@@ -43,4 +43,4 @@ app.include_router(student_router)
 
 @app.get("/health", tags=["System"])
 async def health_check() -> dict[str, str]:
-    return {"status": "healthy", "environment": settings.ENVIRONMENT}
+    return {"status": "ok", "environment": settings.ENVIRONMENT}

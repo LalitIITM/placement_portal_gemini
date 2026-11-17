@@ -67,7 +67,7 @@ async def register_sliding_session(session_id: str, user_id: uuid.UUID) -> None:
     try:
         redis = get_redis()
         ttl_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        await redis.setex(f"session:{session_id}", ttl_seconds, str(user_id))
+        await redis.set(f"session:{session_id}", str(user_id), ex=ttl_seconds)
     except Exception:
         # Allow graceful fallback if Redis is unreachable in local dev
         pass
