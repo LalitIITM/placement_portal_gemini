@@ -1,4 +1,3 @@
-cat << 'EOF' > .github/workflows/ci.yml
 name: CI Pipeline
 
 on:
@@ -85,4 +84,3 @@ jobs:
 
       - name: Production Build
         run: npm run build
-EOF
