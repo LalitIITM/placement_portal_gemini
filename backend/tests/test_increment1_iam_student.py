@@ -116,7 +116,7 @@ async def test_max_three_active_resumes_brule_55():
         assert fourth.status_code == 409
 
         # Archive 1 resume -> 4th upload now succeeds
-        first_id = fourth.json()
+        fourth.json()
         ws = (await client.get("/api/v1/students/me", headers=headers)).json()
         del_res = await client.delete(f"/api/v1/students/me/resumes/{ws['resumes'][0]['id']}", headers=headers)
         assert del_res.status_code == 200

@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.modules.audit.service import list_audit_logs, record_audit_event
 from app.modules.iam.models import Role, RoleName, User, UserRole
 from app.modules.iam.security import (
