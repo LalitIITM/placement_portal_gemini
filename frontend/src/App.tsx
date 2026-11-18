@@ -166,6 +166,10 @@ const ACTIVITY_CATALOG: ActivityCatalogItem[] = [
   { id: "T32-AWS-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "AWS / GenAI Cert", title: "AWS Academy Data Engineering / ML / NLP / GenAI Foundations", description: "Complete AWS Academy Data Engineering, ML Foundations, NLP, or GenAI Foundations", points: 10, platformHint: "AWS Credly / Certificate URL" },
 ];
 
+const API_BASE_URL =
+  (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL ||
+  "http://localhost:8000";
+
 const INITIAL_TRAINING_STAGES: TrainingStageScore[] = [
   // Level 1: Soft Skills Training (Overall Cutoff 80%, Stage Cutoff 70%, Max 2 Attempts/Stage)
   { id: "L1-S1", level: 1, stageNum: 1, title: "Placement Prep", description: "Video-based communication training", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
@@ -746,6 +750,102 @@ export default function App() {
   const [coordTargetRoll, setCoordTargetRoll] = useState<string>("21F3001013");
   const [coordFeedback, setCoordFeedback] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
   const coordCsvInputRef = useRef<HTMLInputElement | null>(null);
+  const [dbHydrated, setDbHydrated] = useState<boolean>(false);
+  const [dbSyncStatus, setDbSyncStatus] = useState<"SYNCED" | "SYNCING" | "LOCAL_FALLBACK">("SYNCING");
+
+  // Hydrate persisted state from FastAPI + PostgreSQL on initial load & when active roll changes
+  useEffect(() => {
+    let cancelled = false;
+    const rollToFetch = (coordTargetRoll || rollNumber || "21F3001013").trim().toUpperCase();
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/v1/portal-state/bootstrap?student_roll=${encodeURIComponent(rollToFetch)}`
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (Array.isArray(data.trainingStages) && data.trainingStages.length > 0) {
+          setTrainingStages(data.trainingStages);
+        }
+        if (Array.isArray(data.activitySubmissions)) {
+          setActivitySubmissions(data.activitySubmissions);
+        }
+        const snap = data.snapshot || {};
+        if (Array.isArray(snap.registrations) && snap.registrations.length > 0) {
+          setRegistrations(snap.registrations);
+        }
+        if (Array.isArray(snap.jobs) && snap.jobs.length > 0) {
+          setJobs(snap.jobs);
+        }
+        if (Array.isArray(snap.applications)) {
+          setApplications(snap.applications);
+        }
+        if (Array.isArray(snap.evaluations)) {
+          setEvaluations(snap.evaluations);
+        }
+        if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
+          setAuditLogs(snap.auditLogs);
+        }
+        setDbSyncStatus("SYNCED");
+      } catch {
+        if (!cancelled) setDbSyncStatus("LOCAL_FALLBACK");
+      } finally {
+        if (!cancelled) setDbHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [coordTargetRoll]);
+
+  // Write-through sync to PostgreSQL whenever core portal records change
+  useEffect(() => {
+    if (!dbHydrated) return;
+    const rollToSave = (coordTargetRoll || rollNumber || "21F3001013").trim().toUpperCase();
+    setDbSyncStatus("SYNCING");
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/portal-state/sync`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentRoll: rollToSave,
+            trainingStages,
+            activitySubmissions,
+            snapshot: {
+              registrations,
+              jobs,
+              applications,
+              evaluations,
+              auditLogs,
+            },
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setDbSyncStatus("SYNCED");
+      } catch {
+        setDbSyncStatus("LOCAL_FALLBACK");
+      }
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    dbHydrated,
+    coordTargetRoll,
+    rollNumber,
+    trainingStages,
+    activitySubmissions,
+    registrations,
+    jobs,
+    applications,
+    evaluations,
+    auditLogs,
+  ]);
   const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
@@ -3407,7 +3507,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">IITM Career & Placement OS</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Inc 1 • Inc 2 • Inc 3 Live
+                  Inc 1 • Inc 2 • Inc 3 Live • {dbSyncStatus === "SYNCED" ? "PostgreSQL Synced" : dbSyncStatus === "SYNCING" ? "Syncing DB..." : "Local Mode"}
                 </span>
                 {isPlaced && (
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">

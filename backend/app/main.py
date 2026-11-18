@@ -10,6 +10,8 @@ from app.modules.iam.router import router as iam_router
 from app.modules.iam.seed import ensure_base_seed
 from app.modules.placement import models as placement_models  # noqa: F401
 from app.modules.placement.router import router as placement_router
+from app.modules.portal_state import models as portal_state_models  # noqa: F401
+from app.modules.portal_state.router import router as portal_state_router
 from app.modules.recruitment import models as recruitment_models  # noqa: F401
 from app.modules.recruitment.router import router as recruitment_router
 from app.modules.recruitment.seed import ensure_recruitment_seed
@@ -52,6 +54,7 @@ app.include_router(student_router)
 app.include_router(training_router)
 app.include_router(recruitment_router)
 app.include_router(placement_router)
+app.include_router(portal_state_router)
 
 
 @app.get("/health", tags=["System"])
