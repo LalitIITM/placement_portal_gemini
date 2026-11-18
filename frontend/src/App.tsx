@@ -25,15 +25,26 @@ import {
   Star,
   Database,
   Shuffle,
+  Building2,
+  Send,
+  XCircle,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
-type ActiveTab = "IDENTITY" | "TRAINING" | "GOVERNANCE";
+type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
 type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
 type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
+type ProgramLevelOption = "FOUNDATION" | "DIPLOMA" | "BSC" | "BS";
+type AppStatusOption =
+  | "APPLIED"
+  | "SHORTLISTED"
+  | "INTERVIEW_SCHEDULED"
+  | "OFFERED"
+  | "OFFER_ACCEPTED"
+  | "REJECTED";
 
 interface ResumeItem {
   id: string;
@@ -113,6 +124,38 @@ interface ExaminerEvaluationRecord {
   remedialTasks: string[];
   notes: string;
   evaluatedAt: string;
+}
+
+interface JobDriveItem {
+  id: string;
+  jobCode: string;
+  companyName: string;
+  title: string;
+  roleType: QuizTrackOption;
+  domain: QuizDomainOption;
+  location: string;
+  compensation: string;
+  description: string;
+  minCgpa: number;
+  maxBacklogs: number;
+  allowedLevels: ProgramLevelOption[];
+  requireExaminerReady: boolean;
+  requiredSkillTags: string[];
+}
+
+interface JobApplicationRecord {
+  id: string;
+  jobId: string;
+  jobCode: string;
+  companyName: string;
+  jobTitle: string;
+  roleType: QuizTrackOption;
+  studentRoll: string;
+  studentName: string;
+  studentCgpa: string;
+  resumeTitle: string;
+  status: AppStatusOption;
+  appliedAt: string;
 }
 
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
@@ -280,6 +323,73 @@ const INITIAL_TRACKS: TrainingTrack[] = [
   },
 ];
 
+const INITIAL_JOBS: JobDriveItem[] = [
+  {
+    id: "job-flipkart-intern",
+    jobCode: "DRV-2026-FLIPKART-INT",
+    companyName: "Flipkart",
+    title: "Data Science & Analytics Intern (6 Months)",
+    roleType: "INTERNSHIP",
+    domain: "DATA_SCIENCE",
+    location: "Bengaluru",
+    compensation: "₹75,000 / month",
+    description: "Supply-chain demand forecasting, anomaly detection, and A/B experimentation.",
+    minCgpa: 7.5,
+    maxBacklogs: 0,
+    allowedLevels: ["DIPLOMA", "BSC", "BS"],
+    requireExaminerReady: false,
+    requiredSkillTags: [],
+  },
+  {
+    id: "job-zoho-intern",
+    jobCode: "DRV-2026-ZOHO-INT",
+    companyName: "Zoho Corporation",
+    title: "Software Developer Intern",
+    roleType: "INTERNSHIP",
+    domain: "SOFTWARE_DEVELOPMENT",
+    location: "Chennai",
+    compensation: "₹45,000 / month",
+    description: "Full-stack cloud productivity applications, REST APIs, and relational query tuning.",
+    minCgpa: 7.0,
+    maxBacklogs: 1,
+    allowedLevels: ["DIPLOMA", "BSC", "BS"],
+    requireExaminerReady: false,
+    requiredSkillTags: [],
+  },
+  {
+    id: "job-fractal-ft",
+    jobCode: "DRV-2026-FRACTAL",
+    companyName: "Fractal Analytics",
+    title: "Applied Data Scientist — Decision Sciences",
+    roleType: "FULL_TIME",
+    domain: "DATA_SCIENCE",
+    location: "Bengaluru / Mumbai (Hybrid)",
+    compensation: "₹16.5 LPA",
+    description: "Production forecasting, propensity modeling, and causal inference pipelines.",
+    minCgpa: 8.0,
+    maxBacklogs: 0,
+    allowedLevels: ["BSC", "BS"],
+    requireExaminerReady: true,
+    requiredSkillTags: ["Production ML & Data Engineering"],
+  },
+  {
+    id: "job-razorpay-ft",
+    jobCode: "DRV-2026-RAZORPAY",
+    companyName: "Razorpay",
+    title: "Software Development Engineer I (Backend)",
+    roleType: "FULL_TIME",
+    domain: "SOFTWARE_DEVELOPMENT",
+    location: "Bengaluru",
+    compensation: "₹22.0 LPA",
+    description: "High-throughput payment orchestration APIs, idempotent ledgers, and microservices.",
+    minCgpa: 8.2,
+    maxBacklogs: 0,
+    allowedLevels: ["BSC", "BS"],
+    requireExaminerReady: true,
+    requiredSkillTags: ["Full-Stack & Distributed SDE"],
+  },
+];
+
 function drawRandomQuestions(pool: BankQuestionItem[], count: number): BankQuestionItem[] {
   const copy = [...pool];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -294,11 +404,14 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<Role>("STUDENT");
   const [user, setUser] = useState<{ email: string; role: Role; name: string } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("TRAINING");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("RECRUITMENT");
 
   // Increment 1: Complete Student Registration Dossier
   const [fullName, setFullName] = useState("Aarav Sharma");
   const [cgpaInput, setCgpaInput] = useState("8.92");
+  const [programLevel, setProgramLevel] = useState<ProgramLevelOption>("BSC");
+  const [activeBacklogs, setActiveBacklogs] = useState<number>(0);
+  const [isPlaced, setIsPlaced] = useState<boolean>(false);
   const [gender, setGender] = useState("Male");
   const [mobileNumber, setMobileNumber] = useState("+91 9876543210");
   const [personalEmail, setPersonalEmail] = useState("aarav.sharma@gmail.com");
@@ -352,7 +465,7 @@ export default function App() {
   } | null>(null);
   const [badges, setBadges] = useState<SkillBadgeItem[]>([]);
 
-  // Question Bank Builder State (for adding questions later)
+  // Question Bank Builder State
   const [qbDomain, setQbDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
   const [qbTrack, setQbTrack] = useState<QuizTrackOption>("INTERNSHIP");
   const [qbPrompt, setQbPrompt] = useState("");
@@ -377,6 +490,23 @@ export default function App() {
   const [evalBanner, setEvalBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
   const [evaluations, setEvaluations] = useState<ExaminerEvaluationRecord[]>([]);
 
+  // Increment 3: Recruitment, Job Postings & Application Eligibility Engine
+  const [jobs, setJobs] = useState<JobDriveItem[]>(INITIAL_JOBS);
+  const [applications, setApplications] = useState<JobApplicationRecord[]>([]);
+  const [selectedResumeIdForApply, setSelectedResumeIdForApply] = useState<string>("res-1");
+  const [jobAlert, setJobAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+
+  // Recruiter New Job Form
+  const [newJobCode, setNewJobCode] = useState("DRV-2026-SWIGGY");
+  const [newCompany, setNewCompany] = useState("Swiggy");
+  const [newJobTitle, setNewJobTitle] = useState("Data Science Intern — Logistics");
+  const [newRoleType, setNewRoleType] = useState<QuizTrackOption>("INTERNSHIP");
+  const [newJobDomain, setNewJobDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [newLocation, setNewLocation] = useState("Bengaluru");
+  const [newCompensation, setNewCompensation] = useState("₹60,000 / month");
+  const [newMinCgpa, setNewMinCgpa] = useState("7.50");
+  const [newRequireReady, setNewRequireReady] = useState(false);
+
   // Immutable Audit Trail
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([
     {
@@ -384,8 +514,8 @@ export default function App() {
       timestamp: "08:00:00 IST",
       actor: "system@iitm.ac.in",
       role: "ADMIN",
-      action: "QUESTION_BANK_INITIALIZED",
-      resource: "80 questions seeded across Data Science & Software Development (Internship & SDE)",
+      action: "PLATFORM_INITIALIZED",
+      resource: "Increment 1 (Registration/Vault), Increment 2 (80-Q Bank/Examiner), Increment 3 (4 Drives/Eligibility Engine)",
       status: "SUCCESS",
     },
   ]);
@@ -641,7 +771,7 @@ export default function App() {
 
     setRegAlert({
       type: "OK",
-      text: `Registration Dossier Saved (${category} • ${degreeType.replace("_", " ")} • CGPA ${parsedCgpa.toFixed(
+      text: `Registration Dossier Saved (${category} • ${degreeType.replace("_", " ")} • Level ${programLevel} • CGPA ${parsedCgpa.toFixed(
         2
       )}).`,
     });
@@ -649,9 +779,7 @@ export default function App() {
       user.email,
       user.role,
       "STUDENT_REGISTRATION_SAVED",
-      `${fullName} | ${category} | ${degreeType} | ${stateName} | Working: ${
-        isWorkingProf ? `Yes (${yearsExp}y, ${workDomain}, ${presentCompany})` : "No"
-      }`,
+      `${fullName} | ${category} | ${degreeType} | ${programLevel} | CGPA ${parsedCgpa.toFixed(2)}`,
       "SUCCESS"
     );
   };
@@ -773,6 +901,7 @@ export default function App() {
     };
 
     setResumes((prev) => [...prev, created]);
+    setSelectedResumeIdForApply(created.id);
     setSelectedFile(null);
     setNewTarget("");
     setVaultAlert(null);
@@ -946,20 +1075,187 @@ export default function App() {
     );
   };
 
+  // Increment 3: Live Eligibility Engine Evaluation (BRULE-21 to BRULE-25)
+  const evaluateEligibilityForDrive = (job: JobDriveItem): { eligible: boolean; reasons: string[] } => {
+    const reasons: string[] = [];
+    const parsedCgpa = parseFloat(cgpaInput) || 0;
+    const latestEval = evaluations[0];
+    const examinerReady = Boolean(latestEval && latestEval.isPlacementReady);
+    const earnedSkillNames = new Set(badges.map((b) => b.skillName));
+
+    if (isPlaced && job.roleType === "FULL_TIME") {
+      reasons.push("BRULE-21: Student already holds an accepted full-time placement offer.");
+    }
+    if (parsedCgpa < job.minCgpa) {
+      reasons.push(`BRULE-23: Minimum CGPA ${job.minCgpa.toFixed(2)} required (yours: ${parsedCgpa.toFixed(2)}).`);
+    }
+    if (activeBacklogs > job.maxBacklogs) {
+      reasons.push(`BRULE-23: Max ${job.maxBacklogs} active backlogs allowed (yours: ${activeBacklogs}).`);
+    }
+    if (!job.allowedLevels.includes(programLevel)) {
+      reasons.push(`BRULE-24: Requires level ${job.allowedLevels.join("/")} (yours: ${programLevel}).`);
+    }
+    if (job.requireExaminerReady && !examinerReady) {
+      reasons.push("BRULE-25: Requires 'Placement Ready' sign-off in Final Stage Examiner Interview.");
+    }
+    const missingBadges = job.requiredSkillTags.filter((tag) => !earnedSkillNames.has(tag));
+    if (missingBadges.length > 0) {
+      reasons.push(`BRULE-25: Missing verified quiz badge: ${missingBadges.join(", ")}.`);
+    }
+
+    return { eligible: reasons.length === 0, reasons };
+  };
+
+  const handleApplyToDrive = (job: JobDriveItem) => {
+    if (!user) return;
+    if (applications.some((a) => a.jobId === job.id)) {
+      setJobAlert({ type: "ERR", text: `You have already applied to ${job.companyName} (${job.jobCode}).` });
+      return;
+    }
+
+    const elig = evaluateEligibilityForDrive(job);
+    if (!elig.eligible) {
+      setJobAlert({
+        type: "ERR",
+        text: `Application Blocked by Eligibility Engine: ${elig.reasons.join(" ")}`,
+      });
+      appendAudit(
+        user.email,
+        user.role,
+        "APPLICATION_ELIGIBILITY_BLOCKED",
+        `${job.jobCode} • ${elig.reasons.join(" | ")}`,
+        "BLOCKED"
+      );
+      return;
+    }
+
+    const chosenResume =
+      resumes.find((r) => r.id === selectedResumeIdForApply) || resumes[0];
+    if (!chosenResume) {
+      setJobAlert({ type: "ERR", text: "Upload at least one PDF resume in your vault before applying." });
+      return;
+    }
+
+    const newApp: JobApplicationRecord = {
+      id: `APP-${Math.floor(1000 + Math.random() * 9000)}`,
+      jobId: job.id,
+      jobCode: job.jobCode,
+      companyName: job.companyName,
+      jobTitle: job.title,
+      roleType: job.roleType,
+      studentRoll: user.name,
+      studentName: fullName,
+      studentCgpa: (parseFloat(cgpaInput) || 0).toFixed(2),
+      resumeTitle: chosenResume.title,
+      status: "APPLIED",
+      appliedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+    };
+
+    setApplications((prev) => [newApp, ...prev]);
+    setJobAlert({
+      type: "OK",
+      text: `Application ${newApp.id} submitted to ${job.companyName} with ${chosenResume.title}.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "JOB_APPLICATION_SUBMITTED",
+      `${job.jobCode} (${job.companyName}) • Resume: ${chosenResume.title}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleCreateNewDrive = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const code = newJobCode.trim().toUpperCase();
+    if (!code || !newCompany.trim() || !newJobTitle.trim()) {
+      setJobAlert({ type: "ERR", text: "Job Code, Company Name, and Title are required." });
+      return;
+    }
+    const minCg = parseFloat(newMinCgpa);
+    if (isNaN(minCg) || minCg < 0 || minCg > 10) {
+      setJobAlert({ type: "ERR", text: "Minimum CGPA must be between 0.00 and 10.00." });
+      return;
+    }
+
+    const created: JobDriveItem = {
+      id: `job-${Date.now()}`,
+      jobCode: code,
+      companyName: newCompany.trim(),
+      title: newJobTitle.trim(),
+      roleType: newRoleType,
+      domain: newJobDomain,
+      location: newLocation.trim() || "Remote / India",
+      compensation: newCompensation.trim() || "Competitive",
+      description: "Published via Recruiter Drive Portal with automated eligibility filtering.",
+      minCgpa: minCg,
+      maxBacklogs: 0,
+      allowedLevels: newRoleType === "INTERNSHIP" ? ["DIPLOMA", "BSC", "BS"] : ["BSC", "BS"],
+      requireExaminerReady: newRequireReady,
+      requiredSkillTags: [],
+    };
+
+    setJobs((prev) => [created, ...prev]);
+    setNewJobCode(`DRV-2026-${Math.floor(100 + Math.random() * 899)}`);
+    setJobAlert({
+      type: "OK",
+      text: `Published Drive ${created.jobCode}: ${created.companyName} — ${created.title}.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "JOB_POSTING_CREATED",
+      `${created.jobCode} (${created.companyName} • Min CGPA ${created.minCgpa.toFixed(2)})`,
+      "SUCCESS"
+    );
+  };
+
+  const handleUpdateApplicationStatus = (appId: string, nextStatus: AppStatusOption) => {
+    if (!user) return;
+    let targetApp: JobApplicationRecord | undefined;
+    setApplications((prev) =>
+      prev.map((a) => {
+        if (a.id !== appId) return a;
+        targetApp = { ...a, status: nextStatus };
+        return targetApp;
+      })
+    );
+
+    if (targetApp && nextStatus === "OFFER_ACCEPTED" && targetApp.roleType === "FULL_TIME") {
+      setIsPlaced(true);
+    }
+
+    if (targetApp) {
+      appendAudit(
+        user.email,
+        user.role,
+        "APPLICATION_STATUS_UPDATED",
+        `${targetApp.id} (${targetApp.companyName}) -> ${nextStatus}${
+          nextStatus === "OFFER_ACCEPTED" && targetApp.roleType === "FULL_TIME"
+            ? " [BRULE-21 Placement Lock Activated]"
+            : ""
+        }`,
+        "SUCCESS"
+      );
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-4">
             <ShieldCheck className="w-4 h-4" />
-            Increment 1 & 2 • Proctored Career OS
+            Increment 1, 2 & 3 • IITM Career OS
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-white">
             IITM Placement & Career Portal
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Student dossier, randomized 15-question bank engine, and examiner viva evaluation.
+            Student registration, proctored 15-Q assessments, examiner viva, and live eligibility
+            recruitment engine.
           </p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
@@ -1041,8 +1337,13 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">IITM Career & Placement OS</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Question Bank ({questionBank.length} Qs)
+                  Inc 1 • Inc 2 • Inc 3 Live
                 </span>
+                {isPlaced && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
+                    PLACED (BRULE-21)
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">{user.email}</p>
             </div>
@@ -1088,7 +1389,7 @@ export default function App() {
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            Student Registration, Marksheet & Vault ({resumes.length}/3)
+            I1: Registration, Marksheet & Vault ({resumes.length}/3)
           </button>
 
           <button
@@ -1100,12 +1401,25 @@ export default function App() {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            Question Bank, 15-Q Random Quizzes & Examiner Viva
+            I2: Question Bank, 15-Q Quiz & Examiner Viva
             {badges.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
                 {badges.length} Badges
               </span>
             )}
+          </button>
+
+          <button
+            disabled={isQuizActive}
+            onClick={() => setActiveTab("RECRUITMENT")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+              activeTab === "RECRUITMENT"
+                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            I3: Jobs & Eligibility Engine ({jobs.length} Drives • {applications.length} Applied)
           </button>
 
           <button
@@ -1118,12 +1432,387 @@ export default function App() {
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            Immutable Audit Ledger ({auditLogs.length})
+            Audit Ledger ({auditLogs.length})
           </button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {activeTab === "RECRUITMENT" && (
+          <div className="space-y-8">
+            {/* Live Student Eligibility Context Strip */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block">Candidate</span>
+                  <span className="font-semibold text-white">
+                    {fullName} ({user.name})
+                  </span>
+                </div>
+                <div className="h-7 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block">CGPA / Backlogs</span>
+                  <span className="font-semibold text-white">
+                    {parseFloat(cgpaInput || "0").toFixed(2)} / {activeBacklogs} Backlogs
+                  </span>
+                </div>
+                <div className="h-7 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block">Program Level</span>
+                  <span className="font-semibold text-indigo-300">{programLevel}</span>
+                </div>
+                <div className="h-7 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block">Examiner Readiness</span>
+                  <span
+                    className={`font-semibold ${
+                      evaluations[0]?.isPlacementReady ? "text-emerald-400" : "text-amber-400"
+                    }`}
+                  >
+                    {evaluations[0]?.isPlacementReady ? "READY (Verified)" : "Pending Viva Sign-off"}
+                  </span>
+                </div>
+                <div className="h-7 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block">Verified Quiz Badges</span>
+                  <span className="font-semibold text-emerald-300">{badges.length} Earned</span>
+                </div>
+              </div>
+
+              {user.role === "STUDENT" && resumes.length > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">Apply with Resume:</span>
+                  <select
+                    value={selectedResumeIdForApply}
+                    onChange={(e) => setSelectedResumeIdForApply(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  >
+                    {resumes.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title} ({r.targetRole})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {jobAlert && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
+                  jobAlert.type === "OK"
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                }`}
+              >
+                {jobAlert.type === "OK" ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                )}
+                <span>{jobAlert.text}</span>
+              </div>
+            )}
+
+            {/* Recruiter / Admin Job Drive Publisher */}
+            {user.role !== "STUDENT" && (
+              <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Building2 className="w-5 h-5 text-indigo-400" />
+                  <h2 className="font-semibold text-white">
+                    Recruiter Portal — Publish New Placement / Internship Drive
+                  </h2>
+                </div>
+                <form onSubmit={handleCreateNewDrive} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Drive Code</label>
+                    <input
+                      type="text"
+                      value={newJobCode}
+                      onChange={(e) => setNewJobCode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Company Name</label>
+                    <input
+                      type="text"
+                      value={newCompany}
+                      onChange={(e) => setNewCompany(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 mb-1">Role Title</label>
+                    <input
+                      type="text"
+                      value={newJobTitle}
+                      onChange={(e) => setNewJobTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Role Type</label>
+                    <select
+                      value={newRoleType}
+                      onChange={(e) => setNewRoleType(e.target.value as QuizTrackOption)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    >
+                      <option value="INTERNSHIP">Internship</option>
+                      <option value="SOFTWARE_DEVELOPMENT">Full-Time</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Domain</label>
+                    <select
+                      value={newJobDomain}
+                      onChange={(e) => setNewJobDomain(e.target.value as QuizDomainOption)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    >
+                      <option value="DATA_SCIENCE">Data Science</option>
+                      <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Compensation / Stipend</label>
+                    <input
+                      type="text"
+                      value={newCompensation}
+                      onChange={(e) => setNewCompensation(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Min CGPA Cutoff</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={newMinCgpa}
+                      onChange={(e) => setNewMinCgpa(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 mb-1">Location</label>
+                    <input
+                      type="text"
+                      value={newLocation}
+                      onChange={(e) => setNewLocation(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id="req-examiner-ready"
+                      checked={newRequireReady}
+                      onChange={(e) => setNewRequireReady(e.target.checked)}
+                      className="accent-indigo-500 w-4 h-4"
+                    />
+                    <label htmlFor="req-examiner-ready" className="text-slate-300">
+                      Require Examiner Ready Sign-off
+                    </label>
+                  </div>
+                  <div className="pt-3">
+                    <button
+                      type="submit"
+                      className="w-full py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                    >
+                      Publish Drive
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Active Drives Grid with Real-Time Eligibility Badges */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {jobs.map((job) => {
+                const elig = evaluateEligibilityForDrive(job);
+                const existingApp = applications.find((a) => a.jobId === job.id);
+
+                return (
+                  <div
+                    key={job.id}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-indigo-400">{job.jobCode}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                              {job.roleType === "INTERNSHIP" ? "INTERNSHIP" : "FULL-TIME"}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold text-white mt-1">
+                            {job.companyName} — {job.title}
+                          </h3>
+                        </div>
+                        <span className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-lg shrink-0">
+                          {job.compensation}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-400">{job.description}</p>
+
+                      <div className="flex flex-wrap gap-2 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Min CGPA: {job.minCgpa.toFixed(2)}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Levels: {job.allowedLevels.join(", ")}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          {job.location}
+                        </span>
+                        {job.requireExaminerReady && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
+                            Examiner Viva Ready Required
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Real-Time Rule Evaluation Box */}
+                      <div
+                        className={`p-3 rounded-xl border text-xs ${
+                          elig.eligible
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                            : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                        }`}
+                      >
+                        {elig.eligible ? (
+                          <div className="flex items-center gap-2 font-semibold">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>Eligible (All BRULE-21 to BRULE-25 Checks Passed)</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 font-semibold">
+                              <XCircle className="w-4 h-4 shrink-0" />
+                              <span>Not Eligible — Rule Guard Triggered:</span>
+                            </div>
+                            <ul className="list-disc list-inside text-[11px] space-y-0.5 text-rose-200/90">
+                              {elig.reasons.map((r, i) => (
+                                <li key={i}>{r}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      {existingApp ? (
+                        <div className="w-full py-2.5 px-4 rounded-xl bg-slate-950 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-between">
+                          <span>Applied ({existingApp.id})</span>
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200">
+                            {existingApp.status}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyToDrive(job)}
+                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                            elig.eligible
+                              ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                              : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                          }`}
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          {elig.eligible ? "1-Click Apply with Selected Resume" : "Attempt Apply (Test Rule Guard)"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Applications & Recruiter ATS Pipeline */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="font-semibold text-white">
+                    Applications & Recruiter ATS Pipeline ({applications.length})
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Switch RBAC View to RECRUITER or ADMIN to shortlist, extend offers, or trigger
+                    BRULE-21 placement lock
+                  </p>
+                </div>
+              </div>
+
+              {applications.length === 0 ? (
+                <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
+                  No applications submitted yet. Apply to an eligible drive above to populate the ATS
+                  pipeline.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                        <th className="py-2.5 pr-3">App ID</th>
+                        <th className="py-2.5 px-3">Drive & Company</th>
+                        <th className="py-2.5 px-3">Candidate & Resume</th>
+                        <th className="py-2.5 px-3">Stage</th>
+                        {user.role !== "STUDENT" && <th className="py-2.5 pl-3">Recruiter Action</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/70">
+                      {applications.map((app) => (
+                        <tr key={app.id}>
+                          <td className="py-3 pr-3 font-mono text-slate-300">{app.id}</td>
+                          <td className="py-3 px-3">
+                            <span className="font-semibold text-white block">{app.companyName}</span>
+                            <span className="text-slate-400">{app.jobTitle}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="text-slate-200 block">
+                              {app.studentName} ({app.studentRoll}) • CGPA {app.studentCgpa}
+                            </span>
+                            <span className="text-indigo-300 text-[11px]">{app.resumeTitle}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold">
+                              {app.status}
+                            </span>
+                          </td>
+                          {user.role !== "STUDENT" && (
+                            <td className="py-3 pl-3">
+                              <select
+                                value={app.status}
+                                onChange={(e) =>
+                                  handleUpdateApplicationStatus(
+                                    app.id,
+                                    e.target.value as AppStatusOption
+                                  )
+                                }
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                              >
+                                <option value="APPLIED">APPLIED</option>
+                                <option value="SHORTLISTED">SHORTLISTED</option>
+                                <option value="INTERVIEW_SCHEDULED">INTERVIEW_SCHEDULED</option>
+                                <option value="OFFERED">OFFERED</option>
+                                <option value="OFFER_ACCEPTED">OFFER_ACCEPTED</option>
+                                <option value="REJECTED">REJECTED</option>
+                              </select>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === "IDENTITY" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Column: Complete Student Registration Dossier */}
@@ -1201,7 +1890,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">Current CGPA</label>
                       <input
@@ -1215,11 +1904,35 @@ export default function App() {
                       />
                     </div>
                     <div>
+                      <label className="block text-slate-400 mb-1">Program Level</label>
+                      <select
+                        value={programLevel}
+                        onChange={(e) => setProgramLevel(e.target.value as ProgramLevelOption)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      >
+                        <option value="FOUNDATION">Foundation</option>
+                        <option value="DIPLOMA">Diploma</option>
+                        <option value="BSC">BSc</option>
+                        <option value="BS">BS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Active Backlogs</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={activeBacklogs}
+                        onChange={(e) => setActiveBacklogs(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                    </div>
+                    <div>
                       <label className="block text-slate-400 mb-1">Gender</label>
                       <select
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       >
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
@@ -1227,12 +1940,15 @@ export default function App() {
                         <option value="Prefer not to say">Prefer not to say</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">State</label>
                       <select
                         value={stateName}
                         onChange={(e) => setStateName(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       >
                         {INDIAN_STATES.map((st) => (
                           <option key={st} value={st}>
@@ -1241,15 +1957,12 @@ export default function App() {
                         ))}
                       </select>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">Category</label>
                       <select
                         value={category}
                         onChange={(e) => setCategory(e.target.value as CategoryOption)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       >
                         <option value="GENERAL">General</option>
                         <option value="OBC">OBC</option>
@@ -1262,7 +1975,7 @@ export default function App() {
                       <select
                         value={degreeType}
                         onChange={(e) => setDegreeType(e.target.value as DegreeTypeOption)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       >
                         <option value="STANDALONE">Standalone</option>
                         <option value="DUAL_DEGREE">Dual Degree</option>
@@ -1314,7 +2027,7 @@ export default function App() {
                             value={yearsExp}
                             onChange={(e) => setYearsExp(e.target.value)}
                             placeholder="e.g., 2.5"
-                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                           />
                         </div>
                         <div>
@@ -1322,7 +2035,7 @@ export default function App() {
                           <select
                             value={workDomain}
                             onChange={(e) => setWorkDomain(e.target.value as WorkDomainOption)}
-                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                           >
                             <option value="DATA_SCIENCE">Data Science</option>
                             <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
@@ -1336,7 +2049,7 @@ export default function App() {
                             value={presentCompany}
                             onChange={(e) => setPresentCompany(e.target.value)}
                             placeholder="e.g., TCS / Fractal / Zoho"
-                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                           />
                         </div>
                       </div>
@@ -1373,7 +2086,7 @@ export default function App() {
                           setLinkedinId(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       />
                     </div>
                     <div>
@@ -1385,7 +2098,7 @@ export default function App() {
                           setGithubUsername(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       />
                     </div>
                     <div>
@@ -1397,7 +2110,7 @@ export default function App() {
                           setKaggleUsername(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       />
                     </div>
                   </div>
@@ -1576,7 +2289,7 @@ export default function App() {
                       value={newTarget}
                       onChange={(e) => setNewTarget(e.target.value)}
                       placeholder="Target Role (e.g., ML Engineer)"
-                      className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
                     />
                     <button
                       type="submit"
@@ -1595,7 +2308,7 @@ export default function App() {
         {activeTab === "TRAINING" && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Domain & Track Selector + Verified Badges */}
+              {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -1653,7 +2366,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Question Bank Builder (Add questions anytime to DS or SD pools) */}
+                {/* Question Bank Builder */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -1664,13 +2377,6 @@ export default function App() {
                       {questionBank.length} Total Qs
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mb-4">
-                    Add new MCQ questions to{" "}
-                    <span className="text-slate-200">Data Science</span> or{" "}
-                    <span className="text-slate-200">Software Development</span> for{" "}
-                    <span className="text-slate-200">Internship</span> or{" "}
-                    <span className="text-slate-200">Software Development</span> tracks.
-                  </p>
 
                   {qbBanner && (
                     <div
@@ -1800,9 +2506,6 @@ export default function App() {
                             <span className="text-xs font-semibold text-white">{b.scorePct}%</span>
                           </div>
                           <p className="font-mono text-[11px] text-emerald-200/90 mt-1.5">{b.code}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Issued {b.issuedAt} • Recruiter Verifiable
-                          </p>
                         </div>
                       ))}
                     </div>
@@ -2049,8 +2752,7 @@ export default function App() {
                           type="text"
                           value={evalSkillsets}
                           onChange={(e) => setEvalSkillsets(e.target.value)}
-                          placeholder="e.g., Python, SQL, FastAPI, Machine Learning"
-                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                         />
                       </div>
 
@@ -2161,8 +2863,7 @@ export default function App() {
                             rows={3}
                             value={remedialTasksText}
                             onChange={(e) => setRemedialTasksText(e.target.value)}
-                            placeholder="Enter required tasks the student must complete before re-evaluation..."
-                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-amber-500/40 text-slate-100 focus:outline-none focus:border-amber-400"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-amber-500/40 text-slate-100"
                           />
                         </div>
                       )}
@@ -2275,8 +2976,8 @@ export default function App() {
                 <div>
                   <h2 className="font-semibold text-white">Immutable Governance & Audit Trail</h2>
                   <p className="text-xs text-slate-400">
-                    Append-only ledger capturing Question Bank, 15-Q Randomized Quizzes, Proctoring &
-                    Examiner Evaluations
+                    Append-only ledger capturing Registration, Assessments, Examiner Evaluations &
+                    Recruitment Eligibility Decisions
                   </p>
                 </div>
               </div>

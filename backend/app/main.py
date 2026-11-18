@@ -5,9 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.modules.audit import models as audit_models  # noqa: F401
+from app.modules.audit.router import router as audit_router
 from app.modules.iam import models as iam_models  # noqa: F401
 from app.modules.iam.router import router as iam_router
 from app.modules.iam.seed import ensure_base_seed
+from app.modules.recruitment import models as recruitment_models  # noqa: F401
+from app.modules.recruitment.router import router as recruitment_router
+from app.modules.recruitment.seed import ensure_recruitment_seed
 from app.modules.student import models as student_models  # noqa: F401
 from app.modules.student.router import router as student_router
 from app.modules.training import models as training_models  # noqa: F401
@@ -17,25 +21,26 @@ from app.shared.database import AsyncSessionLocal, Base, engine
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as session:
         await ensure_base_seed(session)
         await ensure_training_seed(session)
+        await ensure_recruitment_seed(session)
         await session.commit()
     yield
 
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version="0.3.0",
+    title=settings.app_name,
+    version=settings.app_version,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,8 +49,10 @@ app.add_middleware(
 app.include_router(iam_router)
 app.include_router(student_router)
 app.include_router(training_router)
+app.include_router(recruitment_router)
+app.include_router(audit_router)
 
 
-@app.get("/health", tags=["System"])
+@app.get("/healthz", tags=["System"])
 async def health_check() -> dict[str, str]:
-    return {"status": "ok", "environment": settings.ENVIRONMENT}
+    return {"status": "ok", "environment": settings.environment}
