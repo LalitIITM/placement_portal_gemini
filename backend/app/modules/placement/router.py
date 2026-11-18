@@ -118,7 +118,7 @@ async def schedule_interview(
     if not app_row:
         raise HTTPException(status_code=404, detail="Job application not found.")
 
-    if app_row.status in (ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN):
+    if app_row.status == ApplicationStatus.REJECTED:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot schedule interview for application in {app_row.status.value} state.",
