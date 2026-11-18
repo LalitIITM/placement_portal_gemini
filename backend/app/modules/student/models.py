@@ -134,6 +134,8 @@ class StudentProfile(Base, TimestampMixin):
         Enum(WorkDomain, name="work_domain_enum"), nullable=True
     )
     present_company: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    work_location: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    current_ctc_lpa: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
     github_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     kaggle_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

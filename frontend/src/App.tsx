@@ -60,6 +60,8 @@ interface StudentOnboardingDraft {
   yearsExp: string;
   workDomain: WorkDomainOption;
   presentCompany: string;
+  workLocation: string;
+  currentCtc: string;
 }
 
 interface RegistrationRequestRecord {
@@ -544,6 +546,8 @@ export default function App() {
     yearsExp: "",
     workDomain: "DATA_SCIENCE",
     presentCompany: "",
+    workLocation: "",
+    currentCtc: "",
   });
   const [eligibilityVerdict, setEligibilityVerdict] = useState<{
     eligible: boolean;
@@ -627,6 +631,8 @@ export default function App() {
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
   const [presentCompany, setPresentCompany] = useState("");
+  const [workLocation, setWorkLocation] = useState("");
+  const [currentCtc, setCurrentCtc] = useState("");
   const [regAlert, setRegAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
   // Increment 1: Developer Handles & BS Marksheet
@@ -1175,10 +1181,13 @@ export default function App() {
       if (
         !studentDraft.yearsExp.trim() ||
         Number(studentDraft.yearsExp) <= 0 ||
-        !studentDraft.presentCompany.trim()
+        !studentDraft.presentCompany.trim() ||
+        !studentDraft.workLocation.trim() ||
+        !studentDraft.currentCtc.trim() ||
+        Number(studentDraft.currentCtc) < 0
       ) {
         setAuthError(
-          "Working Professional details (Years of Experience, Work Domain, Present Company) are mandatory when 'Yes' is selected."
+          "Working Professional details (Years of Experience, Work Domain, Present Company, Location, and Current CTC) are mandatory when 'Yes' is selected."
         );
         return;
       }
@@ -1271,6 +1280,8 @@ export default function App() {
     setYearsExp(studentDraft.yearsExp);
     setWorkDomain(studentDraft.workDomain);
     setPresentCompany(studentDraft.presentCompany);
+    setWorkLocation(studentDraft.workLocation);
+    setCurrentCtc(studentDraft.currentCtc);
 
     appendAudit(
       normalizedEmail,
@@ -2389,59 +2400,97 @@ export default function App() {
                 </div>
 
                 {studentDraft.isWorkingProf && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
-                    <div>
-                      <label className="block text-slate-300 mb-1">
-                        Years of Experience <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        step="0.5"
-                        min="0.5"
-                        max="40"
-                        value={studentDraft.yearsExp}
-                        onChange={(e) =>
-                          setStudentDraft({ ...studentDraft, yearsExp: e.target.value })
-                        }
-                        placeholder="e.g., 2.5"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                      />
+                  <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-300 mb-1">
+                          Years of Experience <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          step="0.5"
+                          min="0.5"
+                          max="40"
+                          value={studentDraft.yearsExp}
+                          onChange={(e) =>
+                            setStudentDraft({ ...studentDraft, yearsExp: e.target.value })
+                          }
+                          placeholder="e.g., 2.5"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-1">
+                          Work Domain <span className="text-rose-400">*</span>
+                        </label>
+                        <select
+                          required
+                          value={studentDraft.workDomain}
+                          onChange={(e) =>
+                            setStudentDraft({
+                              ...studentDraft,
+                              workDomain: e.target.value as WorkDomainOption,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        >
+                          <option value="DATA_SCIENCE">Data Science</option>
+                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                          <option value="OTHERS">Others</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-1">
+                          Present Company <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={studentDraft.presentCompany}
+                          onChange={(e) =>
+                            setStudentDraft({ ...studentDraft, presentCompany: e.target.value })
+                          }
+                          placeholder="e.g., TCS / Fractal / Zoho"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-slate-300 mb-1">
-                        Work Domain <span className="text-rose-400">*</span>
-                      </label>
-                      <select
-                        required
-                        value={studentDraft.workDomain}
-                        onChange={(e) =>
-                          setStudentDraft({
-                            ...studentDraft,
-                            workDomain: e.target.value as WorkDomainOption,
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                      >
-                        <option value="DATA_SCIENCE">Data Science</option>
-                        <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
-                        <option value="OTHERS">Others</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 mb-1">
-                        Present Company <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={studentDraft.presentCompany}
-                        onChange={(e) =>
-                          setStudentDraft({ ...studentDraft, presentCompany: e.target.value })
-                        }
-                        placeholder="e.g., TCS / Fractal / Zoho"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                      />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-300 mb-1">
+                          Work Location <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={studentDraft.workLocation}
+                          onChange={(e) =>
+                            setStudentDraft({ ...studentDraft, workLocation: e.target.value })
+                          }
+                          placeholder="e.g., Bengaluru / Chennai / Remote"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-1">
+                          Current CTC (LPA) <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          step="0.1"
+                          min="0"
+                          max="500"
+                          value={studentDraft.currentCtc}
+                          onChange={(e) =>
+                            setStudentDraft({ ...studentDraft, currentCtc: e.target.value })
+                          }
+                          placeholder="e.g., 12.5"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3526,6 +3575,29 @@ export default function App() {
                             value={presentCompany}
                             onChange={(e) => setPresentCompany(e.target.value)}
                             placeholder="e.g., TCS / Fractal / Zoho"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Work Location</label>
+                          <input
+                            type="text"
+                            value={workLocation}
+                            onChange={(e) => setWorkLocation(e.target.value)}
+                            placeholder="e.g., Bengaluru / Chennai"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Current CTC (LPA)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="500"
+                            value={currentCtc}
+                            onChange={(e) => setCurrentCtc(e.target.value)}
+                            placeholder="e.g., 12.5"
                             className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                           />
                         </div>

@@ -44,6 +44,8 @@ class StudentRegistrationIn(BaseModel):
     years_of_experience: Optional[Decimal] = Field(None, ge=Decimal("0.0"), le=Decimal("50.0"))
     work_domain: Optional[WorkDomain] = None
     present_company: Optional[str] = Field(None, max_length=160)
+    work_location: Optional[str] = Field(None, max_length=120)
+    current_ctc_lpa: Optional[Decimal] = Field(None, ge=Decimal("0.0"), le=Decimal("500.0"))
 
     @model_validator(mode="after")
     def validate_working_professional_fields(self) -> "StudentRegistrationIn":
@@ -54,6 +56,10 @@ class StudentRegistrationIn(BaseModel):
                 raise ValueError("work_domain is required when is_working_professional is True")
             if not self.present_company or not self.present_company.strip():
                 raise ValueError("present_company is required when is_working_professional is True")
+            if not self.work_location or not self.work_location.strip():
+                raise ValueError("work_location is required when is_working_professional is True")
+            if self.current_ctc_lpa is None:
+                raise ValueError("current_ctc_lpa is required when is_working_professional is True")
         return self
 
 
@@ -184,6 +190,8 @@ def _serialize_workspace(student: Student, principal: CurrentPrincipal) -> Stude
             else None,
             "work_domain": p.work_domain.value if (p and p.work_domain) else None,
             "present_company": p.present_company if p else None,
+            "work_location": p.work_location if p else None,
+            "current_ctc_lpa": str(p.current_ctc_lpa) if (p and p.current_ctc_lpa is not None) else None,
             "github_url": p.github_url if p else None,
             "linkedin_url": p.linkedin_url if p else None,
             "kaggle_url": p.kaggle_url if p else None,
@@ -258,10 +266,14 @@ async def submit_student_registration(
         profile.years_of_experience = payload.years_of_experience
         profile.work_domain = payload.work_domain
         profile.present_company = payload.present_company.strip() if payload.present_company else None
+        profile.work_location = payload.work_location.strip() if payload.work_location else None
+        profile.current_ctc_lpa = payload.current_ctc_lpa
     else:
         profile.years_of_experience = None
         profile.work_domain = None
         profile.present_company = None
+        profile.work_location = None
+        profile.current_ctc_lpa = None
 
     await db.flush()
 
