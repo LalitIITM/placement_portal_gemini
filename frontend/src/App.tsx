@@ -1247,17 +1247,16 @@ export default function App() {
       role: "STUDENT",
       orgOrDept: `${studentDraft.programLevel} (${diplomasLabel || "Degree"}) • ${
         studentDraft.applyingTrack
-      } • ${studentDraft.targetDomain}`,
+      } • ${studentDraft.targetDomain} • Payment: PAID`,
       password: studentDraft.password,
-      status: "APPROVED",
+      status: "PENDING",
       paymentStatus: "PAID",
       submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
-      reviewedBy: "AUTO_ELIGIBILITY_&_PAYMENT_GATE",
     };
 
     setRegistrations((prev) => [newRecord, ...prev]);
 
-    // Hydrate student workspace profile states so dashboard reflects registration immediately
+    // Pre-populate student dossier fields for when Admin approves login
     setFullName(cleanFullName);
     setPersonalEmail(studentDraft.personalEmail.trim().toLowerCase());
     setMobileNumber(studentDraft.mobileNumber.trim());
@@ -1277,19 +1276,19 @@ export default function App() {
       normalizedEmail,
       "STUDENT",
       "REGISTRATION_PAYMENT_CONFIRMED",
-      `${newRecord.id} (${rollCode}) -> Payment Confirmed & Dashboard Unlocked`,
+      `${newRecord.id} (${rollCode}) -> Payment Confirmed; Queued for Admin Approval`,
       "SUCCESS"
     );
 
     setPaymentProcessing(false);
+    setEmail(normalizedEmail);
+    setPassword("");
     setOnboardingStep("AUTH");
     setAuthMode("SIGN_IN");
-    setActiveTab("IDENTITY");
-    setUser({
-      email: normalizedEmail,
-      role: "STUDENT",
-      name: cleanFullName,
-    });
+    setAuthError(null);
+    setAuthNotice(
+      `Registration ${newRecord.id} and payment confirmed for ${cleanFullName}. Your account is now PENDING Placement Admin approval before you can sign in.`
+    );
   };
 
   const handleRoleSwitch = (nextRole: Role) => {
@@ -2523,8 +2522,8 @@ export default function App() {
                 Payment Gateway Integration Placeholder
               </p>
               <p className="text-xs text-slate-400">
-                Official IITM Payment Gateway link will be embedded here. Click below to simulate
-                payment confirmation and activate your Student Dashboard.
+                Official IITM Payment Gateway link will be embedded here. Click below to confirm
+                payment and submit your verified registration for Placement Admin approval.
               </p>
             </div>
 
@@ -2537,7 +2536,7 @@ export default function App() {
               <CheckCircle2 className="w-4 h-4" />
               {paymentProcessing
                 ? "Confirming Payment..."
-                : "Confirm Payment & Go to Student Dashboard"}
+                : "Confirm Payment & Submit for Admin Approval"}
             </button>
           </div>
         </div>
