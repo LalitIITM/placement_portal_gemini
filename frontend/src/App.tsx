@@ -85,6 +85,97 @@ type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
 type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
 type JobRoleTypeOption = "INTERNSHIP" | "FULL_TIME";
 type ProgramLevelOption = "FOUNDATION" | "DIPLOMA" | "BSC" | "BS";
+interface TrainingStageScore {
+  id: string;
+  level: 1 | 2 | 3;
+  stageNum: number;
+  title: string;
+  description: string;
+  evaluationType: "MARKS" | "AI_MOCK" | "ONE_ON_ONE";
+  maxMarks: number;
+  minRequired: number;
+  obtainedMarks: number;
+  statusText: string; // e.g. "Hire" / "Pending" or "Yes" / "No"
+}
+
+interface ActivityCatalogItem {
+  id: string;
+  table: "TABLE_1" | "TABLE_2" | "TABLE_3";
+  domain: "COMMON" | "SOFTWARE_DEVELOPMENT" | "DATA_SCIENCE";
+  topic: string;
+  title: string;
+  description: string;
+  points: number;
+  platformHint: string;
+}
+
+interface ActivitySubmission {
+  activityId: string;
+  proofUrl: string;
+  completedDate: string;
+  verifiedByIic: boolean;
+}
+
+const ACTIVITY_CATALOG: ActivityCatalogItem[] = [
+  // Table 1: Common Mandatory (Total 15 pts, Min 10 pts)
+  { id: "T1-DBMS-1", table: "TABLE_1", domain: "COMMON", topic: "DBMS", title: "SQL Basic Certification (HackerRank)", description: "SQL Basic Certification Skills on HackerRank", points: 1, platformHint: "https://www.hackerrank.com/skills-verification" },
+  { id: "T1-DBMS-2", table: "TABLE_1", domain: "COMMON", topic: "DBMS", title: "SQL Intermediate Certification (HackerRank)", description: "SQL Intermediate Certification Skills on HackerRank", points: 1, platformHint: "https://www.hackerrank.com/skills-verification" },
+  { id: "T1-DBMS-3", table: "TABLE_1", domain: "COMMON", topic: "DBMS", title: "SQL Advanced Certification (HackerRank)", description: "SQL Advanced Certification Skills on HackerRank", points: 2, platformHint: "https://www.hackerrank.com/skills-verification" },
+  { id: "T1-PDSA-1", table: "TABLE_1", domain: "COMMON", topic: "PDSA (Python)", title: "PDSA Tasks Easy (20 LeetCode)", description: "Solve 20 Easy Level Questions on LeetCode", points: 1, platformHint: "https://leetcode.com/u/..." },
+  { id: "T1-PDSA-2", table: "TABLE_1", domain: "COMMON", topic: "PDSA (Python)", title: "PDSA Tasks Medium (25 LeetCode)", description: "Solve 25 Intermediate Level Questions on LeetCode", points: 2, platformHint: "https://leetcode.com/u/..." },
+  { id: "T1-PDSA-3", table: "TABLE_1", domain: "COMMON", topic: "PDSA (Python)", title: "PDSA Tasks Hard (10 LeetCode)", description: "Solve 10 Advanced Level Questions on LeetCode", points: 4, platformHint: "https://leetcode.com/u/..." },
+  { id: "T1-SYS-1", table: "TABLE_1", domain: "COMMON", topic: "System Commands", title: "VM Task — Solve VMT1.x Series", description: "Complete VMT1.x series & HackerRank Linux Shell challenges (grep, sed, awk)", points: 3, platformHint: "https://www.hackerrank.com/domains/shell" },
+  { id: "T1-CLD-1", table: "TABLE_1", domain: "COMMON", topic: "Cloud & DevOps", title: "Introduction to Cloud Computing / AWS Cloud Foundation", description: "Simplilearn Intro to Cloud Computing or AWS Certified Cloud Practitioner", points: 3, platformHint: "https://www.simplilearn.com/..." },
+
+  // Table 2.1: Internship Mandatory — Software Development (Total 25 pts, Min 15 pts)
+  { id: "T21-JAVA-1", table: "TABLE_2", domain: "SOFTWARE_DEVELOPMENT", topic: "Java", title: "Java Tasks Easy (HackerRank)", description: "Practice Java Easy Tasks on HackerRank", points: 1, platformHint: "https://www.hackerrank.com/domains/java" },
+  { id: "T21-JAVA-2", table: "TABLE_2", domain: "SOFTWARE_DEVELOPMENT", topic: "Java", title: "Java Tasks Medium (5 Badges)", description: "Earn 5 Badges from Java Tasks on HackerRank", points: 4, platformHint: "https://www.hackerrank.com/domains/java" },
+  { id: "T21-MAD-1", table: "TABLE_2", domain: "SOFTWARE_DEVELOPMENT", topic: "Modern App Dev", title: "Build 4 GitHub Projects (Flask, Vue3)", description: "Build 4 projects in GitHub using Flask, Vue3 & code contributions", points: 5, platformHint: "https://github.com/..." },
+  { id: "T21-LNX-1", table: "TABLE_2", domain: "SOFTWARE_DEVELOPMENT", topic: "Linux Club", title: "Linux Club Mandatory Activity", description: "Complete mandatory IIC Linux Club practical task", points: 10, platformHint: "IIC Linux Club Submission Link" },
+  { id: "T21-SWE-1", table: "TABLE_2", domain: "SOFTWARE_DEVELOPMENT", topic: "Certification", title: "Software Engineer Intern Certificate (HackerRank)", description: "HackerRank Software Engineer Intern Role Certification", points: 5, platformHint: "https://www.hackerrank.com/skills-verification" },
+
+  // Table 2.2: Internship Mandatory — Data Science (Total 25 pts, Min 15 pts)
+  { id: "T22-KAG-1", table: "TABLE_2", domain: "DATA_SCIENCE", topic: "ML Practice (Kaggle)", title: "Kaggle Regression Competition (RMSE <= 0.50)", description: "Compete in Regression-based Kaggle Competition and achieve RMSE <= 0.50", points: 5, platformHint: "https://www.kaggle.com/..." },
+  { id: "T22-KAG-2", table: "TABLE_2", domain: "DATA_SCIENCE", topic: "ML Practice (Kaggle)", title: "Kaggle Classification Competition (Accuracy >= 80%)", description: "Compete in Classification-based Kaggle Competition and achieve Accuracy >= 80%", points: 5, platformHint: "https://www.kaggle.com/..." },
+  { id: "T22-MLC-1", table: "TABLE_2", domain: "DATA_SCIENCE", topic: "ML Certification", title: "Machine Learning Basics Certification", description: "Complete verified Machine Learning Basics Certification", points: 15, platformHint: "Certificate URL" },
+
+  // Table 3.1: Full-Time Placement Mandatory — Software Development (Total 40 pts, Min 25 pts)
+  { id: "T31-SYS-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "System Commands", title: "VM Tasks — Solve VMT2.x Series", description: "Complete advanced VMT2.x series virtual machine tasks", points: 5, platformHint: "VM Submission Proof" },
+  { id: "T31-EXR-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "Bash (Exercism)", title: "Bash Track on Exercism (30 Problems)", description: "Solve 30 problems in the Bash track on Exercism", points: 2, platformHint: "https://exercism.org/profiles/..." },
+  { id: "T31-EXR-2", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "Bash (Exercism)", title: "Exercism Reputation > 100 Points", description: "Achieve over 100 reputation points on Exercism", points: 3, platformHint: "https://exercism.org/profiles/..." },
+  { id: "T31-CLD-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "Cloud Associate", title: "Associate Cloud Certification (AWS / Azure AZ-204 / GCP)", description: "AWS Associate, Microsoft Azure AZ-204, or Google Associate Certification", points: 5, platformHint: "Credly / Certificate URL" },
+  { id: "T31-APP-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "App Dev & GenAI", title: "4 Open-Source / FastAPI / React / RAG Chatbot GitHub Projects", description: "Open-source contributions + 4 GitHub projects using FastAPI, NodeJS/React, GenAI & RAG", points: 5, platformHint: "https://github.com/..." },
+  { id: "T31-WEB-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "Web Dev Club", title: "Web Development Club Mandatory Activity", description: "Complete mandatory IIC Web Development Club activity", points: 10, platformHint: "IIC Web Dev Club Link" },
+  { id: "T31-SWE-1", table: "TABLE_3", domain: "SOFTWARE_DEVELOPMENT", topic: "Certification", title: "Software Engineer Certificate (HackerRank)", description: "HackerRank Software Engineer Role Certification", points: 10, platformHint: "https://www.hackerrank.com/skills-verification" },
+
+  // Table 3.2: Full-Time Placement Mandatory — Data Science (Total 40 pts, Min 25 pts)
+  { id: "T32-VIZ-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "Data Visualization", title: "Power BI / Tableau / Python Data Analysis Certification", description: "Microsoft Power BI Data Analyst, Tableau, or Data Analysis with Python Certification", points: 5, platformHint: "Certificate URL" },
+  { id: "T32-AIML-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "AI & ML Club", title: "AI & ML Club Mandatory Activity", description: "Complete mandatory IIC AI & ML Club project/activity", points: 10, platformHint: "IIC AI & ML Club Link" },
+  { id: "T32-DLP-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "Deep Learning (DLP)", title: "DLP — NPPE 1 Score", description: "Complete and qualify in NPPE1 of Deep Learning Practice (DLP)", points: 5, platformHint: "IITM BS DLP Scorecard" },
+  { id: "T32-DLP-2", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "Deep Learning (DLP)", title: "DLP — NPPE 2 Score", description: "Complete and qualify in NPPE2 of Deep Learning Practice (DLP)", points: 5, platformHint: "IITM BS DLP Scorecard" },
+  { id: "T32-DLP-3", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "Deep Learning (DLP)", title: "DLP — NPPE 3 Score", description: "Complete and qualify in NPPE3 of Deep Learning Practice (DLP)", points: 5, platformHint: "IITM BS DLP Scorecard" },
+  { id: "T32-AWS-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "AWS / GenAI Cert", title: "AWS Academy Data Engineering / ML / NLP / GenAI Foundations", description: "Complete AWS Academy Data Engineering, ML Foundations, NLP, or GenAI Foundations", points: 10, platformHint: "AWS Credly / Certificate URL" },
+];
+
+const INITIAL_TRAINING_STAGES: TrainingStageScore[] = [
+  // Level 1: Soft Skills Training (Overall Cutoff 80%, Stage Cutoff 70%)
+  { id: "L1-S1", level: 1, stageNum: 1, title: "Placement Prep", description: "Video-based communication training", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, statusText: "PASSED" },
+  { id: "L1-S2", level: 1, stageNum: 2, title: "Listening Comprehension I", description: "Listen to audio and write a paragraph response via LMS", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, statusText: "PASSED" },
+  { id: "L1-S3", level: 1, stageNum: 3, title: "Listening Comprehension II", description: "Listen and speak to answer given questions", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, statusText: "PASSED" },
+  { id: "L1-S4", level: 1, stageNum: 4, title: "Self-Introduction Video", description: "Formally dressed video recording", evaluationType: "MARKS", maxMarks: 40, minRequired: 28, obtainedMarks: 34, statusText: "PASSED" },
+  { id: "L1-S5", level: 1, stageNum: 5, title: "Email Writing", description: "Write formal/professional corporate emails", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, statusText: "PASSED" },
+
+  // Level 2: Focus Finder (Overall Cutoff 60%, Stage Cutoff 70%)
+  { id: "L2-S1", level: 2, stageNum: 1, title: "Behavioral Assessment", description: "Scenario-based response & live training assessment", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 15, statusText: "PASSED" },
+  { id: "L2-S2", level: 2, stageNum: 2, title: "Self-Paced Aptitude Test", description: "Analytical, quantitative, and logical tests", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 23, statusText: "PASSED" },
+  { id: "L2-S3", level: 2, stageNum: 3, title: "Project Presentation", description: "Present a short-term project added in resume", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 22, statusText: "PASSED" },
+
+  // Level 3: Hire Tracking (Overall Cutoff 60%, Stage Cutoff 60%)
+  { id: "L3-S1", level: 3, stageNum: 1, title: "Technical Comprehensive Test", description: "Test on syllabus and industry-based concepts", evaluationType: "MARKS", maxMarks: 25, minRequired: 15, obtainedMarks: 18, statusText: "PASSED" },
+  { id: "L3-S2", level: 3, stageNum: 2, title: "Technical AI Mock Interview", description: "Realistic, AI-evaluated interview simulation", evaluationType: "AI_MOCK", maxMarks: 0, minRequired: 0, obtainedMarks: 0, statusText: "Hire" },
+  { id: "L3-S3", level: 3, stageNum: 3, title: "1-on-1 Session with Examiner", description: "Domain fundamentals, resume deep-dive & placement readiness", evaluationType: "ONE_ON_ONE", maxMarks: 0, minRequired: 0, obtainedMarks: 0, statusText: "No" },
+];
+
 type AppStatusOption =
   | "APPLIED"
   | "SHORTLISTED"
@@ -630,6 +721,17 @@ export default function App() {
   const [degreeType, setDegreeType] = useState<DegreeTypeOption>("STANDALONE");
   const [studentTargetDomain, setStudentTargetDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
   const [studentApplyingTrack, setStudentApplyingTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
+  const [trainingStages, setTrainingStages] = useState<TrainingStageScore[]>(INITIAL_TRAINING_STAGES);
+  const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([
+    { activityId: "T1-DBMS-1", proofUrl: "https://www.hackerrank.com/certificates/sql-basic", completedDate: "2026-08-12", verifiedByIic: true },
+    { activityId: "T1-PDSA-2", proofUrl: "https://leetcode.com/u/iitm_bs_student", completedDate: "2026-09-04", verifiedByIic: true },
+    { activityId: "T1-SYS-1", proofUrl: "https://www.hackerrank.com/domains/shell", completedDate: "2026-09-19", verifiedByIic: true },
+    { activityId: "T1-CLD-1", proofUrl: "https://www.simplilearn.com/cloud-cert", completedDate: "2026-10-02", verifiedByIic: true },
+  ]);
+  const [selectedActivityToLog, setSelectedActivityToLog] = useState<string>("T22-KAG-1");
+  const [activityProofUrl, setActivityProofUrl] = useState<string>("");
+  const [activityCompletedDate, setActivityCompletedDate] = useState<string>("2026-11-15");
+  const [activityAlert, setActivityAlert] = useState<string | null>(null);
   const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
@@ -1866,6 +1968,149 @@ export default function App() {
   };
 
   // Increment 3: Live Eligibility Engine Evaluation (BRULE-21 to BRULE-25)
+  const computeTrainingAndActivityProgress = () => {
+    const l1Stages = trainingStages.filter((s) => s.level === 1);
+    const l1Max = l1Stages.reduce((acc, s) => acc + s.maxMarks, 0);
+    const l1Obt = l1Stages.reduce((acc, s) => acc + s.obtainedMarks, 0);
+    const l1Pct = l1Max ? (l1Obt / l1Max) * 100 : 0;
+    const l1StagesPassed = l1Stages.every((s) => s.obtainedMarks >= s.minRequired);
+    const l1Passed = l1StagesPassed && l1Pct >= 80;
+
+    const l2Stages = trainingStages.filter((s) => s.level === 2);
+    const l2Max = l2Stages.reduce((acc, s) => acc + s.maxMarks, 0);
+    const l2Obt = l2Stages.reduce((acc, s) => acc + s.obtainedMarks, 0);
+    const l2Pct = l2Max ? (l2Obt / l2Max) * 100 : 0;
+    const l2StagesPassed = l2Stages.every((s) => s.obtainedMarks >= s.minRequired);
+    const l2Passed = l2StagesPassed && l2Pct >= 60;
+
+    const l3TechTest = trainingStages.find((s) => s.id === "L3-S1")!;
+    const l3AiMock = trainingStages.find((s) => s.id === "L3-S2")!;
+    const l3OneOnOne = trainingStages.find((s) => s.id === "L3-S3")!;
+    const l3PreSessionPassed =
+      l3TechTest.obtainedMarks >= l3TechTest.minRequired && l3AiMock.statusText === "Hire";
+
+    // Filter valid activity submissions (within 1-year validity)
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const validSubmittedIds = new Set(
+      activitySubmissions
+        .filter((sub) => new Date(sub.completedDate) >= oneYearAgo)
+        .map((sub) => sub.activityId)
+    );
+
+    const table1Points = ACTIVITY_CATALOG.filter(
+      (a) => a.table === "TABLE_1" && validSubmittedIds.has(a.id)
+    ).reduce((sum, a) => sum + a.points, 0);
+
+    const table2Points = ACTIVITY_CATALOG.filter(
+      (a) =>
+        a.table === "TABLE_2" &&
+        a.domain === studentTargetDomain &&
+        validSubmittedIds.has(a.id)
+    ).reduce((sum, a) => sum + a.points, 0);
+
+    const table3Points = ACTIVITY_CATALOG.filter(
+      (a) =>
+        a.table === "TABLE_3" &&
+        a.domain === studentTargetDomain &&
+        validSubmittedIds.has(a.id)
+    ).reduce((sum, a) => sum + a.points, 0);
+
+    const requiredTotalPoints = studentApplyingTrack === "INTERNSHIP" ? 25 : 50;
+    const earnedPointsForTrack =
+      studentApplyingTrack === "INTERNSHIP"
+        ? table1Points + table2Points
+        : table1Points + table2Points + table3Points;
+
+    const meetsTableMinimums =
+      studentApplyingTrack === "INTERNSHIP"
+        ? table1Points >= 10 && table2Points >= 15 && earnedPointsForTrack >= 25
+        : table1Points >= 10 && table2Points >= 15 && table3Points >= 25 && earnedPointsForTrack >= 50;
+
+    const eligibleForOneOnOne = l1Passed && l2Passed && l3PreSessionPassed && meetsTableMinimums;
+    const oneOnOneCleared = l3OneOnOne.statusText === "Yes" || Boolean(evaluations[0]?.isPlacementReady);
+    const overallPlacementReady = eligibleForOneOnOne && oneOnOneCleared;
+
+    return {
+      l1Obt,
+      l1Max,
+      l1Pct,
+      l1Passed,
+      l2Obt,
+      l2Max,
+      l2Pct,
+      l2Passed,
+      l3PreSessionPassed,
+      table1Points,
+      table2Points,
+      table3Points,
+      earnedPointsForTrack,
+      requiredTotalPoints,
+      meetsTableMinimums,
+      eligibleForOneOnOne,
+      oneOnOneCleared,
+      overallPlacementReady,
+    };
+  };
+
+  const handleLogActivityPoint = (e: React.FormEvent) => {
+    e.preventDefault();
+    setActivityAlert(null);
+    if (!activityProofUrl.trim()) {
+      setActivityAlert("Please provide a valid public credential / platform URL (HackerRank, LeetCode, Kaggle, GitHub, Exercism, or Certificate link).");
+      return;
+    }
+    const item = ACTIVITY_CATALOG.find((a) => a.id === selectedActivityToLog);
+    if (!item) return;
+
+    setActivitySubmissions((prev) => {
+      const filtered = prev.filter((s) => s.activityId !== item.id);
+      return [
+        ...filtered,
+        {
+          activityId: item.id,
+          proofUrl: activityProofUrl.trim(),
+          completedDate: activityCompletedDate || "2026-11-15",
+          verifiedByIic: true,
+        },
+      ];
+    });
+    setActivityProofUrl("");
+    appendAudit(
+      user?.email || "student@ds.study.iitm.ac.in",
+      user?.role || "STUDENT",
+      "ACTIVITY_POINTS_LOGGED",
+      `${item.title} (+${item.points} pts)`,
+      "VERIFIED"
+    );
+  };
+
+  const handleSimulateOneOnOneSignoff = () => {
+    const progress = computeTrainingAndActivityProgress();
+    if (!progress.eligibleForOneOnOne) {
+      setActivityAlert(
+        `1-on-1 Session Blocked: Requires Level 1 (80%), Level 2 (60%), Level 3 Test + AI Mock Hire, and minimum ${progress.requiredTotalPoints} Activity Points (${progress.earnedPointsForTrack}/${progress.requiredTotalPoints} earned).`
+      );
+      return;
+    }
+    setTrainingStages((prev) =>
+      prev.map((s) => (s.id === "L3-S3" ? { ...s, statusText: "Yes" } : s))
+    );
+    setEvaluations((prev) =>
+      prev.length
+        ? [{ ...prev[0], isPlacementReady: true, status: "APPROVED" }, ...prev.slice(1)]
+        : prev
+    );
+    appendAudit(
+      "examiner@iitm.ac.in",
+      "EXAMINER",
+      "ONE_ON_ONE_READINESS_APPROVED",
+      `1-on-1 Session Readiness = Yes (${progress.earnedPointsForTrack} Activity Pts)`,
+      "APPROVED"
+    );
+  };
+
   const evaluateEligibilityForDrive = (job: JobDriveItem): { eligible: boolean; reasons: string[] } => {
     const reasons: string[] = [];
     const parsedCgpa = parseFloat(cgpaInput) || 0;
@@ -3221,7 +3466,7 @@ export default function App() {
             )}
 
             {/* Student Training Readiness Gate & Field-Specific Filter */}
-            {user.role === "STUDENT" && !(badges.length > 0 && Boolean(evaluations[0]?.isPlacementReady)) ? (
+            {user.role === "STUDENT" && !computeTrainingAndActivityProgress().overallPlacementReady ? (
               <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-8 text-center space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-300">
                   <Shield className="w-6 h-6" />
@@ -3963,86 +4208,324 @@ export default function App() {
         {activeTab === "TRAINING" && (
           <div className="space-y-8">
             {user.role === "STUDENT" && (() => {
-              const hasPassedQuiz = badges.length > 0;
-              const isVivaCleared = Boolean(evaluations[0]?.isPlacementReady);
-              const isReadyForJobs = hasPassedQuiz && isVivaCleared;
-              return (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-bold text-white flex items-center gap-2">
-                        <Award className="w-5 h-5 text-indigo-400" />
-                        My Training & Placement Readiness Tracker
-                      </h2>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Target Field:{" "}
-                        <span className="text-indigo-300 font-semibold">
-                          {studentTargetDomain === "DATA_SCIENCE"
-                            ? "Data Science"
-                            : "Software Development"}
-                        </span>{" "}
-                        • Track:{" "}
-                        <span className="text-indigo-300 font-semibold">{studentApplyingTrack}</span>
-                      </p>
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                        isReadyForJobs
-                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                          : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                      }`}
-                    >
-                      {isReadyForJobs
-                        ? "ELIGIBLE TO APPLY FOR OPPORTUNITIES"
-                        : "TRAINING IN PROGRESS — COMPLETE STEPS BELOW"}
-                    </span>
-                  </div>
+              const prog = computeTrainingAndActivityProgress();
+              const relevantActivities = ACTIVITY_CATALOG.filter((a) => {
+                if (a.table === "TABLE_1") return true;
+                if (a.table === "TABLE_2") return a.domain === studentTargetDomain;
+                if (a.table === "TABLE_3")
+                  return studentApplyingTrack === "FULL_TIME" && a.domain === studentTargetDomain;
+                return false;
+              });
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                      <span className="text-slate-400 block">Step 1 • 15-Q Domain Assessment</span>
-                      <span
-                        className={`font-semibold mt-1 block ${
-                          hasPassedQuiz ? "text-emerald-400" : "text-amber-300"
-                        }`}
-                      >
-                        {hasPassedQuiz
-                          ? `Completed (${badges.length} Verified Badge${badges.length > 1 ? "s" : ""})`
-                          : "Pending — Attempt 15-Question Quiz"}
-                      </span>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                      <span className="text-slate-400 block">Step 2 • Examiner Viva Evaluation</span>
-                      <span
-                        className={`font-semibold mt-1 block ${
-                          isVivaCleared ? "text-emerald-400" : "text-amber-300"
-                        }`}
-                      >
-                        {isVivaCleared
-                          ? "Cleared — Placement Ready Signed Off"
-                          : "Awaiting Examiner Viva Sign-Off"}
-                      </span>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+              return (
+                <div className="space-y-6">
+                  {/* Master Readiness & Eligibility Header */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <span className="text-slate-400 block">Step 3 • Field Opportunities</span>
-                        <span
-                          className={`font-semibold mt-1 block ${
-                            isReadyForJobs ? "text-emerald-400" : "text-slate-400"
-                          }`}
-                        >
-                          {isReadyForJobs ? "Unlocked" : "Locked Until Training Cleared"}
+                        <h2 className="text-base font-bold text-white flex items-center gap-2">
+                          <Award className="w-5 h-5 text-indigo-400" />
+                          3-Level Placement Training & IIC Activity Points Tracker
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Domain:{" "}
+                          <span className="text-indigo-300 font-semibold">
+                            {studentTargetDomain === "DATA_SCIENCE"
+                              ? "Data Science"
+                              : "Software Development"}
+                          </span>{" "}
+                          • Opted Plan:{" "}
+                          <span className="text-indigo-300 font-semibold">
+                            {studentApplyingTrack === "INTERNSHIP"
+                              ? "Internship Plan (Min 25 Activity Pts)"
+                              : "Full-Time Placement Plan (Min 50 Activity Pts)"}
+                          </span>
+                        </p>
+                      </div>
+                      <span
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border ${
+                          prog.overallPlacementReady
+                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                            : prog.eligibleForOneOnOne
+                            ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                            : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        }`}
+                      >
+                        {prog.overallPlacementReady
+                          ? "PLACEMENT READY — OPPORTUNITIES UNLOCKED"
+                          : prog.eligibleForOneOnOne
+                          ? "ELIGIBLE FOR 1-ON-1 EXAMINER SESSION"
+                          : `TRAINING & ACTIVITY POINTS IN PROGRESS (${prog.earnedPointsForTrack}/${prog.requiredTotalPoints} PTS)`}
+                      </span>
+                    </div>
+
+                    {/* 4-Pillar Gate Overview */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 block">Level 1 • Soft Skills (80% Cutoff)</span>
+                        <span className={`font-bold mt-1 block ${prog.l1Passed ? "text-emerald-400" : "text-amber-300"}`}>
+                          {prog.l1Obt}/{prog.l1Max} ({prog.l1Pct.toFixed(1)}%) — {prog.l1Passed ? "PASSED" : "BELOW CUTOFF"}
                         </span>
                       </div>
-                      {isReadyForJobs && (
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab("RECRUITMENT")}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 block">Level 2 • Focus Finder (60% Cutoff)</span>
+                        <span className={`font-bold mt-1 block ${prog.l2Passed ? "text-emerald-400" : "text-amber-300"}`}>
+                          {prog.l2Obt}/{prog.l2Max} ({prog.l2Pct.toFixed(1)}%) — {prog.l2Passed ? "PASSED" : "BELOW CUTOFF"}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 block">Parallel IIC Activity Points</span>
+                        <span className={`font-bold mt-1 block ${prog.meetsTableMinimums ? "text-emerald-400" : "text-amber-300"}`}>
+                          {prog.earnedPointsForTrack} / {prog.requiredTotalPoints} Pts ({prog.meetsTableMinimums ? "QUALIFIED" : "ACTION REQUIRED"})
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 block">Level 3 • 1-on-1 Examiner Session</span>
+                        <span className={`font-bold mt-1 block ${prog.oneOnOneCleared ? "text-emerald-400" : prog.eligibleForOneOnOne ? "text-indigo-300" : "text-slate-400"}`}>
+                          {prog.oneOnOneCleared
+                            ? "Readiness: Yes (Cleared)"
+                            : prog.eligibleForOneOnOne
+                            ? "Unlocked — Ready for 1-on-1"
+                            : `Locked (Need ${prog.requiredTotalPoints} Pts)`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3-Level Training Stage-by-Stage Breakdown */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    {([1, 2, 3] as const).map((lvl) => {
+                      const stages = trainingStages.filter((s) => s.level === lvl);
+                      const levelMeta =
+                        lvl === 1
+                          ? { name: "Level 1: Soft Skills Training", cutoff: "Overall 80% • Stage 70%", passed: prog.l1Passed }
+                          : lvl === 2
+                          ? { name: "Level 2: Focus Finder", cutoff: "Overall 60% • Stage 70%", passed: prog.l2Passed }
+                          : { name: "Level 3: Hire Tracking", cutoff: "Overall 60% • Stage 60% + Activity Pts", passed: prog.overallPlacementReady };
+
+                      return (
+                        <div key={lvl} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="text-sm font-bold text-white">{levelMeta.name}</h3>
+                                <p className="text-[11px] text-slate-400">{levelMeta.cutoff}</p>
+                              </div>
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                                  levelMeta.passed
+                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                    : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                }`}
+                              >
+                                {levelMeta.passed ? "CLEARED" : "IN PROGRESS"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {stages.map((st) => {
+                                const stageOk =
+                                  st.evaluationType === "MARKS"
+                                    ? st.obtainedMarks >= st.minRequired
+                                    : st.evaluationType === "AI_MOCK"
+                                    ? st.statusText === "Hire"
+                                    : prog.oneOnOneCleared;
+
+                                return (
+                                  <div key={st.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-slate-100">
+                                        {st.stageNum}. {st.title}
+                                      </span>
+                                      {st.evaluationType === "MARKS" ? (
+                                        <span className={`font-mono font-bold ${stageOk ? "text-emerald-400" : "text-rose-400"}`}>
+                                          {st.obtainedMarks}/{st.maxMarks} (Min {st.minRequired})
+                                        </span>
+                                      ) : st.evaluationType === "AI_MOCK" ? (
+                                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold">
+                                          {st.statusText}
+                                        </span>
+                                      ) : (
+                                        <span
+                                          className={`px-2 py-0.5 rounded font-semibold ${
+                                            prog.oneOnOneCleared
+                                              ? "bg-emerald-500/15 text-emerald-300"
+                                              : prog.eligibleForOneOnOne
+                                              ? "bg-indigo-500/20 text-indigo-300"
+                                              : "bg-slate-800 text-slate-400"
+                                          }`}
+                                        >
+                                          {prog.oneOnOneCleared
+                                            ? "Readiness: Yes"
+                                            : prog.eligibleForOneOnOne
+                                            ? "Eligible for 1-on-1"
+                                            : `Locked (${prog.earnedPointsForTrack}/${prog.requiredTotalPoints} Pts)`}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-1">{st.description}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {lvl === 3 && !prog.oneOnOneCleared && (
+                            <button
+                              type="button"
+                              onClick={handleSimulateOneOnOneSignoff}
+                              disabled={!prog.eligibleForOneOnOne}
+                              className={`w-full py-2 px-3 rounded-xl text-xs font-semibold transition ${
+                                prog.eligibleForOneOnOne
+                                  ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                                  : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                              }`}
+                            >
+                              {prog.eligibleForOneOnOne
+                                ? "Complete 1-on-1 Examiner Session (Sign Off Readiness)"
+                                : `Earn ${prog.requiredTotalPoints - prog.earnedPointsForTrack} More Activity Pts to Unlock 1-on-1`}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Parallel IIC Activity Points Portal (1-Year Validity) */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-bold text-white">
+                          IIC Placement Activity Points Portal (1-Year Validity)
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Table 1 (Common): <strong className="text-slate-200">{prog.table1Points}/15 pts</strong> (Min 10) •{" "}
+                          Table 2 (Internship {studentTargetDomain === "DATA_SCIENCE" ? "DS" : "Dev"}):{" "}
+                          <strong className="text-slate-200">{prog.table2Points}/25 pts</strong> (Min 15)
+                          {studentApplyingTrack === "FULL_TIME" && (
+                            <>
+                              {" "}
+                              • Table 3 (Placement {studentTargetDomain === "DATA_SCIENCE" ? "DS" : "Dev"}):{" "}
+                              <strong className="text-slate-200">{prog.table3Points}/40 pts</strong> (Min 25)
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
+                          Total Earned: {prog.earnedPointsForTrack} / {prog.requiredTotalPoints} Required Pts
+                        </span>
+                      </div>
+                    </div>
+
+                    {activityAlert && (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                        {activityAlert}
+                      </div>
+                    )}
+
+                    {/* Log Completed Activity Form */}
+                    <form onSubmit={handleLogActivityPoint} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs">
+                      <div className="md:col-span-5">
+                        <label className="block text-slate-400 mb-1">Select IIC Activity (Table 1 / 2 / 3)</label>
+                        <select
+                          value={selectedActivityToLog}
+                          onChange={(e) => setSelectedActivityToLog(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                         >
-                          View Jobs →
+                          {relevantActivities.map((act) => (
+                            <option key={act.id} value={act.id}>
+                              [{act.table.replace("_", " ")} • +{act.points} pts] {act.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-4">
+                        <label className="block text-slate-400 mb-1">Public Platform / Certificate URL</label>
+                        <input
+                          type="url"
+                          required
+                          value={activityProofUrl}
+                          onChange={(e) => setActivityProofUrl(e.target.value)}
+                          placeholder="https://kaggle.com/... or hackerrank.com/..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-slate-400 mb-1">Completion Date</label>
+                        <input
+                          type="date"
+                          required
+                          value={activityCompletedDate}
+                          onChange={(e) => setActivityCompletedDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div className="md:col-span-1 flex items-end">
+                        <button
+                          type="submit"
+                          className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                        >
+                          Log
                         </button>
-                      )}
+                      </div>
+                    </form>
+
+                    {/* Activity Checklist Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                            <th className="py-2 pr-3">Table</th>
+                            <th className="py-2 px-3">Topic & Activity</th>
+                            <th className="py-2 px-3">Points</th>
+                            <th className="py-2 px-3">Credential / Proof Link</th>
+                            <th className="py-2 pl-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/70">
+                          {relevantActivities.map((act) => {
+                            const sub = activitySubmissions.find((s) => s.activityId === act.id);
+                            return (
+                              <tr key={act.id}>
+                                <td className="py-2.5 pr-3 font-mono text-[11px] text-indigo-300">
+                                  {act.table.replace("_", " ")}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="font-semibold text-slate-100 block">{act.title}</span>
+                                  <span className="text-[11px] text-slate-400">{act.description}</span>
+                                </td>
+                                <td className="py-2.5 px-3 font-bold text-emerald-300">+{act.points} pts</td>
+                                <td className="py-2.5 px-3 text-[11px]">
+                                  {sub ? (
+                                    <a
+                                      href={sub.proofUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-indigo-400 hover:underline break-all"
+                                    >
+                                      {sub.proofUrl} ({sub.completedDate})
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-500">{act.platformHint}</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 pl-3">
+                                  {sub ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-semibold">
+                                      Earned (+{act.points})
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
