@@ -34,7 +34,19 @@ import {
   Video,
 } from "lucide-react";
 
-type Role = "STUDENT" | "RECRUITER" | "ADMIN";
+type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "ADMIN";
+type AuthMode = "SIGN_IN" | "SIGN_UP";
+type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+interface RegistrationRequestRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  role: Exclude<Role, "ADMIN">;
+  orgOrDept: string;
+  status: RegistrationApprovalStatus;
+  submittedAt: string;
+  reviewedBy?: string;
+}
 type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
@@ -481,6 +493,60 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<Role>("STUDENT");
   const [user, setUser] = useState<{ email: string; role: Role; name: string } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("SIGN_IN");
+  const [regFullName, setRegFullName] = useState("");
+  const [regOrgOrDept, setRegOrgOrDept] = useState("");
+  const [registrations, setRegistrations] = useState<RegistrationRequestRecord[]>([
+    {
+      id: "REG-101",
+      fullName: "Aarav Sharma",
+      email: "22f3001234@ds.study.iitm.ac.in",
+      role: "STUDENT",
+      orgOrDept: "BS Data Science • Roll 22F3001234",
+      status: "APPROVED",
+      submittedAt: "2026-11-10 09:15 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
+      id: "REG-102",
+      fullName: "Neha Kulkarni",
+      email: "neha.kulkarni@fractal.ai",
+      role: "RECRUITER",
+      orgOrDept: "Fractal Analytics • Talent Acquisition Lead",
+      status: "APPROVED",
+      submittedAt: "2026-11-11 14:20 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
+      id: "REG-103",
+      fullName: "Dr. Meera Subramanian",
+      email: "meera.subramanian@study.iitm.ac.in",
+      role: "EXAMINER",
+      orgOrDept: "Data Science & AI Viva Panel",
+      status: "APPROVED",
+      submittedAt: "2026-11-12 11:00 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
+      id: "REG-104",
+      fullName: "Rohan Deshmukh",
+      email: "23f1004512@ds.study.iitm.ac.in",
+      role: "STUDENT",
+      orgOrDept: "BS Data Science • Roll 23F1004512",
+      status: "PENDING",
+      submittedAt: "2026-11-18 10:05 IST",
+    },
+    {
+      id: "REG-105",
+      fullName: "Prof. Karthik Narayanan",
+      email: "karthik.viva@study.iitm.ac.in",
+      role: "EXAMINER",
+      orgOrDept: "Software Systems & Backend Architecture Panel",
+      status: "PENDING",
+      submittedAt: "2026-11-18 11:40 IST",
+    },
+  ]);
   const [activeTab, setActiveTab] = useState<ActiveTab>("RECRUITMENT");
 
   // Increment 1: Complete Student Registration Dossier
@@ -784,11 +850,21 @@ export default function App() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  const BLOCKED_PUBLIC_DOMAINS = [
+    "@gmail.com",
+    "@yahoo.com",
+    "@hotmail.com",
+    "@outlook.com",
+    "@icloud.com",
+    "@protonmail.com",
+  ];
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthNotice(null);
     const normalized = email.trim().toLowerCase();
     if (!normalized) {
-      setAuthError("Please enter your institutional email address.");
+      setAuthError("Please enter your institutional or corporate email address.");
       return;
     }
 
@@ -801,12 +877,147 @@ export default function App() {
         appendAudit(normalized, "STUDENT", "SSO_DOMAIN_REJECTED", "IAM Domain Filter", "BLOCKED");
         return;
       }
+    } else if (selectedRole === "RECRUITER") {
+      if (
+        BLOCKED_PUBLIC_DOMAINS.some((d) => normalized.endsWith(d)) ||
+        ALLOWED_DOMAINS.some((d) => normalized.endsWith(d))
+      ) {
+        setAuthError("Recruiters must sign in with an official corporate email domain.");
+        appendAudit(normalized, "RECRUITER", "CORPORATE_DOMAIN_REJECTED", "IAM Domain Filter", "BLOCKED");
+        return;
+      }
+    }
+
+    if (selectedRole !== "ADMIN") {
+      const matchedReg = registrations.find(
+        (r) => r.email.toLowerCase() === normalized && r.role === selectedRole
+      );
+      if (!matchedReg) {
+        setAuthError(
+          `No approved ${selectedRole} registration found for ${normalized}. Please switch to the Register (Sign Up) tab first.`
+        );
+        appendAudit(normalized, selectedRole, "LOGIN_UNREGISTERED", "IAM Approval Gate", "BLOCKED");
+        return;
+      }
+      if (matchedReg.status === "PENDING") {
+        setAuthError(
+          "Account Pending Approval: Your registration is awaiting Placement Admin verification before sign-in is enabled."
+        );
+        appendAudit(normalized, selectedRole, "LOGIN_PENDING_APPROVAL", "IAM Approval Gate", "BLOCKED");
+        return;
+      }
+      if (matchedReg.status === "REJECTED") {
+        setAuthError(
+          "Registration Declined: This account request was rejected by Placement Admin. Contact placement support."
+        );
+        appendAudit(normalized, selectedRole, "LOGIN_REJECTED_ACCOUNT", "IAM Approval Gate", "BLOCKED");
+        return;
+      }
+      setAuthError(null);
+      setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
+      appendAudit(normalized, selectedRole, "USER_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
+      return;
     }
 
     setAuthError(null);
     const displayName = normalized.split("@")[0].toUpperCase();
-    setUser({ email: normalized, role: selectedRole, name: displayName });
-    appendAudit(normalized, selectedRole, "USER_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
+    setUser({ email: normalized, role: "ADMIN", name: displayName });
+    appendAudit(normalized, "ADMIN", "ADMIN_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthNotice(null);
+    if (selectedRole === "ADMIN") {
+      setAuthError("Admin accounts cannot self-register.");
+      return;
+    }
+
+    const normalized = email.trim().toLowerCase();
+    const cleanName = regFullName.trim();
+    const cleanOrg = regOrgOrDept.trim();
+
+    if (!cleanName || !normalized || !cleanOrg) {
+      setAuthError("Please complete Full Name, Email, and Department / Organization details.");
+      return;
+    }
+
+    if (selectedRole === "STUDENT") {
+      const validDomain = ALLOWED_DOMAINS.some((d) => normalized.endsWith(d));
+      if (!validDomain) {
+        setAuthError(
+          "Domain Guard Rejected: Student registration requires @ds.study.iitm.ac.in or @es.study.iitm.ac.in."
+        );
+        appendAudit(normalized, "STUDENT", "SIGNUP_DOMAIN_REJECTED", "IAM Domain Filter", "BLOCKED");
+        return;
+      }
+    } else if (selectedRole === "RECRUITER") {
+      if (
+        BLOCKED_PUBLIC_DOMAINS.some((d) => normalized.endsWith(d)) ||
+        ALLOWED_DOMAINS.some((d) => normalized.endsWith(d))
+      ) {
+        setAuthError("Recruiter registration requires an official corporate email domain.");
+        appendAudit(normalized, "RECRUITER", "SIGNUP_DOMAIN_REJECTED", "IAM Domain Filter", "BLOCKED");
+        return;
+      }
+    }
+
+    const existing = registrations.find(
+      (r) => r.email.toLowerCase() === normalized && r.role === selectedRole
+    );
+    if (existing) {
+      setAuthError(
+        `A ${selectedRole} registration for ${normalized} already exists (Current Status: ${existing.status}).`
+      );
+      return;
+    }
+
+    const newRecord: RegistrationRequestRecord = {
+      id: `REG-${101 + registrations.length}`,
+      fullName: cleanName,
+      email: normalized,
+      role: selectedRole,
+      orgOrDept: cleanOrg,
+      status: "PENDING",
+      submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
+    };
+
+    setRegistrations((prev) => [newRecord, ...prev]);
+    appendAudit(
+      normalized,
+      selectedRole,
+      "REGISTRATION_SUBMITTED",
+      `${newRecord.id} (${selectedRole}) -> Awaiting Admin Approval`,
+      "SUCCESS"
+    );
+    setAuthError(null);
+    setAuthNotice(
+      `Registration ${newRecord.id} submitted for ${cleanName} (${selectedRole}). Sign-in will unlock once approved by Placement Admin.`
+    );
+    setRegFullName("");
+    setRegOrgOrDept("");
+    setAuthMode("SIGN_IN");
+  };
+
+  const handleRegistrationDecision = (regId: string, decision: "APPROVED" | "REJECTED") => {
+    if (!user || user.role !== "ADMIN") return;
+    let target: RegistrationRequestRecord | undefined;
+    setRegistrations((prev) =>
+      prev.map((r) => {
+        if (r.id !== regId) return r;
+        target = { ...r, status: decision, reviewedBy: user.email };
+        return target;
+      })
+    );
+    if (target) {
+      appendAudit(
+        user.email,
+        "ADMIN",
+        `REGISTRATION_${decision}`,
+        `${target.id} (${target.email} • ${target.role})`,
+        "SUCCESS"
+      );
+    }
   };
 
   const handleRoleSwitch = (nextRole: Role) => {
@@ -1530,32 +1741,36 @@ export default function App() {
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-4">
             <ShieldCheck className="w-4 h-4" />
-            Increment 1, 2 & 3 • IITM Career OS
+            IITM Career OS • Placement & Governance Portal
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-white">
             IITM Placement & Career Portal
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Student registration, proctored 15-Q assessments, examiner viva, and live eligibility
-            recruitment engine.
+            Admin-verified onboarding, proctored assessments, examiner viva evaluations, and live
+            eligibility recruitment engine.
           </p>
 
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+          <div className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
                 Select Role Context
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["STUDENT", "RECRUITER", "ADMIN"] as Role[]).map((r) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(["STUDENT", "RECRUITER", "EXAMINER", "ADMIN"] as Role[]).map((r) => (
                   <button
                     key={r}
                     type="button"
                     onClick={() => {
                       setSelectedRole(r);
                       setAuthError(null);
+                      setAuthNotice(null);
+                      if (r === "ADMIN") {
+                        setAuthMode("SIGN_IN");
+                      }
                     }}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition ${
+                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold border transition ${
                       selectedRole === r
                         ? "bg-indigo-600 border-indigo-500 text-white"
                         : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
@@ -1567,38 +1782,158 @@ export default function App() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
-                Institutional Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="22f3001234@ds.study.iitm.ac.in"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-              />
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                Allowed student domains: <span className="text-slate-300">@ds.study.iitm.ac.in</span>,{" "}
-                <span className="text-slate-300">@es.study.iitm.ac.in</span>
-              </p>
-            </div>
-
-            {authError && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{authError}</span>
+            {selectedRole !== "ADMIN" ? (
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("SIGN_IN");
+                    setAuthError(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-semibold transition ${
+                    authMode === "SIGN_IN"
+                      ? "bg-slate-800 text-white shadow"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("SIGN_UP");
+                    setAuthError(null);
+                    setAuthNotice(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-semibold transition ${
+                    authMode === "SIGN_UP"
+                      ? "bg-indigo-600 text-white shadow"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Register (Sign Up)
+                </button>
+              </div>
+            ) : (
+              <div className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>Administrator Access</span>
+                <span className="text-indigo-300 font-semibold">Sign In Only (Pre-Provisioned)</span>
               </div>
             )}
 
-            <button
-              type="submit"
-              className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+            <form
+              onSubmit={authMode === "SIGN_UP" && selectedRole !== "ADMIN" ? handleRegister : handleLogin}
+              className="space-y-3.5"
             >
-              <Lock className="w-4 h-4" />
-              Sign In with Domain SSO
-            </button>
-          </form>
+              {authMode === "SIGN_UP" && selectedRole !== "ADMIN" && (
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={regFullName}
+                    onChange={(e) => setRegFullName(e.target.value)}
+                    placeholder={
+                      selectedRole === "STUDENT"
+                        ? "e.g., Rohan Deshmukh"
+                        : selectedRole === "RECRUITER"
+                        ? "e.g., Priya Nair"
+                        : "e.g., Dr. Karthik Narayanan"
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
+                  {selectedRole === "RECRUITER" ? "Corporate Work Email" : "Institutional Email"}
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={
+                    selectedRole === "STUDENT"
+                      ? "22f3001234@ds.study.iitm.ac.in"
+                      : selectedRole === "RECRUITER"
+                      ? "neha.kulkarni@fractal.ai"
+                      : selectedRole === "EXAMINER"
+                      ? "meera.subramanian@study.iitm.ac.in"
+                      : "placement.admin@iitm.ac.in"
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
+                />
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  {selectedRole === "STUDENT" && (
+                    <>
+                      Allowed student domains: <span className="text-slate-300">@ds.study.iitm.ac.in</span>,{" "}
+                      <span className="text-slate-300">@es.study.iitm.ac.in</span>
+                    </>
+                  )}
+                  {selectedRole === "RECRUITER" && (
+                    <>Corporate domains only (public Gmail/Yahoo/Outlook addresses blocked).</>
+                  )}
+                  {selectedRole === "EXAMINER" && (
+                    <>Faculty / industry viva panelists require Placement Admin approval before login.</>
+                  )}
+                  {selectedRole === "ADMIN" && (
+                    <>Sign in as Admin to review and approve pending Student, Recruiter & Examiner registrations.</>
+                  )}
+                </p>
+              </div>
+
+              {authMode === "SIGN_UP" && selectedRole !== "ADMIN" && (
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
+                    {selectedRole === "STUDENT"
+                      ? "Program & Roll Number"
+                      : selectedRole === "RECRUITER"
+                      ? "Company & Designation"
+                      : "Department / Viva Panel Specialization"}
+                  </label>
+                  <input
+                    type="text"
+                    value={regOrgOrDept}
+                    onChange={(e) => setRegOrgOrDept(e.target.value)}
+                    placeholder={
+                      selectedRole === "STUDENT"
+                        ? "BS Data Science • Roll 23F1004512"
+                        : selectedRole === "RECRUITER"
+                        ? "Google India • University Talent Partner"
+                        : "Machine Learning & Systems Viva Panel"
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              )}
+
+              {authNotice && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authNotice}</span>
+                </div>
+              )}
+
+              {authError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+              >
+                <Lock className="w-4 h-4" />
+                {authMode === "SIGN_UP" && selectedRole !== "ADMIN"
+                  ? `Submit ${selectedRole} Registration for Admin Approval`
+                  : "Sign In with Domain SSO"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     );
@@ -1634,7 +1969,7 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 mr-1">RBAC View:</span>
-            {(["STUDENT", "RECRUITER", "ADMIN"] as Role[]).map((r) => (
+            {(["STUDENT", "RECRUITER", "EXAMINER", "ADMIN"] as Role[]).map((r) => (
               <button
                 key={r}
                 onClick={() => handleRoleSwitch(r)}
@@ -3656,7 +3991,99 @@ export default function App() {
         })()}
 
         {activeTab === "GOVERNANCE" && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-indigo-400" />
+                  <div>
+                    <h2 className="font-semibold text-white">
+                      Registration Approval Queue (Admin Gate)
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      All Student, Recruiter, and Examiner sign-ups remain locked until explicitly
+                      approved by Placement Admin.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold">
+                  {registrations.filter((r) => r.status === "PENDING").length} Pending Approval
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                      <th className="py-2.5 pr-3">Reg ID</th>
+                      <th className="py-2.5 pr-3">Applicant</th>
+                      <th className="py-2.5 pr-3">Role</th>
+                      <th className="py-2.5 pr-3">Department / Organization</th>
+                      <th className="py-2.5 pr-3">Status</th>
+                      <th className="py-2.5 text-right">Admin Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/70 text-xs">
+                    {registrations.map((reg) => (
+                      <tr key={reg.id} className="hover:bg-slate-950/60">
+                        <td className="py-3 pr-3 font-mono text-slate-400">{reg.id}</td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-slate-100">{reg.fullName}</div>
+                          <div className="text-[11px] text-slate-400">{reg.email}</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-semibold text-[11px]">
+                            {reg.role}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-3 text-slate-300">{reg.orgOrDept}</td>
+                        <td className="py-3 pr-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                              reg.status === "APPROVED"
+                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                : reg.status === "PENDING"
+                                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                : "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                            }`}
+                          >
+                            {reg.status}
+                          </span>
+                        </td>
+                        <td className="py-3 text-right">
+                          {user.role === "ADMIN" ? (
+                            <div className="inline-flex items-center gap-1.5">
+                              {reg.status !== "APPROVED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRegistrationDecision(reg.id, "APPROVED")}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition"
+                                >
+                                  Approve
+                                </button>
+                              )}
+                              {reg.status !== "REJECTED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRegistrationDecision(reg.id, "REJECTED")}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600/80 hover:bg-rose-500 text-white font-semibold text-[11px] transition"
+                                >
+                                  Reject
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">Admin Role Required</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
@@ -3716,6 +4143,7 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
         )}
       </main>

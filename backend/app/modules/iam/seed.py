@@ -9,6 +9,7 @@ from app.modules.student.models import ProgramLevel, ProgramType, Student, Stude
 ROLE_DESCRIPTIONS = {
     RoleName.STUDENT: "IITM BS Student candidate",
     RoleName.RECRUITER: "Corporate Hiring Manager / Talent Partner",
+    RoleName.EXAMINER: "Technical Viva & Assessment Examiner",
     RoleName.PLACEMENT_COORDINATOR: "Student Placement Representative",
     RoleName.ADMIN: "Placement Cell Operations Admin",
     RoleName.SUPER_ADMIN: "System Super Administrator",

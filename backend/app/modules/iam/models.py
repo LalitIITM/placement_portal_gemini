@@ -13,6 +13,7 @@ from app.shared.database import Base, TimestampMixin, generate_uuid
 class RoleName(str, enum.Enum):
     STUDENT = "STUDENT"
     RECRUITER = "RECRUITER"
+    EXAMINER = "EXAMINER"
     PLACEMENT_COORDINATOR = "PLACEMENT_COORDINATOR"
     ADMIN = "ADMIN"
     SUPER_ADMIN = "SUPER_ADMIN"
@@ -28,6 +29,8 @@ class User(Base, TimestampMixin):
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     google_sub: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    approval_status: Mapped[str] = mapped_column(String(32), default="APPROVED", nullable=False)
+    organization_or_dept: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user_roles: Mapped[list["UserRole"]] = relationship(
