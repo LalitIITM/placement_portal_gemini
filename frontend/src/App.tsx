@@ -28,10 +28,14 @@ import {
   Building2,
   Send,
   XCircle,
+  Calendar,
+  BadgeCheck,
+  BarChart3,
+  Video,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
-type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "GOVERNANCE";
+type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
@@ -158,6 +162,78 @@ interface JobApplicationRecord {
   status: AppStatusOption;
   appliedAt: string;
 }
+
+type InterviewRoundOption = "TECHNICAL_1" | "TECHNICAL_2" | "MANAGERIAL" | "HR_FINAL";
+type InterviewStatusOption = "SCHEDULED" | "CONFIRMED" | "PASSED" | "FAILED";
+type OfferStatusOption = "ISSUED" | "ACCEPTED" | "DECLINED";
+
+interface InterviewScheduleRecord {
+  id: string;
+  applicationId: string;
+  studentRoll: string;
+  studentName: string;
+  companyName: string;
+  jobTitle: string;
+  roundNumber: number;
+  roundType: InterviewRoundOption;
+  mode: "ONLINE_MEET" | "IN_PERSON";
+  scheduledAt: string;
+  meetingLink: string;
+  panelistName: string;
+  status: InterviewStatusOption;
+  notes?: string;
+}
+
+interface OfferLetterRecord {
+  id: string;
+  offerCode: string;
+  applicationId: string;
+  studentRoll: string;
+  studentName: string;
+  companyName: string;
+  roleTitle: string;
+  roleType: JobRoleTypeOption;
+  ctcLpa: number;
+  joiningDate: string;
+  expiresAt: string;
+  status: OfferStatusOption;
+  remarks?: string;
+}
+
+const INITIAL_INTERVIEWS: InterviewScheduleRecord[] = [
+  {
+    id: "IV-901",
+    applicationId: "SEED-APP-1",
+    studentRoll: "22F3001234",
+    studentName: "Aarav Sharma",
+    companyName: "Fractal Analytics",
+    jobTitle: "Associate Data Scientist",
+    roundNumber: 1,
+    roundType: "TECHNICAL_1",
+    mode: "ONLINE_MEET",
+    scheduledAt: "2026-11-22T10:30",
+    meetingLink: "https://meet.google.com/iitm-fractal-ds1",
+    panelistName: "Dr. Meera Subramanian (Principal DS)",
+    status: "SCHEDULED",
+  },
+];
+
+const INITIAL_OFFERS: OfferLetterRecord[] = [
+  {
+    id: "OFR-501",
+    offerCode: "OFR-2026-8841A",
+    applicationId: "SEED-APP-2",
+    studentRoll: "22F3001234",
+    studentName: "Aarav Sharma",
+    companyName: "Flipkart",
+    roleTitle: "Data Science Intern — Supply Chain",
+    roleType: "INTERNSHIP",
+    ctcLpa: 7.2,
+    joiningDate: "2027-01-11",
+    expiresAt: "2026-12-05",
+    status: "ISSUED",
+  },
+];
 
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
@@ -937,6 +1013,212 @@ export default function App() {
     );
   };
 
+
+  // Increment 4: Interviews, Offers & Placement Analytics State
+  const [interviews, setInterviews] = useState<InterviewScheduleRecord[]>(INITIAL_INTERVIEWS);
+  const [offers, setOffers] = useState<OfferLetterRecord[]>(INITIAL_OFFERS);
+  const [placementAlert, setPlacementAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+
+  const [ivAppId, setIvAppId] = useState<string>("");
+  const [ivRoundType, setIvRoundType] = useState<InterviewRoundOption>("TECHNICAL_1");
+  const [ivMode, setIvMode] = useState<"ONLINE_MEET" | "IN_PERSON">("ONLINE_MEET");
+  const [ivDateTime, setIvDateTime] = useState<string>("2026-11-24T14:00");
+  const [ivMeetingLink, setIvMeetingLink] = useState<string>("https://meet.google.com/iitm-placement-panel");
+  const [ivPanelist, setIvPanelist] = useState<string>("Rohan Kulkarni (Staff Engineer)");
+
+  const [ofrAppId, setOfrAppId] = useState<string>("");
+  const [ofrCtcLpa, setOfrCtcLpa] = useState<string>("16.50");
+  const [ofrJoiningDate, setOfrJoiningDate] = useState<string>("2027-06-15");
+  const [ofrExpiresAt, setOfrExpiresAt] = useState<string>("2026-12-10");
+
+  const handleScheduleInterview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const targetApp = applications.find((a) => a.id === ivAppId) || applications[0];
+    const studentRoll = targetApp ? targetApp.studentRoll : "22F3001234";
+    const studentName = targetApp ? targetApp.studentName : fullName;
+    const companyName = targetApp ? targetApp.companyName : "Google Research India";
+    const jobTitle = targetApp ? targetApp.jobTitle : "AI/ML Research Fellow";
+    const appId = targetApp ? targetApp.id : `APP-${Date.now()}`;
+
+    const proposedMs = new Date(ivDateTime).getTime();
+    if (Number.isNaN(proposedMs)) {
+      setPlacementAlert({ type: "ERR", text: "Select a valid interview date and time." });
+      return;
+    }
+
+    // BRULE-31: 45-minute student conflict check
+    const conflict = interviews.find(
+      (iv) =>
+        iv.studentRoll === studentRoll &&
+        (iv.status === "SCHEDULED" || iv.status === "CONFIRMED") &&
+        Math.abs(new Date(iv.scheduledAt).getTime() - proposedMs) < 45 * 60 * 1000
+    );
+    if (conflict) {
+      const msg = `BRULE-31 Conflict: ${studentName} already has an active interview (${conflict.companyName} at ${conflict.scheduledAt.replace("T", " ")}) within 45 minutes.`;
+      setPlacementAlert({ type: "ERR", text: msg });
+      appendAudit(user.email, user.role, "INTERVIEW_CONFLICT_BLOCKED", msg, "BLOCKED");
+      return;
+    }
+
+    const existingForApp = interviews.filter((iv) => iv.applicationId === appId).length;
+    const created: InterviewScheduleRecord = {
+      id: `IV-${Math.floor(100 + Math.random() * 900)}`,
+      applicationId: appId,
+      studentRoll,
+      studentName,
+      companyName,
+      jobTitle,
+      roundNumber: existingForApp + 1,
+      roundType: ivRoundType,
+      mode: ivMode,
+      scheduledAt: ivDateTime,
+      meetingLink: ivMeetingLink.trim() || "https://meet.google.com/iitm-panel",
+      panelistName: ivPanelist.trim() || "Industry Panelist",
+      status: "SCHEDULED",
+    };
+    setInterviews((prev) => [created, ...prev]);
+    if (targetApp && (targetApp.status === "APPLIED" || targetApp.status === "SHORTLISTED")) {
+      setApplications((prev) =>
+        prev.map((a) => (a.id === targetApp.id ? { ...a, status: "INTERVIEWING" } : a))
+      );
+    }
+    setPlacementAlert({
+      type: "OK",
+      text: `Scheduled Round ${created.roundNumber} (${created.roundType}) for ${studentName} with ${companyName}.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "INTERVIEW_SCHEDULED",
+      `${created.id} — ${companyName} (${created.roundType}) for ${studentRoll}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleUpdateInterviewStatus = (ivId: string, nextStatus: InterviewStatusOption) => {
+    if (!user) return;
+    setInterviews((prev) =>
+      prev.map((iv) => (iv.id === ivId ? { ...iv, status: nextStatus } : iv))
+    );
+    setPlacementAlert({ type: "OK", text: `Interview ${ivId} updated to ${nextStatus}.` });
+    appendAudit(user.email, user.role, "INTERVIEW_STATUS_UPDATED", `${ivId} -> ${nextStatus}`, "SUCCESS");
+  };
+
+  const handleIssueOfferLetter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const targetApp = applications.find((a) => a.id === ofrAppId) || applications[0];
+    const studentRoll = targetApp ? targetApp.studentRoll : "22F3001234";
+    const studentName = targetApp ? targetApp.studentName : fullName;
+    const companyName = targetApp ? targetApp.companyName : "Fractal Analytics";
+    const roleTitle = targetApp ? targetApp.jobTitle : "Associate Data Scientist";
+    const roleType: JobRoleTypeOption = targetApp ? targetApp.roleType : "FULL_TIME";
+    const appId = targetApp ? targetApp.id : `APP-OFR-${Date.now()}`;
+    const parsedCtc = parseFloat(ofrCtcLpa);
+
+    if (Number.isNaN(parsedCtc) || parsedCtc <= 0) {
+      setPlacementAlert({ type: "ERR", text: "Enter a valid positive CTC / Stipend annualized value in LPA." });
+      return;
+    }
+
+    const newOffer: OfferLetterRecord = {
+      id: `OFR-${Math.floor(100 + Math.random() * 900)}`,
+      offerCode: `OFR-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      applicationId: appId,
+      studentRoll,
+      studentName,
+      companyName,
+      roleTitle,
+      roleType,
+      ctcLpa: parsedCtc,
+      joiningDate: ofrJoiningDate,
+      expiresAt: ofrExpiresAt,
+      status: "ISSUED",
+    };
+    setOffers((prev) => [newOffer, ...prev]);
+    if (targetApp) {
+      setApplications((prev) =>
+        prev.map((a) => (a.id === targetApp.id ? { ...a, status: "OFFERED" } : a))
+      );
+    }
+    setPlacementAlert({
+      type: "OK",
+      text: `Issued offer ${newOffer.offerCode} (${companyName} — ₹${parsedCtc.toFixed(2)} LPA) to ${studentName}.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "OFFER_LETTER_ISSUED",
+      `${newOffer.offerCode} (${companyName}, ₹${parsedCtc.toFixed(2)} LPA) -> ${studentRoll}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleRespondToOffer = (offerId: string, decision: "ACCEPTED" | "DECLINED") => {
+    if (!user) return;
+    const target = offers.find((o) => o.id === offerId);
+    if (!target || target.status !== "ISSUED") return;
+
+    // BRULE-35: Single Accepted Full-Time Offer Lock
+    if (decision === "ACCEPTED" && target.roleType === "FULL_TIME") {
+      const alreadyAcceptedFt = offers.find(
+        (o) =>
+          o.studentRoll === target.studentRoll &&
+          o.roleType === "FULL_TIME" &&
+          o.status === "ACCEPTED"
+      );
+      if (alreadyAcceptedFt) {
+        const msg = `BRULE-35 Lock: Already accepted full-time offer from ${alreadyAcceptedFt.companyName} (${alreadyAcceptedFt.offerCode}).`;
+        setPlacementAlert({ type: "ERR", text: msg });
+        appendAudit(user.email, user.role, "OFFER_ACCEPT_BLOCKED", msg, "BLOCKED");
+        return;
+      }
+      setIsPlaced(true);
+    }
+
+    setOffers((prev) =>
+      prev.map((o) => {
+        if (o.id === offerId) {
+          return {
+            ...o,
+            status: decision,
+            remarks: decision === "ACCEPTED" ? "Accepted via IITM BS Placement Portal" : "Declined by candidate",
+          };
+        }
+        if (
+          decision === "ACCEPTED" &&
+          target.roleType === "FULL_TIME" &&
+          o.studentRoll === target.studentRoll &&
+          o.roleType === "FULL_TIME" &&
+          o.status === "ISSUED"
+        ) {
+          return {
+            ...o,
+            status: "DECLINED",
+            remarks: "Auto-closed under BRULE-35 Single Full-Time Offer Policy",
+          };
+        }
+        return o;
+      })
+    );
+
+    setPlacementAlert({
+      type: "OK",
+      text:
+        decision === "ACCEPTED"
+          ? `Offer ${target.offerCode} from ${target.companyName} ACCEPTED! Placement status updated.`
+          : `Offer ${target.offerCode} from ${target.companyName} declined.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      `OFFER_${decision}`,
+      `${target.offerCode} (${target.companyName})`,
+      "SUCCESS"
+    );
+  };
+
   const handleAddQuestionToBank = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -1421,6 +1703,19 @@ export default function App() {
           >
             <Building2 className="w-3.5 h-3.5" />
             I3: Jobs & Eligibility Engine ({jobs.length} Drives • {applications.length} Applied)
+          </button>
+
+          <button
+            disabled={isQuizActive}
+            onClick={() => setActiveTab("PLACEMENT")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+              activeTab === "PLACEMENT"
+                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            Interviews, Offers & Analytics ({interviews.length + offers.length})
           </button>
 
           <button
@@ -2968,6 +3263,397 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {activeTab === "PLACEMENT" && (() => {
+          const acceptedOffers = offers.filter((o) => o.status === "ACCEPTED");
+          const ftOffers = offers.filter((o) => o.roleType === "FULL_TIME");
+          const avgCtc = ftOffers.length
+            ? (ftOffers.reduce((acc, o) => acc + o.ctcLpa, 0) / ftOffers.length).toFixed(2)
+            : "16.50";
+          const maxCtc = ftOffers.length
+            ? Math.max(...ftOffers.map((o) => o.ctcLpa)).toFixed(2)
+            : "22.00";
+
+          return (
+            <div className="space-y-8">
+              {placementAlert && (
+                <div
+                  className={`p-4 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                    placementAlert.type === "OK"
+                      ? "bg-emerald-950/50 border-emerald-500/40 text-emerald-200"
+                      : "bg-rose-950/60 border-rose-500/40 text-rose-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {placementAlert.type === "OK" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span>{placementAlert.text}</span>
+                  </div>
+                  <button
+                    onClick={() => setPlacementAlert(null)}
+                    className="text-slate-400 hover:text-white text-[11px] underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {/* Placement Cell Executive KPIs */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-indigo-400" />
+                      IITM BS Placement Analytics & Cohort Telemetry
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Live conversion funnel across drives, interviews, issued offers, and BRULE-35 locked acceptances.
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
+                    2026-27 Placement Season
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Active Drives</div>
+                    <div className="text-xl font-bold text-white mt-1">{jobs.length}</div>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Applications</div>
+                    <div className="text-xl font-bold text-sky-300 mt-1">{applications.length}</div>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Interviews</div>
+                    <div className="text-xl font-bold text-amber-300 mt-1">{interviews.length}</div>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Offers Issued</div>
+                    <div className="text-xl font-bold text-purple-300 mt-1">{offers.length}</div>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Offers Accepted</div>
+                    <div className="text-xl font-bold text-emerald-400 mt-1">{acceptedOffers.length}</div>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+                    <div className="text-[11px] text-slate-400">Avg / Max FT CTC</div>
+                    <div className="text-base font-bold text-emerald-300 mt-1">
+                      ₹{avgCtc} / ₹{maxCtc} LPA
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Offer Letters Desk (BRULE-35 Single Full-Time Offer Lock) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <BadgeCheck className="w-4 h-4 text-emerald-400" />
+                      Official Offer Letters ({offers.length})
+                    </h3>
+                    <span className="text-[11px] text-slate-400">BRULE-35 Single FT Lock Active</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {offers.map((ofr) => (
+                      <div
+                        key={ofr.id}
+                        className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono text-indigo-300">{ofr.offerCode}</span>
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold text-slate-300">
+                              {ofr.roleType}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                ofr.status === "ACCEPTED"
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : ofr.status === "DECLINED"
+                                  ? "bg-rose-500/20 text-rose-300"
+                                  : "bg-amber-500/20 text-amber-300"
+                              }`}
+                            >
+                              {ofr.status}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-white">
+                            {ofr.companyName} — {ofr.roleTitle}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Candidate: <span className="text-slate-200">{ofr.studentName}</span> ({ofr.studentRoll}) ·{" "}
+                            <span className="text-emerald-300 font-semibold">₹{ofr.ctcLpa.toFixed(2)} LPA</span> · Joins{" "}
+                            {ofr.joiningDate} (Expires {ofr.expiresAt})
+                          </div>
+                          {ofr.remarks && (
+                            <div className="text-[11px] text-slate-500 italic">{ofr.remarks}</div>
+                          )}
+                        </div>
+
+                        {user?.role === "STUDENT" && ofr.status === "ISSUED" && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleRespondToOffer(ofr.id, "ACCEPTED")}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition"
+                            >
+                              Accept Offer
+                            </button>
+                            <button
+                              onClick={() => handleRespondToOffer(ofr.id, "DECLINED")}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 text-xs font-semibold transition"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recruiter / Admin Offer Issuance Form */}
+                <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400" />
+                    Issue Formal Offer Letter
+                  </h3>
+                  <form onSubmit={handleIssueOfferLetter} className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Target Application</label>
+                      <select
+                        value={ofrAppId}
+                        onChange={(e) => setOfrAppId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      >
+                        {applications.length === 0 ? (
+                          <option value="">Aarav Sharma — Fractal Analytics (Associate Data Scientist)</option>
+                        ) : (
+                          applications.map((app) => (
+                            <option key={app.id} value={app.id}>
+                              {app.studentName} — {app.companyName} ({app.jobTitle})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Annualized CTC (LPA)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={ofrCtcLpa}
+                          onChange={(e) => setOfrCtcLpa(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Joining Date</label>
+                        <input
+                          type="date"
+                          value={ofrJoiningDate}
+                          onChange={(e) => setOfrJoiningDate(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Offer Response Deadline</label>
+                      <input
+                        type="date"
+                        value={ofrExpiresAt}
+                        onChange={(e) => setOfrExpiresAt(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={user?.role === "STUDENT"}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold transition"
+                    >
+                      {user?.role === "STUDENT" ? "Switch to Recruiter / Admin to Issue Offers" : "Generate & Issue Offer Letter"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Interview Schedule & BRULE-31 Conflict-Free Slot Engine */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-sky-400" />
+                      Scheduled Interview Panels ({interviews.length})
+                    </h3>
+                    <span className="text-[11px] text-slate-400">BRULE-31 45-Min Conflict Guard</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {interviews.map((iv) => (
+                      <div
+                        key={iv.id}
+                        className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono text-sky-300">{iv.id}</span>
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold">
+                              Round {iv.roundNumber} · {iv.roundType}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                iv.status === "PASSED" || iv.status === "CONFIRMED"
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : iv.status === "FAILED"
+                                  ? "bg-rose-500/20 text-rose-300"
+                                  : "bg-amber-500/20 text-amber-300"
+                              }`}
+                            >
+                              {iv.status}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-white">
+                            {iv.companyName} — {iv.jobTitle}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Candidate: <span className="text-slate-200">{iv.studentName}</span> · Slot:{" "}
+                            <span className="text-sky-300 font-medium">{iv.scheduledAt.replace("T", " ")} IST</span> · Panelist:{" "}
+                            {iv.panelistName}
+                          </div>
+                          <div className="text-[11px] text-indigo-400 flex items-center gap-1.5">
+                            <Video className="w-3.5 h-3.5" />
+                            <span>{iv.meetingLink}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {user?.role === "STUDENT" && iv.status === "SCHEDULED" && (
+                            <button
+                              onClick={() => handleUpdateInterviewStatus(iv.id, "CONFIRMED")}
+                              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition"
+                            >
+                              Confirm Slot
+                            </button>
+                          )}
+                          {user?.role !== "STUDENT" && (iv.status === "SCHEDULED" || iv.status === "CONFIRMED") && (
+                            <>
+                              <button
+                                onClick={() => handleUpdateInterviewStatus(iv.id, "PASSED")}
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition"
+                              >
+                                Pass Round
+                              </button>
+                              <button
+                                onClick={() => handleUpdateInterviewStatus(iv.id, "FAILED")}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-xs font-semibold transition"
+                              >
+                                Fail
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recruiter / Admin Interview Slot Scheduler */}
+                <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-400" />
+                    Schedule Interview Slot
+                  </h3>
+                  <form onSubmit={handleScheduleInterview} className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Candidate Application</label>
+                      <select
+                        value={ivAppId}
+                        onChange={(e) => setIvAppId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      >
+                        {applications.length === 0 ? (
+                          <option value="">Aarav Sharma — Google Research India (AI/ML Research Fellow)</option>
+                        ) : (
+                          applications.map((app) => (
+                            <option key={app.id} value={app.id}>
+                              {app.studentName} — {app.companyName} ({app.jobTitle})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Interview Round</label>
+                        <select
+                          value={ivRoundType}
+                          onChange={(e) => setIvRoundType(e.target.value as InterviewRoundOption)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                        >
+                          <option value="TECHNICAL_1">TECHNICAL_1</option>
+                          <option value="TECHNICAL_2">TECHNICAL_2</option>
+                          <option value="MANAGERIAL">MANAGERIAL</option>
+                          <option value="HR_FINAL">HR_FINAL</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Mode</label>
+                        <select
+                          value={ivMode}
+                          onChange={(e) => setIvMode(e.target.value as "ONLINE_MEET" | "IN_PERSON")}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                        >
+                          <option value="ONLINE_MEET">ONLINE_MEET</option>
+                          <option value="IN_PERSON">IN_PERSON</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Date & Time (IST)</label>
+                      <input
+                        type="datetime-local"
+                        value={ivDateTime}
+                        onChange={(e) => setIvDateTime(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Panelist Name & Title</label>
+                      <input
+                        type="text"
+                        value={ivPanelist}
+                        onChange={(e) => setIvPanelist(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Meeting Link / Campus Room</label>
+                      <input
+                        type="text"
+                        value={ivMeetingLink}
+                        onChange={(e) => setIvMeetingLink(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={user?.role === "STUDENT"}
+                      className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white text-xs font-semibold transition"
+                    >
+                      {user?.role === "STUDENT" ? "Switch to Recruiter / Admin to Schedule" : "Schedule Interview Slot"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {activeTab === "GOVERNANCE" && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
