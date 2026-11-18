@@ -1,11 +1,12 @@
 import hashlib
+import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,6 +21,9 @@ from app.modules.training.models import (
     ExaminerEvaluation,
     ModuleProgress,
     QuizAttempt,
+    QuizDomain,
+    QuizQuestionBank,
+    QuizTrack,
     SkillBadge,
 )
 from app.shared.database import get_db
@@ -28,10 +32,45 @@ router = APIRouter(prefix="/api/v1/training", tags=["Training & Assessment"])
 
 MAX_QUIZ_ATTEMPTS = 3  # BRULE-12
 MAX_QUIZ_DURATION_SECONDS = 1800  # 30 minutes
+QUESTIONS_PER_QUIZ = 15  # 15 randomly drawn questions per quiz
 
 
-class QuizSubmissionIn(BaseModel):
-    answers: list[int] = Field(default_factory=list)
+class QuestionBankCreateIn(BaseModel):
+    domain: QuizDomain
+    track: QuizTrack
+    prompt: str = Field(..., min_length=5, max_length=2000)
+    options: list[str] = Field(..., min_length=4, max_length=4)
+    correct_index: int = Field(..., ge=0, le=3)
+    difficulty: str = Field(default="MEDIUM", max_length=24)
+
+
+class QuestionBankOut(BaseModel):
+    id: str
+    domain: QuizDomain
+    track: QuizTrack
+    prompt: str
+    options: list[str]
+    correct_index: int
+    difficulty: str
+    created_at: datetime
+
+
+class QuestionPublicOut(BaseModel):
+    id: str
+    prompt: str
+    options: list[str]
+
+
+class QuizSessionStartOut(BaseModel):
+    attempt_id: str
+    attempt_number: int
+    attempts_remaining_after: int
+    time_limit_seconds: int
+    questions: list[QuestionPublicOut]
+
+
+class QuizSessionSubmitIn(BaseModel):
+    answers: dict[str, int] = Field(default_factory=dict)
     termination_reason: Literal["NORMAL", "TIMEOUT", "TAB_SWITCH_VIOLATION"] = "NORMAL"
     elapsed_seconds: int = Field(default=0, ge=0)
 
@@ -82,12 +121,6 @@ class ModuleOut(BaseModel):
     completed: bool
 
 
-class QuestionPublicOut(BaseModel):
-    id: str
-    prompt: str
-    options: list[str]
-
-
 class BadgeOut(BaseModel):
     id: str
     course_code: str
@@ -103,21 +136,26 @@ class CourseOut(BaseModel):
     code: str
     title: str
     category: str
+    domain: QuizDomain
+    track: QuizTrack
     skill_tag: str
     description: str
     pass_threshold_pct: int
     time_limit_seconds: int
+    questions_per_quiz: int
+    question_pool_size: int
     attempts_used: int
     max_attempts: int
     best_score_pct: Optional[int]
     badge: Optional[BadgeOut]
     modules: list[ModuleOut]
-    questions: list[QuestionPublicOut]
 
 
 class AttemptResultOut(BaseModel):
     attempt_number: int
     attempts_remaining: int
+    total_questions: int
+    correct_count: int
     score_pct: int
     passed: bool
     termination_reason: str
@@ -134,6 +172,119 @@ class BadgeVerificationOut(BaseModel):
     student_roll_number: str
     score_pct: int
     issued_at: datetime
+
+
+@router.get("/question-bank", response_model=list[QuestionBankOut])
+async def list_question_bank(
+    domain: Optional[QuizDomain] = Query(None),
+    track: Optional[QuizTrack] = Query(None),
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[QuestionBankOut]:
+    stmt = select(QuizQuestionBank).where(QuizQuestionBank.is_active.is_(True))
+    if domain is not None:
+        stmt = stmt.where(QuizQuestionBank.domain == domain)
+    if track is not None:
+        stmt = stmt.where(QuizQuestionBank.track == track)
+    stmt = stmt.order_by(QuizQuestionBank.created_at.desc())
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        QuestionBankOut(
+            id=str(q.id),
+            domain=q.domain,
+            track=q.track,
+            prompt=q.prompt,
+            options=q.options_json,
+            correct_index=q.correct_index,
+            difficulty=q.difficulty,
+            created_at=q.created_at,
+        )
+        for q in rows
+    ]
+
+
+@router.post("/question-bank", response_model=QuestionBankOut, status_code=status.HTTP_201_CREATED)
+async def add_question_to_bank(
+    payload: QuestionBankCreateIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankOut:
+    """Add a new MCQ question to the Data Science or Software Development question bank."""
+    q = QuizQuestionBank(
+        domain=payload.domain,
+        track=payload.track,
+        prompt=payload.prompt.strip(),
+        options_json=[o.strip() for o in payload.options],
+        correct_index=payload.correct_index,
+        difficulty=payload.difficulty.strip().upper(),
+        created_by=principal.user.id,
+    )
+    db.add(q)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="QUESTION_BANK_ADDED",
+        entity_type="QuizQuestionBank",
+        entity_id=str(q.id),
+        after_state={"domain": q.domain.value, "track": q.track.value, "difficulty": q.difficulty},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return QuestionBankOut(
+        id=str(q.id),
+        domain=q.domain,
+        track=q.track,
+        prompt=q.prompt,
+        options=q.options_json,
+        correct_index=q.correct_index,
+        difficulty=q.difficulty,
+        created_at=q.created_at,
+    )
+
+
+@router.post(
+    "/question-bank/bulk",
+    response_model=dict[str, int],
+    status_code=status.HTTP_201_CREATED,
+)
+async def bulk_add_questions_to_bank(
+    items: list[QuestionBankCreateIn],
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Bulk import MCQ questions into the Data Science / Software Development question bank."""
+    if not items:
+        raise HTTPException(status_code=400, detail="Provide at least one question.")
+    for item in items:
+        db.add(
+            QuizQuestionBank(
+                domain=item.domain,
+                track=item.track,
+                prompt=item.prompt.strip(),
+                options_json=[o.strip() for o in item.options],
+                correct_index=item.correct_index,
+                difficulty=item.difficulty.strip().upper(),
+                created_by=principal.user.id,
+            )
+        )
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="QUESTION_BANK_BULK_IMPORTED",
+        entity_type="QuizQuestionBank",
+        entity_id="BULK",
+        after_state={"inserted_count": len(items)},
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"inserted": len(items)}
 
 
 @router.get("/courses", response_model=list[CourseOut])
@@ -166,6 +317,16 @@ async def list_training_courses(
     results: list[CourseOut] = []
 
     for c in courses:
+        pool_count = (
+            await db.execute(
+                select(func.count(QuizQuestionBank.id)).where(
+                    QuizQuestionBank.domain == c.domain,
+                    QuizQuestionBank.track == c.track,
+                    QuizQuestionBank.is_active.is_(True),
+                )
+            )
+        ).scalar_one()
+
         c_attempts = [a for a in attempts if a.course_id == c.id]
         best = max((a.score_pct for a in c_attempts), default=None)
         b = badge_by_course.get(c.id)
@@ -188,10 +349,14 @@ async def list_training_courses(
                 code=c.code,
                 title=c.title,
                 category=c.category,
+                domain=c.domain,
+                track=c.track,
                 skill_tag=c.skill_tag,
                 description=c.description,
                 pass_threshold_pct=c.pass_threshold_pct,
                 time_limit_seconds=c.time_limit_seconds,
+                questions_per_quiz=c.questions_per_quiz,
+                question_pool_size=pool_count,
                 attempts_used=len(c_attempts),
                 max_attempts=MAX_QUIZ_ATTEMPTS,
                 best_score_pct=best,
@@ -206,10 +371,6 @@ async def list_training_courses(
                         completed=m.id in completed_ids,
                     )
                     for m in c.modules
-                ],
-                questions=[
-                    QuestionPublicOut(id=q["id"], prompt=q["prompt"], options=q["options"])
-                    for q in c.questions_json
                 ],
             )
         )
@@ -256,15 +417,14 @@ async def complete_course_module(
     return {"status": "completed", "module_id": str(module.id)}
 
 
-@router.post("/courses/{course_id}/attempt", response_model=AttemptResultOut)
-async def submit_quiz_attempt(
+@router.post("/courses/{course_id}/sessions/start", response_model=QuizSessionStartOut)
+async def start_random_quiz_session(
     course_id: uuid.UUID,
-    payload: QuizSubmissionIn,
     request: Request,
     principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
     db: AsyncSession = Depends(get_db),
-) -> AttemptResultOut:
-    """Enforces BRULE-12 (3-attempt cap), 30m timer, and tab-switch auto-fail proctoring."""
+) -> QuizSessionStartOut:
+    """Draws 15 random questions from the course's (domain, track) question bank & arms 30m timer."""
     student = await _get_or_create_student(db, principal)
     course = (
         await db.execute(select(Course).where(Course.id == course_id))
@@ -297,39 +457,120 @@ async def submit_quiz_attempt(
             detail=f"BRULE-12: Maximum of {MAX_QUIZ_ATTEMPTS} assessment attempts reached for {course.code}.",
         )
 
-    questions = course.questions_json
-    effective_reason = payload.termination_reason
-    if effective_reason == "NORMAL" and payload.elapsed_seconds > MAX_QUIZ_DURATION_SECONDS:
-        effective_reason = "TIMEOUT"
-
-    if effective_reason == "TAB_SWITCH_VIOLATION":
-        score_pct = 0
-        passed = False
-    else:
-        if effective_reason == "NORMAL" and len(payload.answers) != len(questions):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Expected {len(questions)} answers, received {len(payload.answers)}.",
+    pool = (
+        await db.execute(
+            select(QuizQuestionBank).where(
+                QuizQuestionBank.domain == course.domain,
+                QuizQuestionBank.track == course.track,
+                QuizQuestionBank.is_active.is_(True),
             )
-        correct_count = sum(
-            1
-            for idx, q in enumerate(questions)
-            if idx < len(payload.answers) and payload.answers[idx] == q["correct_index"]
         )
-        score_pct = round((correct_count / len(questions)) * 100)
-        passed = effective_reason == "NORMAL" and score_pct >= course.pass_threshold_pct
+    ).scalars().all()
 
+    draw_count = min(course.questions_per_quiz, len(pool))
+    if draw_count == 0:
+        raise HTTPException(status_code=400, detail="No questions available in this domain/track bank.")
+
+    drawn = random.sample(list(pool), k=draw_count)
     attempt_number = len(prior_attempts) + 1
+
     attempt = QuizAttempt(
         student_id=student.id,
         course_id=course.id,
         attempt_number=attempt_number,
-        score_pct=score_pct,
-        passed=passed,
-        termination_reason=effective_reason,
-        elapsed_seconds=payload.elapsed_seconds,
+        drawn_question_ids=[str(q.id) for q in drawn],
+        score_pct=0,
+        passed=False,
+        termination_reason="IN_PROGRESS",
+        elapsed_seconds=0,
     )
     db.add(attempt)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ASSESSMENT_SESSION_STARTED",
+        entity_type="QuizAttempt",
+        entity_id=str(attempt.id),
+        after_state={
+            "course_code": course.code,
+            "domain": course.domain.value,
+            "track": course.track.value,
+            "attempt_number": attempt_number,
+            "questions_drawn": draw_count,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return QuizSessionStartOut(
+        attempt_id=str(attempt.id),
+        attempt_number=attempt_number,
+        attempts_remaining_after=MAX_QUIZ_ATTEMPTS - attempt_number,
+        time_limit_seconds=course.time_limit_seconds,
+        questions=[
+            QuestionPublicOut(id=str(q.id), prompt=q.prompt, options=q.options_json) for q in drawn
+        ],
+    )
+
+
+@router.post("/quiz-sessions/{attempt_id}/submit", response_model=AttemptResultOut)
+async def submit_random_quiz_session(
+    attempt_id: uuid.UUID,
+    payload: QuizSessionSubmitIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> AttemptResultOut:
+    """Auto-evaluates the 15 randomly drawn questions with 30m timer & tab-switch auto-fail."""
+    student = await _get_or_create_student(db, principal)
+    attempt = (
+        await db.execute(
+            select(QuizAttempt).where(
+                QuizAttempt.id == attempt_id,
+                QuizAttempt.student_id == student.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Quiz session not found")
+    if attempt.termination_reason != "IN_PROGRESS":
+        raise HTTPException(status_code=409, detail="This quiz session has already been finalized.")
+
+    course = (
+        await db.execute(select(Course).where(Course.id == attempt.course_id))
+    ).scalar_one()
+
+    effective_reason = payload.termination_reason
+    if effective_reason == "NORMAL" and payload.elapsed_seconds > MAX_QUIZ_DURATION_SECONDS:
+        effective_reason = "TIMEOUT"
+
+    drawn_uuids = [uuid.UUID(qid) for qid in attempt.drawn_question_ids]
+    q_rows = (
+        await db.execute(select(QuizQuestionBank).where(QuizQuestionBank.id.in_(drawn_uuids)))
+    ).scalars().all()
+    q_map = {str(q.id): q for q in q_rows}
+    total_questions = len(attempt.drawn_question_ids)
+
+    if effective_reason == "TAB_SWITCH_VIOLATION":
+        correct_count = 0
+        score_pct = 0
+        passed = False
+    else:
+        correct_count = sum(
+            1
+            for qid in attempt.drawn_question_ids
+            if qid in q_map and payload.answers.get(qid) == q_map[qid].correct_index
+        )
+        score_pct = round((correct_count / max(1, total_questions)) * 100)
+        passed = effective_reason == "NORMAL" and score_pct >= course.pass_threshold_pct
+
+    attempt.score_pct = score_pct
+    attempt.passed = passed
+    attempt.termination_reason = effective_reason
+    attempt.elapsed_seconds = payload.elapsed_seconds
+    attempt.submitted_at = datetime.now(timezone.utc)
     await db.flush()
 
     badge_out: Optional[BadgeOut] = None
@@ -391,7 +632,11 @@ async def submit_quiz_attempt(
     audit_action = (
         "ASSESSMENT_TAB_VIOLATION"
         if effective_reason == "TAB_SWITCH_VIOLATION"
-        else ("ASSESSMENT_TIMEOUT" if effective_reason == "TIMEOUT" else ("ASSESSMENT_PASSED" if passed else "ASSESSMENT_FAILED"))
+        else (
+            "ASSESSMENT_TIMEOUT"
+            if effective_reason == "TIMEOUT"
+            else ("ASSESSMENT_PASSED" if passed else "ASSESSMENT_FAILED")
+        )
     )
     await record_audit_event(
         db,
@@ -402,7 +647,9 @@ async def submit_quiz_attempt(
         entity_id=str(attempt.id),
         after_state={
             "course_code": course.code,
-            "attempt_number": attempt_number,
+            "attempt_number": attempt.attempt_number,
+            "correct_count": correct_count,
+            "total_questions": total_questions,
             "score_pct": score_pct,
             "passed": passed,
             "termination_reason": effective_reason,
@@ -422,8 +669,10 @@ async def submit_quiz_attempt(
         )
 
     return AttemptResultOut(
-        attempt_number=attempt_number,
-        attempts_remaining=MAX_QUIZ_ATTEMPTS - attempt_number,
+        attempt_number=attempt.attempt_number,
+        attempts_remaining=MAX_QUIZ_ATTEMPTS - attempt.attempt_number,
+        total_questions=total_questions,
+        correct_count=correct_count,
         score_pct=score_pct,
         passed=passed,
         termination_reason=effective_reason,

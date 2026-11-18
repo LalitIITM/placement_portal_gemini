@@ -23,6 +23,8 @@ import {
   ClipboardCheck,
   Briefcase,
   Star,
+  Database,
+  Shuffle,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
@@ -30,6 +32,8 @@ type ActiveTab = "IDENTITY" | "TRAINING" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
+type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
+type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
 
 interface ResumeItem {
   id: string;
@@ -57,8 +61,10 @@ interface AuditEntry {
   status: "SUCCESS" | "BLOCKED";
 }
 
-interface QuizQuestion {
+interface BankQuestionItem {
   id: string;
+  domain: QuizDomainOption;
+  track: QuizTrackOption;
   prompt: string;
   options: string[];
   correctIndex: number;
@@ -80,18 +86,18 @@ interface SkillBadgeItem {
   issuedAt: string;
 }
 
-interface TrainingCourse {
+interface TrainingTrack {
   id: string;
   code: string;
   title: string;
-  category: string;
+  domain: QuizDomainOption;
+  track: QuizTrackOption;
   skillTag: string;
   passThresholdPct: number;
   attemptsUsed: number;
   maxAttempts: number;
   bestScorePct: number | null;
   modules: CourseModuleItem[];
-  questions: QuizQuestion[];
 }
 
 interface ExaminerEvaluationRecord {
@@ -112,6 +118,7 @@ interface ExaminerEvaluationRecord {
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const QUIZ_DURATION_SECONDS = 30 * 60;
+const QUESTIONS_PER_QUIZ = 15;
 
 const INDIAN_STATES = [
   "Andhra Pradesh",
@@ -133,160 +140,161 @@ const INDIAN_STATES = [
   "Other",
 ];
 
-const INITIAL_COURSES: TrainingCourse[] = [
+const SEED_DS_BANK: Array<[string, string[], number]> = [
+  ["When should StandardScaler be fit inside a cross-validation pipeline?", ["On the entire dataset before splitting", "Inside each training fold only, then applied to validation", "Only on the test set", "After hyperparameter tuning"], 1],
+  ["Which metric is most informative on a heavily imbalanced 1% positive class dataset?", ["Raw Accuracy", "PR-AUC (Precision-Recall AUC)", "R-squared", "Mean Bias Error"], 1],
+  ["What does a high Population Stability Index (PSI > 0.25) indicate in production?", ["Significant covariate distribution shift", "Zero model latency", "Perfect calibration", "Training-only overfitting"], 0],
+  ["Which technique calibrates predicted probabilities without altering rank ordering?", ["Dropout", "Isotonic / Platt Calibration", "L1 Pruning", "PCA"], 1],
+  ["What is the variance inflation factor (VIF) used to diagnose?", ["Heteroscedasticity", "Multicollinearity among predictors", "Autocorrelation", "Non-normality of target"], 1],
+  ["In gradient boosted trees, what does lowering learning rate with more estimators generally improve?", ["Generalization performance", "Training speed", "Memory footprint", "Label noise"], 0],
+  ["Which SQL window function assigns consecutive ranks without gaps for ties?", ["RANK()", "DENSE_RANK()", "ROW_NUMBER()", "NTILE(4)"], 1],
+  ["What does L1 (Lasso) regularization uniquely encourage compared to L2 (Ridge)?", ["Exact zero feature weights (sparsity)", "Uniformly small weights", "Faster matrix inversion", "Higher variance"], 0],
+  ["Which hypothesis test compares medians across two independent non-normal samples?", ["Paired t-test", "Mann-Whitney U test", "Chi-square test", "ANOVA F-test"], 1],
+  ["Why is stratified splitting recommended for classification datasets?", ["Preserves class proportions across train and test folds", "Removes outliers", "Normalizes skewed features", "Reduces dimensionality"], 0],
+  ["In A/B testing, what does statistical power (1 - β) measure?", ["Probability of rejecting a false null hypothesis", "Type I error probability", "Sample mean variance", "Confidence interval width"], 0],
+  ["Which distance metric is invariant to vector magnitude and ideal for TF-IDF text embeddings?", ["Euclidean distance", "Cosine similarity/distance", "Manhattan distance", "Hamming distance"], 1],
+  ["What causes target leakage in time-series forecasting?", ["Using future lags or post-event aggregates as features", "Using rolling historical means", "Encoding day-of-week", "Dropping missing timestamps"], 0],
+  ["Which loss function is minimized by binary logistic regression?", ["Hinge loss", "Binary cross-entropy (log loss)", "Huber loss", "Triplet loss"], 1],
+  ["What does PCA maximize along its first principal component?", ["Class separability", "Projected variance of centered data", "Mutual information", "L1 sparsity"], 1],
+  ["In k-means clustering, what does the silhouette score measure?", ["Cluster cohesion vs separation", "Iteration count", "Feature correlation", "Outlier count"], 0],
+  ["Which technique addresses class imbalance by interpolating synthetic minority points?", ["SMOTE", "Random column shuffling", "Standard scaling", "PCA whitening"], 0],
+  ["What is the primary purpose of an out-of-time (OOT) validation split?", ["Verify temporal stability against concept drift", "Speed up grid search", "Tune batch size", "Replace unit tests"], 0],
+  ["Which SQL clause filters groups after aggregation?", ["WHERE", "HAVING", "ORDER BY", "DISTINCT"], 1],
+  ["What does SHAP provide for gradient boosted tree models?", ["Consistent local feature attribution values", "Hyperparameter bounds", "Database indexing", "GPU profiling"], 0],
+];
+
+const SEED_SD_BANK: Array<[string, string[], number]> = [
+  ["Why should blocking I/O calls be avoided inside an async FastAPI route?", ["They stall the single-threaded asyncio event loop", "FastAPI rejects sync functions", "PostgreSQL drops sync connections", "CORS headers fail"], 0],
+  ["Which HTTP status code best represents a business-rule conflict like exceeding max attempts?", ["200 OK", "302 Found", "409 Conflict", "502 Bad Gateway"], 2],
+  ["How is immutability guaranteed on an enterprise audit log table?", ["Soft-delete flags", "Blocking UPDATE/DELETE at ORM hooks and DB triggers", "Nightly truncation", "Client-side caching"], 1],
+  ["What is the primary advantage of keyset pagination over large OFFSET queries?", ["Eliminates indexes", "O(log N) index seek without scanning skipped rows", "Automatic compression", "Disables isolation"], 1],
+  ["What does an idempotency key prevent on POST application or payment endpoints?", ["Duplicate side effects on network retries", "SQL injection", "Slow DNS lookups", "JWT expiration"], 0],
+  ["Which PostgreSQL index type is best suited for JSONB containment (@>) queries?", ["B-Tree", "GIN (Generalized Inverted Index)", "Hash", "BRIN"], 1],
+  ["In JWT authentication, why use short-lived access tokens paired with refresh tokens?", ["Limits exposure window if an access token is compromised", "Eliminates HTTPS", "Avoids signature verification", "Stores passwords in plaintext"], 0],
+  ["What is the average lookup time complexity in a balanced binary search tree?", ["O(1)", "O(log n)", "O(n)", "O(n log n)"], 1],
+  ["Which PostgreSQL isolation level prevents dirty reads and non-repeatable reads?", ["READ UNCOMMITTED", "REPEATABLE READ", "READ COMMITTED", "NONE"], 1],
+  ["What problem does a circuit breaker pattern solve in distributed services?", ["Cascading failures when a downstream dependency degrades", "Schema migrations", "Static asset bundling", "CSS layout shifts"], 0],
+  ["Which Git command replays commits from a feature branch onto the tip of main cleanly?", ["git rebase main", "git stash pop", "git bisect", "git tag"], 0],
+  ["What does CORS preflight (OPTIONS) verify before a browser sends a cross-origin POST?", ["Allowed origins, HTTP methods, and custom headers", "TLS certificate chain", "DB connection pool", "DNSSEC records"], 0],
+  ["Which data structure underlies Dijkstra's shortest-path algorithm for O((V+E) log V) runtime?", ["Min-Priority Queue (Binary Heap)", "LIFO Stack", "Circular Buffer", "Disjoint Set"], 0],
+  ["Why parameterize SQL queries instead of string concatenation?", ["Prevents SQL injection and enables query plan reuse", "Bypasses transactions", "Disables foreign keys", "Compresses text columns"], 0],
+  ["What is the purpose of a database connection pooler like PgBouncer?", ["Multiplexes client connections onto a bounded pool of DB backends", "Replaces backups", "Encrypts disk volumes", "Formats JSON"], 0],
+  ["Which HTTP response header enforces HTTPS-only connections in browsers?", ["Strict-Transport-Security (HSTS)", "X-Powered-By", "Accept-Encoding", "ETag"], 0],
+  ["In React, what causes an infinite re-render loop inside useEffect?", ["Updating state unconditionally without a proper dependency array", "Using TypeScript interfaces", "Memoizing callbacks", "Rendering lists with keys"], 0],
+  ["Which CAP theorem trade-off does a strongly consistent PostgreSQL primary choose during a partition?", ["Consistency over Availability (CP)", "Availability over Consistency (AP)", "Neither", "Eventual disk sync"], 0],
+  ["What does EXPLAIN ANALYZE in PostgreSQL show that EXPLAIN alone does not?", ["Actual execution times and row counts from running the query", "Table column types", "User permissions", "Index definitions"], 0],
+  ["Which rate-limiting algorithm allows short bursts while enforcing a steady average rate?", ["Token Bucket", "Bubble Sort", "Round-Robin DNS", "Two-Phase Commit"], 0],
+];
+
+function buildInitialQuestionBank(): BankQuestionItem[] {
+  const bank: BankQuestionItem[] = [];
+  (["INTERNSHIP", "SOFTWARE_DEVELOPMENT"] as QuizTrackOption[]).forEach((track) => {
+    SEED_DS_BANK.forEach(([prompt, options, correctIndex], idx) => {
+      bank.push({
+        id: `ds-${track}-${idx + 1}`,
+        domain: "DATA_SCIENCE",
+        track,
+        prompt,
+        options,
+        correctIndex,
+      });
+    });
+    SEED_SD_BANK.forEach(([prompt, options, correctIndex], idx) => {
+      bank.push({
+        id: `sd-${track}-${idx + 1}`,
+        domain: "SOFTWARE_DEVELOPMENT",
+        track,
+        prompt,
+        options,
+        correctIndex,
+      });
+    });
+  });
+  return bank;
+}
+
+const INITIAL_TRACKS: TrainingTrack[] = [
   {
-    id: "course-cs301",
-    code: "CS-301",
-    title: "Production FastAPI & Distributed Systems",
-    category: "Backend Engineering",
-    skillTag: "FastAPI & Async Architecture",
+    id: "track-ds-intern",
+    code: "DS-INT-101",
+    title: "Data Science — Internship Track",
+    domain: "DATA_SCIENCE",
+    track: "INTERNSHIP",
+    skillTag: "Data Science Internship Ready",
     passThresholdPct: 75,
     attemptsUsed: 0,
     maxAttempts: 3,
     bestScorePct: null,
     modules: [
-      {
-        id: "m-1",
-        title: "Async SQLAlchemy & Connection Pooling",
-        durationMinutes: 25,
-        summary: "Avoid event-loop starvation and pool exhaustion under 50k concurrent users.",
-        completed: true,
-      },
-      {
-        id: "m-2",
-        title: "Idempotency, Rate Limiting & Redis Caching",
-        durationMinutes: 30,
-        summary: "Protect critical mutations and cache read-heavy endpoints.",
-        completed: false,
-      },
-      {
-        id: "m-3",
-        title: "Zero-Trust RBAC & Immutable Audit Trails",
-        durationMinutes: 20,
-        summary: "Enforce role boundaries and append-only compliance ledgers.",
-        completed: false,
-      },
-    ],
-    questions: [
-      {
-        id: "q1",
-        prompt: "Why should blocking I/O calls be avoided inside an async FastAPI route?",
-        options: [
-          "They stall the single-threaded asyncio event loop",
-          "FastAPI rejects synchronous functions at import time",
-          "PostgreSQL automatically drops sync connections",
-          "CORS headers are stripped on blocking calls",
-        ],
-        correctIndex: 0,
-      },
-      {
-        id: "q2",
-        prompt: "Which HTTP status code best represents a business-rule conflict like exceeding max attempts?",
-        options: ["200 OK", "302 Found", "409 Conflict", "502 Bad Gateway"],
-        correctIndex: 2,
-      },
-      {
-        id: "q3",
-        prompt: "How is immutability guaranteed on an audit log table?",
-        options: [
-          "Allowing soft-deletes via is_deleted flag",
-          "Blocking UPDATE/DELETE at both ORM event hooks and DB triggers",
-          "Truncating logs nightly after backup",
-          "Using browser localStorage",
-        ],
-        correctIndex: 1,
-      },
-      {
-        id: "q4",
-        prompt: "What is the primary benefit of keyset pagination over large OFFSET queries?",
-        options: [
-          "It eliminates the need for indexes",
-          "It maintains O(log N) index seeks without scanning skipped rows",
-          "It compresses JSON payloads automatically",
-          "It disables transaction isolation",
-        ],
-        correctIndex: 1,
-      },
+      { id: "m-1", title: "SQL Analytics & Window Functions", durationMinutes: 25, summary: "Cohort queries, DENSE_RANK, and aggregation hygiene.", completed: true },
+      { id: "m-2", title: "Leakage-Free Cross-Validation", durationMinutes: 30, summary: "Fold-safe scalers and stratified splits.", completed: false },
     ],
   },
   {
-    id: "course-ds302",
-    code: "DS-302",
-    title: "Applied ML & Statistical Modeling",
-    category: "Data Science",
-    skillTag: "Applied Machine Learning",
+    id: "track-ds-sde",
+    code: "DS-SDE-201",
+    title: "Data Science — Software Development Track",
+    domain: "DATA_SCIENCE",
+    track: "SOFTWARE_DEVELOPMENT",
+    skillTag: "Production ML & Data Engineering",
     passThresholdPct: 75,
     attemptsUsed: 0,
     maxAttempts: 3,
     bestScorePct: null,
     modules: [
-      {
-        id: "m-4",
-        title: "Leakage-Free Cross-Validation Pipelines",
-        durationMinutes: 25,
-        summary: "Prevent target and temporal leakage in tabular datasets.",
-        completed: false,
-      },
-      {
-        id: "m-5",
-        title: "Precision-Recall Tradeoffs & Threshold Tuning",
-        durationMinutes: 25,
-        summary: "Align model operating points with asymmetric business costs.",
-        completed: false,
-      },
-      {
-        id: "m-6",
-        title: "Probability Calibration & Data Drift Detection",
-        durationMinutes: 20,
-        summary: "Monitor PSI/KS statistics and Brier scores in production.",
-        completed: false,
-      },
+      { id: "m-3", title: "Model Calibration & Threshold Tuning", durationMinutes: 25, summary: "Platt/Isotonic calibration and cost-sensitive operating points.", completed: false },
+      { id: "m-4", title: "Covariate Drift & Telemetry (PSI/KS)", durationMinutes: 30, summary: "Detect production data drift before accuracy degrades.", completed: false },
     ],
-    questions: [
-      {
-        id: "q1",
-        prompt: "When should feature scaling (e.g., StandardScaler) be fit in a cross-validation pipeline?",
-        options: [
-          "On the entire dataset before splitting",
-          "Inside each training fold only, then applied to validation",
-          "Only on the test set",
-          "After hyperparameter tuning finishes",
-        ],
-        correctIndex: 1,
-      },
-      {
-        id: "q2",
-        prompt: "Which metric is most informative on a heavily imbalanced 1% positive class dataset?",
-        options: ["Raw Accuracy", "PR-AUC (Precision-Recall AUC)", "R-squared", "Mean Bias Error"],
-        correctIndex: 1,
-      },
-      {
-        id: "q3",
-        prompt: "What does a high Population Stability Index (PSI > 0.25) indicate in production?",
-        options: [
-          "Significant covariate distribution shift",
-          "Zero model latency",
-          "Perfect model calibration",
-          "Overfitting on training labels only",
-        ],
-        correctIndex: 0,
-      },
-      {
-        id: "q4",
-        prompt: "Which technique improves predicted probability reliability without changing rank ordering?",
-        options: ["Dropout", "Isotonic / Platt Calibration", "L1 Pruning", "PCA"],
-        correctIndex: 1,
-      },
+  },
+  {
+    id: "track-sd-intern",
+    code: "SD-INT-102",
+    title: "Software Development — Internship Track",
+    domain: "SOFTWARE_DEVELOPMENT",
+    track: "INTERNSHIP",
+    skillTag: "Software Dev Internship Ready",
+    passThresholdPct: 75,
+    attemptsUsed: 0,
+    maxAttempts: 3,
+    bestScorePct: null,
+    modules: [
+      { id: "m-5", title: "Core Data Structures & Graph Algorithms", durationMinutes: 25, summary: "Heaps, hash tables, BFS/DFS, and shortest paths.", completed: false },
+      { id: "m-6", title: "REST Semantics & Relational Indexing", durationMinutes: 25, summary: "HTTP status codes, keyset pagination, and B-Trees.", completed: false },
+    ],
+  },
+  {
+    id: "track-sd-sde",
+    code: "SD-SDE-202",
+    title: "Software Development — Software Development Track",
+    domain: "SOFTWARE_DEVELOPMENT",
+    track: "SOFTWARE_DEVELOPMENT",
+    skillTag: "Full-Stack & Distributed SDE",
+    passThresholdPct: 75,
+    attemptsUsed: 0,
+    maxAttempts: 3,
+    bestScorePct: null,
+    modules: [
+      { id: "m-7", title: "Async FastAPI & Connection Pooling", durationMinutes: 25, summary: "Prevent event-loop starvation at 50k concurrent users.", completed: false },
+      { id: "m-8", title: "Idempotency, Circuit Breakers & RBAC", durationMinutes: 30, summary: "Build resilient, tamper-audited backend systems.", completed: false },
     ],
   },
 ];
+
+function drawRandomQuestions(pool: BankQuestionItem[], count: number): BankQuestionItem[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(count, copy.length));
+}
 
 export default function App() {
   const [email, setEmail] = useState("22f3001234@ds.study.iitm.ac.in");
   const [selectedRole, setSelectedRole] = useState<Role>("STUDENT");
   const [user, setUser] = useState<{ email: string; role: Role; name: string } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("IDENTITY");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("TRAINING");
 
   // Increment 1: Complete Student Registration Dossier
   const [fullName, setFullName] = useState("Aarav Sharma");
@@ -330,9 +338,11 @@ export default function App() {
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Increment 2: Training, Proctored Quiz & Examiner Final Stage Interview
-  const [courses, setCourses] = useState<TrainingCourse[]>(INITIAL_COURSES);
-  const [activeCourseId, setActiveCourseId] = useState<string>(INITIAL_COURSES[0].id);
+  // Increment 2: Question Bank Database + Random 15-Question Quiz Engine
+  const [questionBank, setQuestionBank] = useState<BankQuestionItem[]>(buildInitialQuestionBank);
+  const [tracks, setTracks] = useState<TrainingTrack[]>(INITIAL_TRACKS);
+  const [activeTrackId, setActiveTrackId] = useState<string>(INITIAL_TRACKS[0].id);
+  const [drawnQuestions, setDrawnQuestions] = useState<BankQuestionItem[]>([]);
   const [isQuizActive, setIsQuizActive] = useState<boolean>(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(QUIZ_DURATION_SECONDS);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
@@ -341,6 +351,17 @@ export default function App() {
     text: string;
   } | null>(null);
   const [badges, setBadges] = useState<SkillBadgeItem[]>([]);
+
+  // Question Bank Builder State (for adding questions later)
+  const [qbDomain, setQbDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [qbTrack, setQbTrack] = useState<QuizTrackOption>("INTERNSHIP");
+  const [qbPrompt, setQbPrompt] = useState("");
+  const [qbOpt0, setQbOpt0] = useState("");
+  const [qbOpt1, setQbOpt1] = useState("");
+  const [qbOpt2, setQbOpt2] = useState("");
+  const [qbOpt3, setQbOpt3] = useState("");
+  const [qbCorrectIdx, setQbCorrectIdx] = useState<number>(0);
+  const [qbBanner, setQbBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
   // Increment 2: Final Stage Examiner Interview Evaluation State
   const [evalSkillsets, setEvalSkillsets] = useState("Python, SQL, FastAPI, Machine Learning");
@@ -363,8 +384,8 @@ export default function App() {
       timestamp: "08:00:00 IST",
       actor: "system@iitm.ac.in",
       role: "ADMIN",
-      action: "POLICY_ENFORCED",
-      resource: "BRULE-55 (Max 3 Resumes), BRULE-12 (30m Proctored Quiz) & BRULE-18 (Examiner Eval)",
+      action: "QUESTION_BANK_INITIALIZED",
+      resource: "80 questions seeded across Data Science & Software Development (Internship & SDE)",
       status: "SUCCESS",
     },
   ]);
@@ -391,51 +412,53 @@ export default function App() {
     []
   );
 
-  const activeCourse = courses.find((c) => c.id === activeCourseId) || courses[0];
+  const activeTrack = tracks.find((t) => t.id === activeTrackId) || tracks[0];
 
   const finalizeQuizAttempt = useCallback(
     (reason: "NORMAL" | "TIMEOUT" | "TAB_SWITCH_VIOLATION") => {
       if (!user) return;
 
-      if (activeCourse.attemptsUsed >= activeCourse.maxAttempts) {
+      if (activeTrack.attemptsUsed >= activeTrack.maxAttempts) {
         setIsQuizActive(false);
         setQuizBanner({
           type: "BLOCKED",
-          text: `BRULE-12 Enforcement: Maximum ${activeCourse.maxAttempts} assessment attempts exhausted for ${activeCourse.code}.`,
+          text: `BRULE-12 Enforcement: Maximum ${activeTrack.maxAttempts} assessment attempts exhausted for ${activeTrack.code}.`,
         });
         appendAudit(
           user.email,
           user.role,
           "BRULE_12_BLOCKED",
-          `${activeCourse.code} (Attempt #${activeCourse.attemptsUsed + 1})`,
+          `${activeTrack.code} (Attempt #${activeTrack.attemptsUsed + 1})`,
           "BLOCKED"
         );
         return;
       }
 
-      const nextAttemptNum = activeCourse.attemptsUsed + 1;
+      const nextAttemptNum = activeTrack.attemptsUsed + 1;
+      const totalQ = drawnQuestions.length || QUESTIONS_PER_QUIZ;
+      let correctCount = 0;
       let scorePct = 0;
       let passed = false;
 
       if (reason === "NORMAL") {
-        const correctCount = activeCourse.questions.reduce(
+        correctCount = drawnQuestions.reduce(
           (acc, q) => (quizAnswers[q.id] === q.correctIndex ? acc + 1 : acc),
           0
         );
-        scorePct = Math.round((correctCount / activeCourse.questions.length) * 100);
-        passed = scorePct >= activeCourse.passThresholdPct;
+        scorePct = Math.round((correctCount / totalQ) * 100);
+        passed = scorePct >= activeTrack.passThresholdPct;
       }
 
       setIsQuizActive(false);
-      setCourses((prev) =>
-        prev.map((c) =>
-          c.id === activeCourse.id
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id === activeTrack.id
             ? {
-                ...c,
+                ...t,
                 attemptsUsed: nextAttemptNum,
-                bestScorePct: Math.max(c.bestScorePct ?? 0, scorePct),
+                bestScorePct: Math.max(t.bestScorePct ?? 0, scorePct),
               }
-            : c
+            : t
         )
       );
 
@@ -444,13 +467,13 @@ export default function App() {
           user.email,
           user.role,
           "ASSESSMENT_TAB_VIOLATION",
-          `${activeCourse.code} • Attempt ${nextAttemptNum}/${activeCourse.maxAttempts} auto-failed (0%)`,
+          `${activeTrack.code} • Attempt ${nextAttemptNum}/${activeTrack.maxAttempts} auto-failed (0%)`,
           "BLOCKED"
         );
         setQuizBanner({
           type: "BLOCKED",
           text: `Proctoring Violation: Tab/window switch detected! Attempt #${nextAttemptNum} automatically failed (0%). ${
-            activeCourse.maxAttempts - nextAttemptNum
+            activeTrack.maxAttempts - nextAttemptNum
           } attempt(s) remaining.`,
         });
         return;
@@ -461,13 +484,13 @@ export default function App() {
           user.email,
           user.role,
           "ASSESSMENT_TIMEOUT",
-          `${activeCourse.code} • 30:00 timer expired on Attempt ${nextAttemptNum}/${activeCourse.maxAttempts}`,
+          `${activeTrack.code} • 30:00 timer expired on Attempt ${nextAttemptNum}/${activeTrack.maxAttempts}`,
           "BLOCKED"
         );
         setQuizBanner({
           type: "FAIL",
           text: `Time Expired (30:00)! Attempt #${nextAttemptNum} recorded as failed (0%). ${
-            activeCourse.maxAttempts - nextAttemptNum
+            activeTrack.maxAttempts - nextAttemptNum
           } attempt(s) remaining.`,
         });
         return;
@@ -477,19 +500,19 @@ export default function App() {
         user.email,
         user.role,
         passed ? "ASSESSMENT_PASSED" : "ASSESSMENT_FAILED",
-        `${activeCourse.code} • Attempt ${nextAttemptNum}/${activeCourse.maxAttempts} (${scorePct}%)`,
+        `${activeTrack.code} • ${correctCount}/${totalQ} correct (${scorePct}%) on Attempt ${nextAttemptNum}/${activeTrack.maxAttempts}`,
         "SUCCESS"
       );
 
       if (passed) {
-        const alreadyHasBadge = badges.some((b) => b.courseCode === activeCourse.code);
+        const alreadyHasBadge = badges.some((b) => b.courseCode === activeTrack.code);
         if (!alreadyHasBadge) {
           const hash = Math.random().toString(36).substring(2, 10).toUpperCase();
-          const code = `BADGE-IITM-${activeCourse.code.replace("-", "")}-${hash}`;
+          const code = `BADGE-IITM-${activeTrack.code.replace(/-/g, "")}-${hash}`;
           const newBadge: SkillBadgeItem = {
             code,
-            courseCode: activeCourse.code,
-            skillName: activeCourse.skillTag,
+            courseCode: activeTrack.code,
+            skillName: activeTrack.skillTag,
             scorePct,
             issuedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
           };
@@ -498,23 +521,23 @@ export default function App() {
             user.email,
             user.role,
             "BADGE_ISSUED",
-            `${code} (${activeCourse.skillTag})`,
+            `${code} (${activeTrack.skillTag})`,
             "SUCCESS"
           );
         }
         setQuizBanner({
           type: "PASS",
-          text: `Passed with ${scorePct}%! Verified credential "${activeCourse.skillTag}" added to your profile.`,
+          text: `Auto-Evaluated: ${correctCount}/${totalQ} correct (${scorePct}%) — PASSED! Verified credential "${activeTrack.skillTag}" issued.`,
         });
       } else {
-        const remaining = activeCourse.maxAttempts - nextAttemptNum;
+        const remaining = activeTrack.maxAttempts - nextAttemptNum;
         setQuizBanner({
           type: "FAIL",
-          text: `Scored ${scorePct}% (Threshold: ${activeCourse.passThresholdPct}%). ${remaining} attempt(s) remaining under BRULE-12.`,
+          text: `Auto-Evaluated: ${correctCount}/${totalQ} correct (${scorePct}% • Required: ${activeTrack.passThresholdPct}%). ${remaining} attempt(s) remaining under BRULE-12.`,
         });
       }
     },
-    [activeCourse, appendAudit, badges, quizAnswers, user]
+    [activeTrack, appendAudit, badges, drawnQuestions, quizAnswers, user]
   );
 
   useEffect(() => {
@@ -764,18 +787,18 @@ export default function App() {
     appendAudit(user.email, user.role, "RESUME_ARCHIVED", title, "SUCCESS");
   };
 
-  const toggleModuleComplete = (courseId: string, moduleId: string) => {
+  const toggleModuleComplete = (trackId: string, moduleId: string) => {
     if (!user) return;
-    setCourses((prev) =>
-      prev.map((c) => {
-        if (c.id !== courseId) return c;
+    setTracks((prev) =>
+      prev.map((t) => {
+        if (t.id !== trackId) return t;
         return {
-          ...c,
-          modules: c.modules.map((m) => {
+          ...t,
+          modules: t.modules.map((m) => {
             if (m.id !== moduleId) return m;
             const nextState = !m.completed;
             if (nextState) {
-              appendAudit(user.email, user.role, "MODULE_COMPLETED", `${c.code}: ${m.title}`, "SUCCESS");
+              appendAudit(user.email, user.role, "MODULE_COMPLETED", `${t.code}: ${m.title}`, "SUCCESS");
             }
             return { ...m, completed: nextState };
           }),
@@ -784,15 +807,59 @@ export default function App() {
     );
   };
 
-  const handleStartQuiz = () => {
+  const handleAddQuestionToBank = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!user) return;
-    if (activeCourse.attemptsUsed >= activeCourse.maxAttempts) {
+    const opts = [qbOpt0.trim(), qbOpt1.trim(), qbOpt2.trim(), qbOpt3.trim()];
+    if (!qbPrompt.trim() || opts.some((o) => !o)) {
+      setQbBanner({ type: "ERR", text: "Provide the question prompt and all 4 options." });
+      return;
+    }
+    const newItem: BankQuestionItem = {
+      id: `custom-${Date.now()}`,
+      domain: qbDomain,
+      track: qbTrack,
+      prompt: qbPrompt.trim(),
+      options: opts,
+      correctIndex: qbCorrectIdx,
+    };
+    setQuestionBank((prev) => [newItem, ...prev]);
+    setQbPrompt("");
+    setQbOpt0("");
+    setQbOpt1("");
+    setQbOpt2("");
+    setQbOpt3("");
+    setQbCorrectIdx(0);
+    setQbBanner({
+      type: "OK",
+      text: `Added to ${qbDomain.replace("_", " ")} • ${qbTrack.replace(
+        "_",
+        " "
+      )} Question Bank!`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "QUESTION_BANK_ADDED",
+      `${qbDomain} / ${qbTrack}: "${newItem.prompt.slice(0, 48)}..."`,
+      "SUCCESS"
+    );
+  };
+
+  const handleStartRandomQuiz = () => {
+    if (!user) return;
+    if (activeTrack.attemptsUsed >= activeTrack.maxAttempts) {
       setQuizBanner({
         type: "BLOCKED",
-        text: `BRULE-12 Enforcement: Maximum ${activeCourse.maxAttempts} assessment attempts exhausted for ${activeCourse.code}.`,
+        text: `BRULE-12 Enforcement: Maximum ${activeTrack.maxAttempts} assessment attempts exhausted for ${activeTrack.code}.`,
       });
       return;
     }
+    const pool = questionBank.filter(
+      (q) => q.domain === activeTrack.domain && q.track === activeTrack.track
+    );
+    const randomFifteen = drawRandomQuestions(pool, QUESTIONS_PER_QUIZ);
+    setDrawnQuestions(randomFifteen);
     setQuizAnswers({});
     setQuizBanner(null);
     setSecondsLeft(QUIZ_DURATION_SECONDS);
@@ -800,19 +867,19 @@ export default function App() {
     appendAudit(
       user.email,
       user.role,
-      "ASSESSMENT_STARTED",
-      `${activeCourse.code} • 30:00 Proctored Timer Armed`,
+      "ASSESSMENT_SESSION_STARTED",
+      `${activeTrack.code} • Randomly drew ${randomFifteen.length}/${pool.length} questions (30:00 timer)`,
       "SUCCESS"
     );
   };
 
   const handleSubmitQuiz = (e: React.FormEvent) => {
     e.preventDefault();
-    const unanswered = activeCourse.questions.some((q) => quizAnswers[q.id] === undefined);
+    const unanswered = drawnQuestions.some((q) => quizAnswers[q.id] === undefined);
     if (unanswered) {
       setQuizBanner({
         type: "FAIL",
-        text: "Please answer all 4 assessment questions before submitting.",
+        text: `Please answer all ${drawnQuestions.length} randomly selected questions before submitting.`,
       });
       return;
     }
@@ -892,7 +959,7 @@ export default function App() {
             IITM Placement & Career Portal
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Student registration dossier, proctored assessments, and examiner viva evaluation.
+            Student dossier, randomized 15-question bank engine, and examiner viva evaluation.
           </p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
@@ -958,6 +1025,10 @@ export default function App() {
     );
   }
 
+  const activePoolSize = questionBank.filter(
+    (q) => q.domain === activeTrack.domain && q.track === activeTrack.track
+  ).length;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
@@ -970,7 +1041,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">IITM Career & Placement OS</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Increment 1 & 2 • Complete
+                  Question Bank ({questionBank.length} Qs)
                 </span>
               </div>
               <p className="text-xs text-slate-400">{user.email}</p>
@@ -1029,7 +1100,7 @@ export default function App() {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            Training, Proctored Quizzes & Examiner Viva
+            Question Bank, 15-Q Random Quizzes & Examiner Viva
             {badges.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
                 {badges.length} Badges
@@ -1199,7 +1270,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Working Professional Conditional Section */}
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-slate-200 flex items-center gap-1.5">
@@ -1282,7 +1352,6 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Developer & LinkedIn Handles */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <h2 className="font-semibold text-white mb-3">
                   LinkedIn, GitHub & Kaggle Handles
@@ -1304,7 +1373,6 @@ export default function App() {
                           setLinkedinId(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        placeholder="linkedin-id"
                         className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
@@ -1317,7 +1385,6 @@ export default function App() {
                           setGithubUsername(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        placeholder="github-username"
                         className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
@@ -1330,7 +1397,6 @@ export default function App() {
                           setKaggleUsername(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        placeholder="kaggle-username"
                         className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
@@ -1345,7 +1411,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Column: BS Marksheet & Resume Vault (BRULE-55) */}
+            {/* Right Column: BS Marksheet & Resume Vault */}
             <div className="lg:col-span-5 space-y-6">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -1529,59 +1595,182 @@ export default function App() {
         {activeTab === "TRAINING" && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Course Catalog & Verified Badges */}
+              {/* Domain & Track Selector + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <BookOpen className="w-5 h-5 text-indigo-400" />
-                      <h2 className="font-semibold text-white">Placement Readiness Tracks</h2>
+                      <h2 className="font-semibold text-white">Domain & Track Assessments</h2>
                     </div>
                     <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-                      BRULE-12 • 30m Timer
+                      15 Random Qs • 30m
                     </span>
                   </div>
 
                   <div className="space-y-3">
-                    {courses.map((c) => {
-                      const completedCount = c.modules.filter((m) => m.completed).length;
-                      const earned = badges.some((b) => b.courseCode === c.code);
+                    {tracks.map((t) => {
+                      const poolCount = questionBank.filter(
+                        (q) => q.domain === t.domain && q.track === t.track
+                      ).length;
+                      const earned = badges.some((b) => b.courseCode === t.code);
                       return (
                         <button
-                          key={c.id}
+                          key={t.id}
                           disabled={isQuizActive}
                           onClick={() => {
-                            setActiveCourseId(c.id);
+                            setActiveTrackId(t.id);
+                            setDrawnQuestions([]);
                             setQuizAnswers({});
                             setQuizBanner(null);
                           }}
                           className={`w-full text-left p-4 rounded-xl border transition disabled:opacity-50 ${
-                            c.id === activeCourse.id
+                            t.id === activeTrack.id
                               ? "bg-indigo-600/15 border-indigo-500/50"
                               : "bg-slate-950 border-slate-800 hover:border-slate-700"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono text-indigo-400">{c.code}</span>
+                            <span className="text-xs font-mono text-indigo-400">{t.code}</span>
                             {earned ? (
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
                                 VERIFIED BADGE
                               </span>
                             ) : (
                               <span className="text-[11px] text-slate-400">
-                                Attempts: {c.attemptsUsed}/{c.maxAttempts}
+                                Attempts: {t.attemptsUsed}/{t.maxAttempts}
                               </span>
                             )}
                           </div>
-                          <p className="text-sm font-semibold text-white mt-1">{c.title}</p>
+                          <p className="text-sm font-semibold text-white mt-1">{t.title}</p>
                           <p className="text-xs text-slate-400 mt-1">
-                            Modules: {completedCount}/{c.modules.length} completed • Pass:{" "}
-                            {c.passThresholdPct}%
+                            Bank Pool: <span className="text-slate-200">{poolCount} questions</span>{" "}
+                            • Draws 15 randomly
                           </p>
                         </button>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Question Bank Builder (Add questions anytime to DS or SD pools) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-5 h-5 text-indigo-400" />
+                      <h2 className="font-semibold text-white">Quiz Question Bank Database</h2>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                      {questionBank.length} Total Qs
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-4">
+                    Add new MCQ questions to{" "}
+                    <span className="text-slate-200">Data Science</span> or{" "}
+                    <span className="text-slate-200">Software Development</span> for{" "}
+                    <span className="text-slate-200">Internship</span> or{" "}
+                    <span className="text-slate-200">Software Development</span> tracks.
+                  </p>
+
+                  {qbBanner && (
+                    <div
+                      className={`mb-3 p-3 rounded-lg border text-xs flex items-center gap-2 ${
+                        qbBanner.type === "OK"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{qbBanner.text}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleAddQuestionToBank} className="space-y-2.5 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-400 mb-1">Domain</label>
+                        <select
+                          value={qbDomain}
+                          onChange={(e) => setQbDomain(e.target.value as QuizDomainOption)}
+                          className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        >
+                          <option value="DATA_SCIENCE">Data Science</option>
+                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1">Track</label>
+                        <select
+                          value={qbTrack}
+                          onChange={(e) => setQbTrack(e.target.value as QuizTrackOption)}
+                          className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        >
+                          <option value="INTERNSHIP">Internship</option>
+                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={qbPrompt}
+                      onChange={(e) => setQbPrompt(e.target.value)}
+                      placeholder="Question prompt..."
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={qbOpt0}
+                        onChange={(e) => setQbOpt0(e.target.value)}
+                        placeholder="Option A"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                      <input
+                        type="text"
+                        value={qbOpt1}
+                        onChange={(e) => setQbOpt1(e.target.value)}
+                        placeholder="Option B"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                      <input
+                        type="text"
+                        value={qbOpt2}
+                        onChange={(e) => setQbOpt2(e.target.value)}
+                        placeholder="Option C"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                      <input
+                        type="text"
+                        value={qbOpt3}
+                        onChange={(e) => setQbOpt3(e.target.value)}
+                        placeholder="Option D"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">Correct Answer:</span>
+                      <select
+                        value={qbCorrectIdx}
+                        onChange={(e) => setQbCorrectIdx(Number(e.target.value))}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      >
+                        <option value={0}>Option A</option>
+                        <option value={1}>Option B</option>
+                        <option value={2}>Option C</option>
+                        <option value={3}>Option D</option>
+                      </select>
+                      <button
+                        type="submit"
+                        className="ml-auto px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Question
+                      </button>
+                    </div>
+                  </form>
                 </div>
 
                 {/* Earned Skill Verification Badges */}
@@ -1593,8 +1782,8 @@ export default function App() {
 
                   {badges.length === 0 ? (
                     <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
-                      Score ≥ 75% on any proctored course assessment to mint a recruiter-verifiable
-                      IITM Skill Badge.
+                      Score ≥ 75% on any 15-question randomized assessment to mint a verified IITM
+                      Skill Badge.
                     </p>
                   ) : (
                     <div className="space-y-3">
@@ -1621,16 +1810,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Active Course Modules & Proctored Assessment Engine */}
+              {/* Active Track Modules & Random 15-Question Assessment Runner */}
               <div className="lg:col-span-7 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <span className="text-xs font-mono text-indigo-400">{activeCourse.code}</span>
-                      <h2 className="text-lg font-bold text-white">{activeCourse.title}</h2>
+                      <span className="text-xs font-mono text-indigo-400">{activeTrack.code}</span>
+                      <h2 className="text-lg font-bold text-white">{activeTrack.title}</h2>
                     </div>
                     <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
-                      {activeCourse.category}
+                      Pool: {activePoolSize} Qs
                     </span>
                   </div>
 
@@ -1640,10 +1829,10 @@ export default function App() {
                         1. Learning Modules (Click to mark complete)
                       </h3>
                       <div className="space-y-2">
-                        {activeCourse.modules.map((m) => (
+                        {activeTrack.modules.map((m) => (
                           <div
                             key={m.id}
-                            onClick={() => toggleModuleComplete(activeCourse.id, m.id)}
+                            onClick={() => toggleModuleComplete(activeTrack.id, m.id)}
                             className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-start gap-3 cursor-pointer transition"
                           >
                             {m.completed ? (
@@ -1676,7 +1865,7 @@ export default function App() {
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                       <PlayCircle className="w-4 h-4 text-indigo-400" />
-                      2. Proctored Skill Assessment (Pass ≥ {activeCourse.passThresholdPct}%)
+                      2. Proctored 15-Question Random Quiz (Pass ≥ {activeTrack.passThresholdPct}%)
                     </h3>
                     <div className="flex items-center gap-2">
                       {isQuizActive && (
@@ -1693,12 +1882,12 @@ export default function App() {
                       )}
                       <span
                         className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                          activeCourse.attemptsUsed >= activeCourse.maxAttempts
+                          activeTrack.attemptsUsed >= activeTrack.maxAttempts
                             ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
                             : "bg-slate-950 text-slate-300 border-slate-800"
                         }`}
                       >
-                        Attempts: {activeCourse.attemptsUsed} / {activeCourse.maxAttempts}
+                        Attempts: {activeTrack.attemptsUsed} / {activeTrack.maxAttempts}
                       </span>
                     </div>
                   </div>
@@ -1707,10 +1896,12 @@ export default function App() {
                     <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold text-amber-300">
-                        Strict Proctoring Active (30:00 Max • Zero Tab-Switch Tolerance):
+                        Randomized 15-Question Draw • 30:00 Timer • Zero Tab-Switch Tolerance:
                       </span>{" "}
-                      Once started, switching browser tabs or leaving this window immediately
-                      terminates and fails your current attempt.
+                      15 questions are randomly drawn from the{" "}
+                      <span className="text-white font-semibold">{activePoolSize}-question</span>{" "}
+                      bank and auto-evaluated on submission. Switching tabs immediately fails the
+                      attempt.
                     </div>
                   </div>
 
@@ -1736,26 +1927,26 @@ export default function App() {
                   {!isQuizActive ? (
                     <button
                       type="button"
-                      onClick={handleStartQuiz}
-                      disabled={activeCourse.attemptsUsed >= activeCourse.maxAttempts}
+                      onClick={handleStartRandomQuiz}
+                      disabled={activeTrack.attemptsUsed >= activeTrack.maxAttempts}
                       className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition flex items-center justify-center gap-2"
                     >
-                      <Clock className="w-4 h-4" />
-                      {activeCourse.attemptsUsed >= activeCourse.maxAttempts
-                        ? `Maximum Attempts Exhausted (${activeCourse.attemptsUsed}/${activeCourse.maxAttempts})`
-                        : `Start 30-Minute Proctored Assessment (Attempt ${
-                            activeCourse.attemptsUsed + 1
-                          } of ${activeCourse.maxAttempts})`}
+                      <Shuffle className="w-4 h-4" />
+                      {activeTrack.attemptsUsed >= activeTrack.maxAttempts
+                        ? `Maximum Attempts Exhausted (${activeTrack.attemptsUsed}/${activeTrack.maxAttempts})`
+                        : `Draw 15 Random Questions & Start 30:00 Quiz (Attempt ${
+                            activeTrack.attemptsUsed + 1
+                          } of ${activeTrack.maxAttempts})`}
                     </button>
                   ) : (
                     <form onSubmit={handleSubmitQuiz} className="space-y-4">
-                      {activeCourse.questions.map((q, qIdx) => (
+                      {drawnQuestions.map((q, qIdx) => (
                         <div
                           key={q.id}
                           className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
                         >
                           <p className="text-xs font-semibold text-slate-200">
-                            Q{qIdx + 1}. {q.prompt}
+                            Q{qIdx + 1} of {drawnQuestions.length}. {q.prompt}
                           </p>
                           <div className="space-y-1.5 pt-1">
                             {q.options.map((opt, optIdx) => (
@@ -1769,7 +1960,7 @@ export default function App() {
                               >
                                 <input
                                   type="radio"
-                                  name={`${activeCourse.id}-${q.id}`}
+                                  name={`session-${q.id}`}
                                   checked={quizAnswers[q.id] === optIdx}
                                   onChange={() =>
                                     setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
@@ -1787,7 +1978,8 @@ export default function App() {
                         type="submit"
                         className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition"
                       >
-                        Submit Assessment & Grade ({formatTimer(secondsLeft)} remaining)
+                        Submit & Auto-Evaluate All {drawnQuestions.length} Questions (
+                        {formatTimer(secondsLeft)} remaining)
                       </button>
                     </form>
                   )}
@@ -1795,7 +1987,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Final Stage: Examiner Interview Evaluation (Stage 3 of Training) */}
+            {/* Final Stage: Examiner Interview Evaluation */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2.5">
@@ -1816,7 +2008,6 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Examiner Rubric Form (Editable when RBAC View is ADMIN or RECRUITER) */}
                 <div className="lg:col-span-6">
                   {user.role === "STUDENT" ? (
                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
@@ -1997,7 +2188,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Recorded Examiner Evaluations Feed */}
                 <div className="lg:col-span-6 space-y-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Recorded Examiner Viva Evaluations ({evaluations.length})
@@ -2085,8 +2275,8 @@ export default function App() {
                 <div>
                   <h2 className="font-semibold text-white">Immutable Governance & Audit Trail</h2>
                   <p className="text-xs text-slate-400">
-                    Append-only ledger capturing Student Registration, Proctoring & Examiner Viva
-                    Evaluations
+                    Append-only ledger capturing Question Bank, 15-Q Randomized Quizzes, Proctoring &
+                    Examiner Evaluations
                   </p>
                 </div>
               </div>
