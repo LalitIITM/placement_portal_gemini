@@ -50,6 +50,28 @@ async def test_interview_scheduling_conflict_and_offer_acceptance_lifecycle():
         application_id = apply_res.json()["id"]
 
         # 2. Recruiter logs in and schedules Round 1 Technical Interview
+        reg_res = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "talent@flipkart.com",
+                "full_name": "Flipkart Campus Hiring",
+                "role": "RECRUITER",
+                "organization_or_dept": "Flipkart Campus Hiring",
+            },
+        )
+        assert reg_res.status_code == 201
+        admin_login = await client.post(
+            "/api/v1/auth/sso-login",
+            json={"email": "placement.admin@iitm.ac.in", "full_name": "Placement Admin", "role": "ADMIN"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+        approve_res = await client.post(
+            f"/api/v1/admin/registrations/{reg_res.json()['user_id']}/decision",
+            json={"decision": "APPROVED"},
+            headers=admin_headers,
+        )
+        assert approve_res.status_code == 200
+
         rec_login = await client.post(
             "/api/v1/auth/sso-login",
             json={
