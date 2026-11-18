@@ -2082,7 +2082,7 @@ export default function App() {
       user?.role || "STUDENT",
       "ACTIVITY_POINTS_LOGGED",
       `${item.title} (+${item.points} pts)`,
-      "VERIFIED"
+      "SUCCESS"
     );
   };
 
@@ -2107,7 +2107,7 @@ export default function App() {
       "EXAMINER",
       "ONE_ON_ONE_READINESS_APPROVED",
       `1-on-1 Session Readiness = Yes (${progress.earnedPointsForTrack} Activity Pts)`,
-      "APPROVED"
+      "SUCCESS"
     );
   };
 
