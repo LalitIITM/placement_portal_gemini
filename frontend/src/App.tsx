@@ -233,6 +233,7 @@ interface ResumeItem {
   id: string;
   title: string;
   targetRole: string;
+  driveUrl: string;
   fileSize: string;
   updatedAt: string;
   isPrimary: boolean;
@@ -240,6 +241,7 @@ interface ResumeItem {
 
 interface MarksheetRecord {
   fileName: string;
+  driveUrl: string;
   fileSize: string;
   cgpa: string;
   uploadedAt: string;
@@ -795,25 +797,33 @@ export default function App() {
   const [kaggleUsername, setKaggleUsername] = useState("aaravml");
   const [handlesSavedBanner, setHandlesSavedBanner] = useState<string | null>(null);
 
-  const [marksheet, setMarksheet] = useState<MarksheetRecord | null>(null);
-  const [marksheetFile, setMarksheetFile] = useState<File | null>(null);
+  const [marksheet, setMarksheet] = useState<MarksheetRecord | null>({
+    fileName: "IITM_BS_Official_Scorecard.pdf",
+    driveUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view",
+    fileSize: "Google Drive",
+    cgpa: "8.74",
+    uploadedAt: "BS Portal PDF",
+  });
+  const [marksheetDriveUrl, setMarksheetDriveUrl] = useState<string>("");
   const [marksheetAlert, setMarksheetAlert] = useState<string | null>(null);
-  const marksheetInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Increment 1: Resume Vault
+  // Increment 1: Resume Vault (3 Google Drive Resume Links)
   const [resumes, setResumes] = useState<ResumeItem[]>([
     {
       id: "res-1",
       title: "SDE_Backend_FastAPI_2026.pdf",
-      targetRole: "Backend Engineer",
-      fileSize: "412 KB",
+      targetRole: "Backend & Full-Stack Engineer",
+      driveUrl: "https://drive.google.com/file/d/195lHv9-2mK8qR7xPwN3tY6sW4zQ1cVbN8mL2kJ5hG9f/view",
+      fileSize: "Google Drive",
       updatedAt: "08:00 IST",
       isPrimary: true,
     },
   ]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [newResumeTitle, setNewResumeTitle] = useState("");
+  const [newResumeDriveUrl, setNewResumeDriveUrl] = useState("");
   const [newTarget, setNewTarget] = useState("");
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
+  const [driveDocPreview, setDriveDocPreview] = useState<{ title: string; subtitle: string; url: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Increment 2: Question Bank Database + Random 15-Question Quiz Engine
@@ -924,6 +934,12 @@ export default function App() {
         if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
           setAuditLogs(snap.auditLogs);
         }
+        if (Array.isArray(snap.resumes) && snap.resumes.length > 0) {
+          setResumes(snap.resumes);
+        }
+        if (snap.marksheet && typeof snap.marksheet === "object") {
+          setMarksheet(snap.marksheet);
+        }
         setDbSyncStatus("SYNCED");
       } catch {
         if (!cancelled) setDbSyncStatus("LOCAL_FALLBACK");
@@ -958,6 +974,8 @@ export default function App() {
               applications,
               evaluations,
               auditLogs,
+              resumes,
+              marksheet,
             },
           }),
         });
@@ -980,6 +998,8 @@ export default function App() {
     applications,
     evaluations,
     auditLogs,
+    resumes,
+    marksheet,
   ]);
 
   const appendAudit = useCallback(
@@ -1629,33 +1649,14 @@ export default function App() {
     );
   };
 
-  const handleMarksheetFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (!file) {
-      setMarksheetFile(null);
-      return;
-    }
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setMarksheetAlert("Invalid File Type: Upload your official IITM BS Marksheet as a PDF (.pdf).");
-      setMarksheetFile(null);
-      e.target.value = "";
-      return;
-    }
-    if (file.size > MAX_PDF_BYTES) {
-      setMarksheetAlert("File Too Large: BS Marksheet PDF must be 5 MB or smaller.");
-      setMarksheetFile(null);
-      e.target.value = "";
-      return;
-    }
-    setMarksheetAlert(null);
-    setMarksheetFile(file);
-  };
-
   const handleUploadMarksheet = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!marksheetFile) {
-      setMarksheetAlert("Please choose your IITM BS Grade Card / Marksheet PDF first.");
+    const parsedDrive = parseGoogleDriveLink(marksheetDriveUrl);
+    if (!parsedDrive.isValid) {
+      setMarksheetAlert(
+        "Invalid Google Drive Link: Upload your downloaded IITM BS Scorecard PDF to Google Drive ('Anyone with the link can view') and paste the share URL."
+      );
       return;
     }
     const parsedCgpa = parseFloat(cgpaInput);
@@ -1663,46 +1664,23 @@ export default function App() {
       setMarksheetAlert("Enter a valid CGPA between 0.00 and 10.00.");
       return;
     }
-    const sizeLabel = formatBytes(marksheetFile.size);
     const record: MarksheetRecord = {
-      fileName: marksheetFile.name,
-      fileSize: sizeLabel,
+      fileName: `IITM_BS_Scorecard_${parsedCgpa.toFixed(2)}.pdf`,
+      driveUrl: parsedDrive.viewUrl,
+      fileSize: "Google Drive",
       cgpa: parsedCgpa.toFixed(2),
       uploadedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
     };
     setMarksheet(record);
-    setMarksheetFile(null);
+    setMarksheetDriveUrl("");
     setMarksheetAlert(null);
-    if (marksheetInputRef.current) marksheetInputRef.current.value = "";
     appendAudit(
       user.email,
       user.role,
-      "MARKSHEET_UPLOADED",
+      "BS_SCORECARD_DRIVE_LINKED",
       `${record.fileName} (CGPA ${record.cgpa})`,
       "SUCCESS"
     );
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (!file) {
-      setSelectedFile(null);
-      return;
-    }
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setVaultAlert("Invalid File Type: Only PDF resumes (.pdf) are accepted.");
-      setSelectedFile(null);
-      e.target.value = "";
-      return;
-    }
-    if (file.size > MAX_PDF_BYTES) {
-      setVaultAlert("File Too Large: Resume PDF must be 5 MB or smaller.");
-      setSelectedFile(null);
-      e.target.value = "";
-      return;
-    }
-    setVaultAlert(null);
-    setSelectedFile(file);
   };
 
   const handleAddResume = (e: React.FormEvent) => {
@@ -1713,32 +1691,39 @@ export default function App() {
       appendAudit(user.email, user.role, "BRULE_55_BLOCKED", "Attempted 4th active resume", "BLOCKED");
       return;
     }
-    if (!selectedFile) {
-      setVaultAlert("Please select a PDF file from your device first.");
+    const parsedDrive = parseGoogleDriveLink(newResumeDriveUrl);
+    if (!parsedDrive.isValid) {
+      setVaultAlert(
+        "Invalid Google Drive Link: Upload your PDF resume to Google Drive ('Anyone with the link can view') and paste the drive.google.com link."
+      );
       return;
     }
     if (!newTarget.trim()) {
-      setVaultAlert("Please specify the target role (e.g., Data Scientist, SDE).");
+      setVaultAlert("Please specify the target role (e.g., Data Scientist, SDE, Core).");
       return;
     }
 
-    const sizeLabel = formatBytes(selectedFile.size);
+    const label =
+      newResumeTitle.trim() ||
+      `${newTarget.trim().replace(/\s+/g, "_")}_Resume_${resumes.length + 1}.pdf`;
+
     const created: ResumeItem = {
       id: `res-${Date.now()}`,
-      title: selectedFile.name,
+      title: label,
       targetRole: newTarget.trim(),
-      fileSize: sizeLabel,
+      driveUrl: parsedDrive.viewUrl,
+      fileSize: "Google Drive",
       updatedAt: "Just now",
       isPrimary: resumes.length === 0,
     };
 
     setResumes((prev) => [...prev, created]);
     setSelectedResumeIdForApply(created.id);
-    setSelectedFile(null);
+    setNewResumeTitle("");
+    setNewResumeDriveUrl("");
     setNewTarget("");
     setVaultAlert(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    appendAudit(user.email, user.role, "RESUME_UPLOADED", `${created.title} (${sizeLabel})`, "SUCCESS");
+    appendAudit(user.email, user.role, "RESUME_DRIVE_LINKED", `${created.title} (${created.targetRole})`, "SUCCESS");
   };
 
   const handleDeleteResume = (id: string, title: string) => {
@@ -4460,7 +4445,7 @@ export default function App() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <GraduationCap className="w-5 h-5 text-emerald-400" />
-                    <h2 className="font-semibold text-white">IITM BS Course Marksheet</h2>
+                    <h2 className="font-semibold text-white">IITM BS Official Scorecard (Google Drive)</h2>
                   </div>
                   <span
                     className={`text-xs px-2.5 py-1 rounded-full border ${
@@ -4469,20 +4454,36 @@ export default function App() {
                         : "bg-slate-950 text-slate-400 border-slate-800"
                     }`}
                   >
-                    {marksheet ? "Uploaded" : "Pending PDF"}
+                    {marksheet ? "Linked" : "Pending Drive Link"}
                   </span>
                 </div>
 
                 {marksheet && (
-                  <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex items-center justify-between">
+                  <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="font-semibold text-emerald-200">{marksheet.fileName}</p>
                       <p className="text-slate-400 mt-0.5">
                         CGPA: <span className="text-white font-semibold">{marksheet.cgpa}</span> •{" "}
-                        {marksheet.fileSize} • {marksheet.uploadedAt}
+                        {marksheet.uploadedAt}
                       </p>
                     </div>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-2">
+                      {marksheet.driveUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDriveDocPreview({
+                              title: marksheet.fileName,
+                              subtitle: `IITM BS Portal Scorecard • CGPA ${marksheet.cgpa}`,
+                              url: marksheet.driveUrl,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/40 font-semibold"
+                        >
+                          Inline Preview
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -4493,49 +4494,35 @@ export default function App() {
                   </div>
                 )}
 
-                <form onSubmit={handleUploadMarksheet} className="space-y-3">
-                  <div>
-                    <input
-                      ref={marksheetInputRef}
-                      type="file"
-                      accept=".pdf,application/pdf"
-                      onChange={handleMarksheetFileChange}
-                      className="hidden"
-                      id="bs-marksheet-upload"
-                    />
-                    <label
-                      htmlFor="bs-marksheet-upload"
-                      className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-emerald-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span className="truncate">
-                          {marksheetFile
-                            ? `${marksheetFile.name} (${formatBytes(marksheetFile.size)})`
-                            : "Select BS Marksheet PDF (max 5 MB)..."}
-                        </span>
-                      </span>
-                      <span className="text-[11px] font-semibold text-emerald-400 ml-2 shrink-0">
-                        Browse
-                      </span>
-                    </label>
-                  </div>
+                {user.role === "STUDENT" && (
+                  <form onSubmit={handleUploadMarksheet} className="space-y-3">
+                    <div>
+                      <input
+                        type="url"
+                        required
+                        value={marksheetDriveUrl}
+                        onChange={(e) => setMarksheetDriveUrl(e.target.value)}
+                        placeholder="Paste Google Drive link to BS Portal Scorecard PDF (Anyone with link can view)"
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                      />
+                    </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    Upload BS Marksheet
-                  </button>
-                </form>
+                    <button
+                      type="submit"
+                      className="w-full py-2 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Save BS Scorecard Drive Link
+                    </button>
+                  </form>
+                )}
               </div>
 
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <FileText className="w-5 h-5 text-indigo-400" />
-                    <h2 className="font-semibold text-white">Resume Vault (BRULE-55)</h2>
+                    <h2 className="font-semibold text-white">3-Resume Vault — Google Drive (BRULE-55)</h2>
                   </div>
                   <span
                     className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
@@ -4564,16 +4551,36 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {res.targetRole} • {res.fileSize} • {res.updatedAt}
+                          {res.targetRole} • {res.updatedAt}
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleDeleteResume(res.id, res.title)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition shrink-0"
-                        title="Archive Resume"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {res.driveUrl && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDriveDocPreview({
+                                title: res.title,
+                                subtitle: `Target Role: ${res.targetRole}`,
+                                url: res.driveUrl,
+                              })
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-xs font-semibold"
+                          >
+                            Inline Preview
+                          </button>
+                        )}
+                        {user.role === "STUDENT" && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteResume(res.id, res.title)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                            title="Archive Resume"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -4585,51 +4592,44 @@ export default function App() {
                   </div>
                 )}
 
-                <form onSubmit={handleAddResume} className="space-y-2.5">
-                  <div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,application/pdf"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="resume-pdf-upload"
-                    />
-                    <label
-                      htmlFor="resume-pdf-upload"
-                      className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-indigo-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
-                        <span className="truncate">
-                          {selectedFile
-                            ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
-                            : "Choose Resume PDF from device (max 5 MB)..."}
-                        </span>
-                      </span>
-                      <span className="text-[11px] font-semibold text-indigo-400 ml-2 shrink-0">
-                        Browse
-                      </span>
-                    </label>
-                  </div>
+                {user.role === "STUDENT" && (
+                  <form onSubmit={handleAddResume} className="space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newTarget}
+                        onChange={(e) => setNewTarget(e.target.value)}
+                        placeholder="Target Role (e.g., Data Scientist, SDE)"
+                        className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                      />
+                      <input
+                        type="text"
+                        value={newResumeTitle}
+                        onChange={(e) => setNewResumeTitle(e.target.value)}
+                        placeholder="Resume Label (optional, e.g., DS_Resume.pdf)"
+                        className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                      />
+                    </div>
 
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newTarget}
-                      onChange={(e) => setNewTarget(e.target.value)}
-                      placeholder="Target Role (e.g., ML Engineer)"
-                      className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Upload
-                    </button>
-                  </div>
-                </form>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        required
+                        value={newResumeDriveUrl}
+                        onChange={(e) => setNewResumeDriveUrl(e.target.value)}
+                        placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                        className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Drive Resume
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           </div>
@@ -6619,6 +6619,47 @@ export default function App() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {driveDocPreview && (() => {
+          const parsed = parseGoogleDriveLink(driveDocPreview.url);
+          return (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl">
+                <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{driveDocPreview.title}</h3>
+                    <p className="text-[11px] text-slate-400">{driveDocPreview.subtitle}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={parsed.viewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-indigo-300"
+                    >
+                      Open in Google Drive ↗
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setDriveDocPreview(null)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-xs font-semibold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-slate-950 h-[75vh] w-full">
+                  <iframe
+                    src={parsed.previewUrl}
+                    title={driveDocPreview.title}
+                    className="w-full h-full border-0"
+                    allow="autoplay"
+                  />
+                </div>
               </div>
             </div>
           );
