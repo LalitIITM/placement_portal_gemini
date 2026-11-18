@@ -20,7 +20,7 @@ from app.shared.database import AsyncSessionLocal, Base, engine
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as session:
@@ -32,14 +32,14 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
+    title=settings.PROJECT_NAME,
+    version="0.3.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +51,6 @@ app.include_router(training_router)
 app.include_router(recruitment_router)
 
 
-@app.get("/healthz", tags=["System"])
+@app.get("/health", tags=["System"])
 async def health_check() -> dict[str, str]:
-    return {"status": "ok", "environment": settings.environment}
+    return {"status": "ok", "environment": settings.ENVIRONMENT}
