@@ -468,7 +468,7 @@ export default function App() {
 
   // Question Bank Builder State
   const [qbDomain, setQbDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
-  const [qbTrack, setQbTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
+  const [qbTrack, setQbTrack] = useState<QuizTrackOption>("INTERNSHIP");
   const [qbPrompt, setQbPrompt] = useState("");
   const [qbOpt0, setQbOpt0] = useState("");
   const [qbOpt1, setQbOpt1] = useState("");
@@ -2409,7 +2409,7 @@ export default function App() {
                         <label className="block text-slate-400 mb-1">Track</label>
                         <select
                           value={qbTrack}
-                          onChange={(e) => setQbTrack(e.target.value as JobRoleTypeOption)}
+                          onChange={(e) => setQbTrack(e.target.value as QuizTrackOption)}
                           className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                         >
                           <option value="INTERNSHIP">Internship</option>
