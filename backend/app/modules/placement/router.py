@@ -163,8 +163,8 @@ async def schedule_interview(
     )
     db.add(interview)
 
-    if app_row.status in (ApplicationStatus.APPLIED, ApplicationStatus.SHORTLISTED):
-        app_row.status = ApplicationStatus.INTERVIEWING
+    if app_row.status == ApplicationStatus.APPLIED:
+        app_row.status = ApplicationStatus.SHORTLISTED
 
     await db.flush()
 
