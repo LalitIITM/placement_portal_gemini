@@ -416,7 +416,6 @@ const INITIAL_OFFERS: OfferLetterRecord[] = [
 ];
 
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
-const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const QUIZ_DURATION_SECONDS = 30 * 60;
 const QUESTIONS_PER_QUIZ = 15;
 
@@ -824,7 +823,6 @@ export default function App() {
   const [newTarget, setNewTarget] = useState("");
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
   const [driveDocPreview, setDriveDocPreview] = useState<{ title: string; subtitle: string; url: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Increment 2: Question Bank Database + Random 15-Question Quiz Engine
   const [questionBank, setQuestionBank] = useState<BankQuestionItem[]>(buildInitialQuestionBank);
@@ -1588,11 +1586,6 @@ export default function App() {
     if (!user || nextRole === user.role) return;
     setUser({ ...user, role: nextRole });
     appendAudit(user.email, nextRole, "ROLE_SWITCH", `RBAC Context -> ${nextRole}`, "SUCCESS");
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   const handleSaveRegistration = (e: React.FormEvent) => {
