@@ -4709,7 +4709,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === "PLACEMENT" && user.role !== "STUDENT" && (() => {
+        {activeTab === "PLACEMENT" && (user.role as Role) !== "STUDENT" && (() => {
           const acceptedOffers = offers.filter((o) => o.status === "ACCEPTED");
           const ftOffers = offers.filter((o) => o.roleType === "FULL_TIME");
           const avgCtc = ftOffers.length
