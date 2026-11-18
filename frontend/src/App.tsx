@@ -166,6 +166,38 @@ const ACTIVITY_CATALOG: ActivityCatalogItem[] = [
   { id: "T32-AWS-1", table: "TABLE_3", domain: "DATA_SCIENCE", topic: "AWS / GenAI Cert", title: "AWS Academy Data Engineering / ML / NLP / GenAI Foundations", description: "Complete AWS Academy Data Engineering, ML Foundations, NLP, or GenAI Foundations", points: 10, platformHint: "AWS Credly / Certificate URL" },
 ];
 
+function parseGoogleDriveLink(rawUrl: string): {
+  isValid: boolean;
+  fileId: string | null;
+  previewUrl: string;
+  viewUrl: string;
+} {
+  const trimmed = rawUrl.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes("drive.google.com") && !host.includes("docs.google.com")) {
+      return { isValid: false, fileId: null, previewUrl: trimmed, viewUrl: trimmed };
+    }
+    // Match /file/d/<ID>/... or ?id=<ID>
+    const pathMatch = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+    const queryId = parsed.searchParams.get("id");
+    const fileId = pathMatch?.[1] || queryId || null;
+
+    if (fileId) {
+      return {
+        isValid: true,
+        fileId,
+        previewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+        viewUrl: `https://drive.google.com/file/d/${fileId}/view`,
+      };
+    }
+    return { isValid: true, fileId: null, previewUrl: trimmed, viewUrl: trimmed };
+  } catch {
+    return { isValid: false, fileId: null, previewUrl: trimmed, viewUrl: trimmed };
+  }
+}
+
 const API_BASE_URL =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL ||
   "http://localhost:8000";
@@ -736,17 +768,17 @@ export default function App() {
   const [studentApplyingTrack, setStudentApplyingTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
   const [trainingStages, setTrainingStages] = useState<TrainingStageScore[]>(INITIAL_TRAINING_STAGES);
   const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([
-    { id: "ACT-201", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-DBMS-1", evidenceFileName: "HackerRank_SQL_Basic_Cert.pdf", evidenceFileType: "PDF", evidenceFileSize: "340 KB", proofUrl: "https://www.hackerrank.com/certificates/sql-basic", completedDate: "2026-08-12", reviewStatus: "APPROVED" },
-    { id: "ACT-202", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-PDSA-2", evidenceFileName: "LeetCode_25_Medium_Profile.jpg", evidenceFileType: "JPG", evidenceFileSize: "512 KB", proofUrl: "https://leetcode.com/u/iitm_bs_student", completedDate: "2026-09-04", reviewStatus: "APPROVED" },
-    { id: "ACT-203", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-SYS-1", evidenceFileName: "VMT1_Linux_Shell_Completion.pdf", evidenceFileType: "PDF", evidenceFileSize: "620 KB", proofUrl: "https://www.hackerrank.com/domains/shell", completedDate: "2026-09-19", reviewStatus: "APPROVED" },
-    { id: "ACT-204", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-CLD-1", evidenceFileName: "AWS_Cloud_Foundations_Cert.pdf", evidenceFileType: "PDF", evidenceFileSize: "480 KB", proofUrl: "https://www.simplilearn.com/cloud-cert", completedDate: "2026-10-02", reviewStatus: "APPROVED" },
+    { id: "ACT-201", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-DBMS-1", evidenceFileName: "Google Drive • SQL Basic Certificate (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view", completedDate: "2026-08-12", reviewStatus: "APPROVED" },
+    { id: "ACT-202", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-PDSA-2", evidenceFileName: "Google Drive • LeetCode 25 Medium Screenshot (JPG)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/195lHv9-2mK8qR7xPwN3tY6sW4zQ1cVbN8mL2kJ5hG9f/view", completedDate: "2026-09-04", reviewStatus: "APPROVED" },
+    { id: "ACT-203", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-SYS-1", evidenceFileName: "Google Drive • Linux Shell Completion (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/174kLp8-9nJ5wT3vRxM2sZ8qP6yC4bVnM7kL1jH4gF8d/view", completedDate: "2026-09-19", reviewStatus: "APPROVED" },
+    { id: "ACT-204", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-CLD-1", evidenceFileName: "Google Drive • Cloud Foundations Cert (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/152jHn6-7mG3vR1tPwK9rX6oN4wA2zTlK5jH9fD2sA6c/view", completedDate: "2026-10-02", reviewStatus: "APPROVED" },
   ]);
   const [selectedActivityToLog, setSelectedActivityToLog] = useState<string>("T22-KAG-1");
-  const [activityEvidenceFile, setActivityEvidenceFile] = useState<File | null>(null);
   const [activityProofUrl, setActivityProofUrl] = useState<string>("");
+  const [activityEvidenceLabel, setActivityEvidenceLabel] = useState<string>("");
   const [activityCompletedDate, setActivityCompletedDate] = useState<string>("2026-11-15");
   const [activityAlert, setActivityAlert] = useState<string | null>(null);
-  const activityFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [previewSubmission, setPreviewSubmission] = useState<ActivitySubmission | null>(null);
   const [coordTargetRoll, setCoordTargetRoll] = useState<string>("21F3001013");
   const [coordFeedback, setCoordFeedback] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
   const coordCsvInputRef = useRef<HTMLInputElement | null>(null);  const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
@@ -2168,37 +2200,22 @@ export default function App() {
     };
   };
 
-  const handleActivityEvidenceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setActivityAlert(null);
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
-    const validExt = /\.(pdf|jpg|jpeg|png)$/i.test(file.name);
-    if (!validTypes.includes(file.type) && !validExt) {
-      setActivityAlert("Invalid file format: Please upload only a PDF or JPG/PNG certificate/screenshot as activity evidence.");
-      e.target.value = "";
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setActivityAlert("Evidence file exceeds 5 MB limit. Please upload a compressed PDF or JPG.");
-      e.target.value = "";
-      return;
-    }
-    setActivityEvidenceFile(file);
-  };
-
   const handleLogActivityPoint = (e: React.FormEvent) => {
     e.preventDefault();
     setActivityAlert(null);
-    if (!activityEvidenceFile) {
-      setActivityAlert("Evidence Required: Please attach a PDF or JPG proof of completing this activity.");
+    const parsedDrive = parseGoogleDriveLink(activityProofUrl);
+    if (!parsedDrive.isValid) {
+      setActivityAlert(
+        "Invalid Google Drive Link: Please upload your PDF or JPG to Google Drive (@ds.study.iitm.ac.in), enable 'Anyone with the link can view', and paste the drive.google.com share URL."
+      );
       return;
     }
     const item = ACTIVITY_CATALOG.find((a) => a.id === selectedActivityToLog);
     if (!item) return;
 
-    const extLabel = activityEvidenceFile.name.split(".").pop()?.toUpperCase() || "PDF";
-    const sizeLabel = `${Math.max(1, Math.round(activityEvidenceFile.size / 1024))} KB`;
+    const cleanLabel =
+      activityEvidenceLabel.trim() ||
+      `Google Drive • ${item.title} (${parsedDrive.fileId ? `ID: ${parsedDrive.fileId.slice(0, 8)}...` : "Shared File"})`;
 
     setActivitySubmissions((prev) => {
       const filtered = prev.filter((s) => s.activityId !== item.id);
@@ -2208,24 +2225,23 @@ export default function App() {
           studentName: fullName || user?.name || "Student",
           studentEmail: user?.email || "student@ds.study.iitm.ac.in",
           activityId: item.id,
-          evidenceFileName: activityEvidenceFile.name,
-          evidenceFileType: extLabel,
-          evidenceFileSize: sizeLabel,
-          proofUrl: activityProofUrl.trim() || undefined,
+          evidenceFileName: cleanLabel,
+          evidenceFileType: "GDRIVE",
+          evidenceFileSize: "Google Drive",
+          proofUrl: parsedDrive.viewUrl,
           completedDate: activityCompletedDate || "2026-11-15",
           reviewStatus: "PENDING_COORDINATOR",
         },
         ...filtered,
       ];
     });
-    setActivityEvidenceFile(null);
     setActivityProofUrl("");
-    if (activityFileInputRef.current) activityFileInputRef.current.value = "";
+    setActivityEvidenceLabel("");
     appendAudit(
       user?.email || "student@ds.study.iitm.ac.in",
       user?.role || "STUDENT",
-      "ACTIVITY_EVIDENCE_SUBMITTED",
-      `${item.title} (${extLabel}) -> Awaiting Training Coordinator`,
+      "GDRIVE_EVIDENCE_SUBMITTED",
+      `${item.title} -> Google Drive Link submitted for Training Coordinator review`,
       "SUCCESS"
     );
   };
@@ -4859,59 +4875,57 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Submit Activity Evidence (PDF / JPG) for Training Coordinator Approval */}
-                    <form onSubmit={handleLogActivityPoint} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs">
-                      <div className="md:col-span-4">
-                        <label className="block text-slate-400 mb-1">Select IIC Activity (Table 1 / 2 / 3)</label>
-                        <select
-                          value={selectedActivityToLog}
-                          onChange={(e) => setSelectedActivityToLog(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                        >
-                          {relevantActivities.map((act) => (
-                            <option key={act.id} value={act.id}>
-                              [{act.table.replace("_", " ")} • +{act.points} pts] {act.title}
-                            </option>
-                          ))}
-                        </select>
+                    {/* Submit Google Drive Evidence Link (PDF / JPG) for Training Coordinator Approval */}
+                    <form onSubmit={handleLogActivityPoint} className="space-y-3 bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/25 px-3 py-2 rounded-lg">
+                        <span>
+                          <strong>Google Drive Submission Rule:</strong> Upload your PDF certificate or JPG screenshot to your <code className="text-white">@ds.study.iitm.ac.in</code> Google Drive, set sharing to <strong>&ldquo;Anyone with the link can view&rdquo;</strong>, and paste the Drive link below.
+                        </span>
                       </div>
-                      <div className="md:col-span-4">
-                        <label className="block text-slate-400 mb-1">Upload Evidence (PDF / JPG, max 5 MB)</label>
-                        <input
-                          ref={activityFileInputRef}
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                          onChange={handleActivityEvidenceFileChange}
-                          className="hidden"
-                          id="activity-evidence-upload"
-                        />
-                        <label
-                          htmlFor="activity-evidence-upload"
-                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-dashed border-slate-700 hover:border-indigo-500 text-slate-200 flex items-center justify-between cursor-pointer"
-                        >
-                          <span className="truncate">
-                            {activityEvidenceFile ? activityEvidenceFile.name : "Choose PDF or JPG proof..."}
-                          </span>
-                          <span className="text-indigo-400 font-semibold ml-2 shrink-0">Browse</span>
-                        </label>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-slate-400 mb-1">Completion Date</label>
-                        <input
-                          type="date"
-                          required
-                          value={activityCompletedDate}
-                          onChange={(e) => setActivityCompletedDate(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                        />
-                      </div>
-                      <div className="md:col-span-2 flex items-end">
-                        <button
-                          type="submit"
-                          className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
-                        >
-                          Submit Proof
-                        </button>
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-4">
+                          <label className="block text-slate-400 mb-1">Select IIC Activity (Table 1 / 2 / 3)</label>
+                          <select
+                            value={selectedActivityToLog}
+                            onChange={(e) => setSelectedActivityToLog(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          >
+                            {relevantActivities.map((act) => (
+                              <option key={act.id} value={act.id}>
+                                [{act.table.replace("_", " ")} • +{act.points} pts] {act.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="md:col-span-4">
+                          <label className="block text-slate-400 mb-1">Google Drive Share Link (PDF / JPG)</label>
+                          <input
+                            type="url"
+                            required
+                            value={activityProofUrl}
+                            onChange={(e) => setActivityProofUrl(e.target.value)}
+                            placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-slate-400 mb-1">Completion Date</label>
+                          <input
+                            type="date"
+                            required
+                            value={activityCompletedDate}
+                            onChange={(e) => setActivityCompletedDate(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex items-end">
+                          <button
+                            type="submit"
+                            className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                          >
+                            Submit Drive Link
+                          </button>
+                        </div>
                       </div>
                     </form>
 
@@ -4942,11 +4956,22 @@ export default function App() {
                                 <td className="py-2.5 px-3 font-bold text-emerald-300">+{act.points} pts</td>
                                 <td className="py-2.5 px-3 text-[11px]">
                                   {sub ? (
-                                    <div>
+                                    <div className="space-y-1">
                                       <span className="text-indigo-300 font-medium block">
-                                        {sub.evidenceFileName} ({sub.evidenceFileType} • {sub.evidenceFileSize})
+                                        {sub.evidenceFileName}
                                       </span>
-                                      <span className="text-slate-500">Completed: {sub.completedDate}</span>
+                                      <div className="flex items-center gap-2">
+                                        {sub.proofUrl && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewSubmission(sub)}
+                                            className="text-indigo-400 hover:underline font-semibold"
+                                          >
+                                            Preview Drive File
+                                          </button>
+                                        )}
+                                        <span className="text-slate-500">• {sub.completedDate}</span>
+                                      </div>
                                     </div>
                                   ) : (
                                     <span className="text-slate-500">{act.platformHint}</span>
@@ -5030,13 +5055,32 @@ export default function App() {
                                 +{act?.points || 0} Points ({act?.table.replace("_", " ")})
                               </span>
                             </td>
-                            <td className="py-3 px-3">
-                              <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-indigo-300 font-mono text-[11px] block w-fit">
-                                {sub.evidenceFileName} ({sub.evidenceFileType} • {sub.evidenceFileSize})
+                            <td className="py-3 px-3 space-y-1">
+                              <span className="text-slate-200 font-medium block">
+                                {sub.evidenceFileName}
                               </span>
-                              <span className="text-[11px] text-slate-400">
-                                Completed: {sub.completedDate}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                {sub.proofUrl && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewSubmission(sub)}
+                                      className="px-2 py-0.5 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 font-semibold"
+                                    >
+                                      Inline Preview
+                                    </button>
+                                    <a
+                                      href={sub.proofUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-slate-400 hover:text-white underline"
+                                    >
+                                      Open in Drive ↗
+                                    </a>
+                                  </>
+                                )}
+                                <span className="text-slate-500">• {sub.completedDate}</span>
+                              </div>
                             </td>
                             <td className="py-3 px-3">
                               <span
@@ -6504,6 +6548,82 @@ export default function App() {
           </div>
           </div>
         )}
+        {previewSubmission && (() => {
+          const parsed = parseGoogleDriveLink(previewSubmission.proofUrl || "");
+          return (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl">
+                <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">
+                      Google Drive Evidence Preview — {previewSubmission.evidenceFileName}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Student: {previewSubmission.studentName} ({previewSubmission.studentEmail}) • Completed: {previewSubmission.completedDate}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {previewSubmission.proofUrl && (
+                      <a
+                        href={previewSubmission.proofUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-indigo-300"
+                      >
+                        Open in Google Drive ↗
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSubmission(null)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-xs font-semibold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-slate-950 h-[70vh] w-full flex flex-col">
+                  <iframe
+                    src={parsed.previewUrl}
+                    title={previewSubmission.evidenceFileName}
+                    className="w-full h-full border-0"
+                    allow="autoplay"
+                  />
+                </div>
+                {(user?.role === "TRAINING_COORDINATOR" || user?.role === "ADMIN") && (
+                  <div className="px-5 py-3 border-t border-slate-800 bg-slate-900 flex items-center justify-between text-xs">
+                    <span className="text-slate-400">
+                      If Google Drive displays &ldquo;You need access&rdquo;, reject and ask the student to enable &ldquo;Anyone with the link can view&rdquo;.
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCoordinatorReviewActivity(previewSubmission.id, "APPROVED");
+                          setPreviewSubmission(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                      >
+                        Approve Evidence
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCoordinatorReviewActivity(previewSubmission.id, "REJECTED");
+                          setPreviewSubmission(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-semibold"
+                      >
+                        Reject (Access / Invalid)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
       </main>
     </div>
   );
