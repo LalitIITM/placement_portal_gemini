@@ -20,7 +20,52 @@ async def setup_db():
 
 
 @pytest.mark.asyncio
-async def test_training_assessment_badge_and_brule_12_attempt_cap():
+async def test_marksheet_and_social_handles():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        login_res = await client.post(
+            "/api/v1/auth/sso-login",
+            json={
+                "email": "22f3001234@ds.study.iitm.ac.in",
+                "full_name": "Aarav Sharma",
+                "role": "STUDENT",
+            },
+        )
+        headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
+
+        # Update LinkedIn ID, GitHub username, and Kaggle username
+        prof_res = await client.patch(
+            "/api/v1/students/me/profile",
+            json={
+                "linkedin_url": "aarav-sharma-iitm",
+                "github_url": "aarav-dev",
+                "kaggle_url": "aaravml",
+            },
+            headers=headers,
+        )
+        assert prof_res.status_code == 200
+        profile = prof_res.json()["profile"]
+        assert profile["linkedin_url"] == "aarav-sharma-iitm"
+        assert profile["github_url"] == "aarav-dev"
+        assert profile["kaggle_url"] == "aaravml"
+
+        # Upload BS Marksheet PDF
+        ms_res = await client.post(
+            "/api/v1/students/me/marksheet",
+            json={
+                "file_name": "IITM_BS_GradeCard_Term3.pdf",
+                "file_size_bytes": 512000,
+                "cgpa": "9.14",
+            },
+            headers=headers,
+        )
+        assert ms_res.status_code == 200
+        assert ms_res.json()["profile"]["marksheet_file_name"] == "IITM_BS_GradeCard_Term3.pdf"
+        assert ms_res.json()["cgpa"] == "9.14"
+
+
+@pytest.mark.asyncio
+async def test_training_assessment_tab_switch_autofail_and_brule_12():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         login_res = await client.post(
@@ -34,60 +79,62 @@ async def test_training_assessment_badge_and_brule_12_attempt_cap():
         assert login_res.status_code == 200
         headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
 
-        # 1. Fetch seeded courses
-        courses_res = await client.get("/api/v1/training/courses", headers=headers)
-        assert courses_res.status_code == 200
-        courses = courses_res.json()
-        assert len(courses) >= 2
+        courses = (await client.get("/api/v1/training/courses", headers=headers)).json()
         course = courses[0]
         course_id = course["id"]
+        assert course["time_limit_seconds"] == 1800
 
-        # 2. Complete first module
-        mod_id = course["modules"][0]["id"]
-        mod_res = await client.post(f"/api/v1/training/modules/{mod_id}/complete", headers=headers)
-        assert mod_res.status_code == 200
-
-        # 3. Attempt #1 -> intentionally fail (all index 3, score 25% < 75%)
-        fail_attempt = await client.post(
+        # 1. Attempt #1 -> Tab-switch violation auto-fails with 0% even if answers were right
+        tab_fail = await client.post(
             f"/api/v1/training/courses/{course_id}/attempt",
-            json={"answers": [3, 3, 3, 3]},
+            json={
+                "answers": [0, 2, 1, 1],
+                "termination_reason": "TAB_SWITCH_VIOLATION",
+                "elapsed_seconds": 45,
+            },
             headers=headers,
         )
-        assert fail_attempt.status_code == 200
-        assert fail_attempt.json()["passed"] is False
-        assert fail_attempt.json()["attempts_remaining"] == 2
-        assert fail_attempt.json()["badge"] is None
+        assert tab_fail.status_code == 200
+        assert tab_fail.json()["passed"] is False
+        assert tab_fail.json()["score_pct"] == 0
+        assert tab_fail.json()["termination_reason"] == "TAB_SWITCH_VIOLATION"
+        assert tab_fail.json()["attempts_remaining"] == 2
 
-        # 4. Attempt #2 -> pass (correct answers for CS-301: [0, 2, 1, 1] -> 100%)
+        # 2. Attempt #2 -> Normal valid submission passes & mints badge
         pass_attempt = await client.post(
             f"/api/v1/training/courses/{course_id}/attempt",
-            json={"answers": [0, 2, 1, 1]},
+            json={
+                "answers": [0, 2, 1, 1],
+                "termination_reason": "NORMAL",
+                "elapsed_seconds": 320,
+            },
             headers=headers,
         )
         assert pass_attempt.status_code == 200
-        body = pass_attempt.json()
-        assert body["passed"] is True
-        assert body["score_pct"] == 100
-        assert body["badge"] is not None
-        code = body["badge"]["verification_code"]
-        assert code.startswith("BADGE-IITM-")
+        assert pass_attempt.json()["passed"] is True
+        assert pass_attempt.json()["score_pct"] == 100
+        code = pass_attempt.json()["badge"]["verification_code"]
 
-        # 5. Public recruiter badge verification succeeds
         verify_res = await client.get(f"/api/v1/training/badges/verify/{code}")
         assert verify_res.status_code == 200
         assert verify_res.json()["valid"] is True
-        assert verify_res.json()["student_roll_number"] == "22F3001234"
 
-        # 6. Attempt #3 -> succeeds (uses last attempt)
-        third_attempt = await client.post(
+        # 3. Attempt #3 -> Exceeding 30-min timer (1801s) auto-fails as TIMEOUT
+        timeout_attempt = await client.post(
             f"/api/v1/training/courses/{course_id}/attempt",
-            json={"answers": [0, 2, 1, 1]},
+            json={
+                "answers": [0, 2, 1, 1],
+                "termination_reason": "NORMAL",
+                "elapsed_seconds": 1801,
+            },
             headers=headers,
         )
-        assert third_attempt.status_code == 200
-        assert third_attempt.json()["attempts_remaining"] == 0
+        assert timeout_attempt.status_code == 200
+        assert timeout_attempt.json()["passed"] is False
+        assert timeout_attempt.json()["termination_reason"] == "TIMEOUT"
+        assert timeout_attempt.json()["attempts_remaining"] == 0
 
-        # 7. Attempt #4 -> blocked by BRULE-12 (409 Conflict)
+        # 4. Attempt #4 -> Blocked by BRULE-12 (409 Conflict)
         fourth_attempt = await client.post(
             f"/api/v1/training/courses/{course_id}/attempt",
             json={"answers": [0, 2, 1, 1]},

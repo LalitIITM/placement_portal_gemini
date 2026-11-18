@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ShieldCheck,
   FileText,
@@ -17,6 +17,9 @@ import {
   CheckSquare,
   Square,
   Sparkles,
+  Clock,
+  EyeOff,
+  GraduationCap,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
@@ -29,6 +32,13 @@ interface ResumeItem {
   fileSize: string;
   updatedAt: string;
   isPrimary: boolean;
+}
+
+interface MarksheetRecord {
+  fileName: string;
+  fileSize: string;
+  cgpa: string;
+  uploadedAt: string;
 }
 
 interface AuditEntry {
@@ -80,6 +90,7 @@ interface TrainingCourse {
 
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const QUIZ_DURATION_SECONDS = 30 * 60; // 30 minutes (1800 seconds)
 
 const INITIAL_COURSES: TrainingCourse[] = [
   {
@@ -234,7 +245,19 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<Role>("STUDENT");
   const [user, setUser] = useState<{ email: string; role: Role; name: string } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("TRAINING");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("IDENTITY");
+
+  // Increment 1: Student Handles & BS Marksheet
+  const [linkedinId, setLinkedinId] = useState("aarav-sharma-iitm");
+  const [githubUsername, setGithubUsername] = useState("aarav-ds-iitm");
+  const [kaggleUsername, setKaggleUsername] = useState("aaravml");
+  const [handlesSavedBanner, setHandlesSavedBanner] = useState<string | null>(null);
+
+  const [marksheet, setMarksheet] = useState<MarksheetRecord | null>(null);
+  const [marksheetFile, setMarksheetFile] = useState<File | null>(null);
+  const [cgpaInput, setCgpaInput] = useState("8.92");
+  const [marksheetAlert, setMarksheetAlert] = useState<string | null>(null);
+  const marksheetInputRef = useRef<HTMLInputElement | null>(null);
 
   // Increment 1: Resume Vault state
   const [resumes, setResumes] = useState<ResumeItem[]>([
@@ -243,7 +266,7 @@ export default function App() {
       title: "SDE_Backend_FastAPI_2026.pdf",
       targetRole: "Backend Engineer",
       fileSize: "412 KB",
-      updatedAt: "2026-11-18 08:00",
+      updatedAt: "08:00 IST",
       isPrimary: true,
     },
   ]);
@@ -252,9 +275,11 @@ export default function App() {
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Increment 2: Training & Assessment state
+  // Increment 2: Training & Proctored Assessment state
   const [courses, setCourses] = useState<TrainingCourse[]>(INITIAL_COURSES);
   const [activeCourseId, setActiveCourseId] = useState<string>(INITIAL_COURSES[0].id);
+  const [isQuizActive, setIsQuizActive] = useState<boolean>(false);
+  const [secondsLeft, setSecondsLeft] = useState<number>(QUIZ_DURATION_SECONDS);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizBanner, setQuizBanner] = useState<{
     type: "PASS" | "FAIL" | "BLOCKED";
@@ -270,28 +295,201 @@ export default function App() {
       actor: "system@iitm.ac.in",
       role: "ADMIN",
       action: "POLICY_ENFORCED",
-      resource: "BRULE-55 (Max 3 Resumes) & BRULE-12 (Max 3 Quiz Attempts)",
+      resource: "BRULE-55 (Max 3 Resumes) & BRULE-12 (30m Proctored Quiz)",
       status: "SUCCESS",
     },
   ]);
 
-  const appendAudit = (
-    actor: string,
-    role: Role,
-    action: string,
-    resource: string,
-    status: "SUCCESS" | "BLOCKED" = "SUCCESS"
-  ) => {
-    const entry: AuditEntry = {
-      id: `AUD-${1000 + auditLogs.length + 1}`,
-      timestamp: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
-      actor,
-      role,
-      action,
-      resource,
-      status,
+  const appendAudit = useCallback(
+    (
+      actor: string,
+      role: Role,
+      action: string,
+      resource: string,
+      status: "SUCCESS" | "BLOCKED" = "SUCCESS"
+    ) => {
+      const entry: AuditEntry = {
+        id: `AUD-${Math.floor(1000 + Math.random() * 9000)}`,
+        timestamp: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+        actor,
+        role,
+        action,
+        resource,
+        status,
+      };
+      setAuditLogs((prev) => [entry, ...prev]);
+    },
+    []
+  );
+
+  const activeCourse = courses.find((c) => c.id === activeCourseId) || courses[0];
+
+  const finalizeQuizAttempt = useCallback(
+    (reason: "NORMAL" | "TIMEOUT" | "TAB_SWITCH_VIOLATION") => {
+      if (!user) return;
+
+      if (activeCourse.attemptsUsed >= activeCourse.maxAttempts) {
+        setIsQuizActive(false);
+        setQuizBanner({
+          type: "BLOCKED",
+          text: `BRULE-12 Enforcement: Maximum ${activeCourse.maxAttempts} assessment attempts exhausted for ${activeCourse.code}.`,
+        });
+        appendAudit(
+          user.email,
+          user.role,
+          "BRULE_12_BLOCKED",
+          `${activeCourse.code} (Attempt #${activeCourse.attemptsUsed + 1})`,
+          "BLOCKED"
+        );
+        return;
+      }
+
+      const nextAttemptNum = activeCourse.attemptsUsed + 1;
+      let scorePct = 0;
+      let passed = false;
+
+      if (reason === "NORMAL") {
+        const correctCount = activeCourse.questions.reduce(
+          (acc, q) => (quizAnswers[q.id] === q.correctIndex ? acc + 1 : acc),
+          0
+        );
+        scorePct = Math.round((correctCount / activeCourse.questions.length) * 100);
+        passed = scorePct >= activeCourse.passThresholdPct;
+      }
+
+      setIsQuizActive(false);
+      setCourses((prev) =>
+        prev.map((c) =>
+          c.id === activeCourse.id
+            ? {
+                ...c,
+                attemptsUsed: nextAttemptNum,
+                bestScorePct: Math.max(c.bestScorePct ?? 0, scorePct),
+              }
+            : c
+        )
+      );
+
+      if (reason === "TAB_SWITCH_VIOLATION") {
+        appendAudit(
+          user.email,
+          user.role,
+          "ASSESSMENT_TAB_VIOLATION",
+          `${activeCourse.code} • Attempt ${nextAttemptNum}/${activeCourse.maxAttempts} auto-failed (0%)`,
+          "BLOCKED"
+        );
+        setQuizBanner({
+          type: "BLOCKED",
+          text: `Proctoring Violation: Tab/window switch detected! Attempt #${nextAttemptNum} automatically failed (0%). ${
+            activeCourse.maxAttempts - nextAttemptNum
+          } attempt(s) remaining.`,
+        });
+        return;
+      }
+
+      if (reason === "TIMEOUT") {
+        appendAudit(
+          user.email,
+          user.role,
+          "ASSESSMENT_TIMEOUT",
+          `${activeCourse.code} • 30:00 timer expired on Attempt ${nextAttemptNum}/${activeCourse.maxAttempts}`,
+          "BLOCKED"
+        );
+        setQuizBanner({
+          type: "FAIL",
+          text: `Time Expired (30:00)! Attempt #${nextAttemptNum} recorded as failed (0%). ${
+            activeCourse.maxAttempts - nextAttemptNum
+          } attempt(s) remaining.`,
+        });
+        return;
+      }
+
+      appendAudit(
+        user.email,
+        user.role,
+        passed ? "ASSESSMENT_PASSED" : "ASSESSMENT_FAILED",
+        `${activeCourse.code} • Attempt ${nextAttemptNum}/${activeCourse.maxAttempts} (${scorePct}%)`,
+        "SUCCESS"
+      );
+
+      if (passed) {
+        const alreadyHasBadge = badges.some((b) => b.courseCode === activeCourse.code);
+        if (!alreadyHasBadge) {
+          const hash = Math.random().toString(36).substring(2, 10).toUpperCase();
+          const code = `BADGE-IITM-${activeCourse.code.replace("-", "")}-${hash}`;
+          const newBadge: SkillBadgeItem = {
+            code,
+            courseCode: activeCourse.code,
+            skillName: activeCourse.skillTag,
+            scorePct,
+            issuedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+          };
+          setBadges((prev) => [newBadge, ...prev]);
+          appendAudit(
+            user.email,
+            user.role,
+            "BADGE_ISSUED",
+            `${code} (${activeCourse.skillTag})`,
+            "SUCCESS"
+          );
+        }
+        setQuizBanner({
+          type: "PASS",
+          text: `Passed with ${scorePct}%! Verified credential "${activeCourse.skillTag}" added to your profile.`,
+        });
+      } else {
+        const remaining = activeCourse.maxAttempts - nextAttemptNum;
+        setQuizBanner({
+          type: "FAIL",
+          text: `Scored ${scorePct}% (Threshold: ${activeCourse.passThresholdPct}%). ${remaining} attempt(s) remaining under BRULE-12.`,
+        });
+      }
+    },
+    [activeCourse, appendAudit, badges, quizAnswers, user]
+  );
+
+  // 30-Minute Countdown Timer Effect
+  useEffect(() => {
+    if (!isQuizActive) return;
+    const interval = window.setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          finalizeQuizAttempt("TIMEOUT");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [isQuizActive, finalizeQuizAttempt]);
+
+  // Tab-Switch / Window-Blur Auto-Fail Proctoring Effect
+  useEffect(() => {
+    if (!isQuizActive) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        finalizeQuizAttempt("TAB_SWITCH_VIOLATION");
+      }
     };
-    setAuditLogs((prev) => [entry, ...prev]);
+
+    const handleWindowBlur = () => {
+      finalizeQuizAttempt("TAB_SWITCH_VIOLATION");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [isQuizActive, finalizeQuizAttempt]);
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -328,6 +526,73 @@ export default function App() {
   const formatBytes = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleSaveHandles = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setHandlesSavedBanner("Developer & LinkedIn handles verified and saved to Student Profile.");
+    appendAudit(
+      user.email,
+      user.role,
+      "STUDENT_HANDLES_UPDATED",
+      `LinkedIn: ${linkedinId || "N/A"} | GitHub: ${githubUsername || "N/A"} | Kaggle: ${kaggleUsername || "N/A"}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleMarksheetFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setMarksheetFile(null);
+      return;
+    }
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setMarksheetAlert("Invalid File Type: Upload your official IITM BS Marksheet as a PDF (.pdf).");
+      setMarksheetFile(null);
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      setMarksheetAlert("File Too Large: BS Marksheet PDF must be 5 MB or smaller.");
+      setMarksheetFile(null);
+      e.target.value = "";
+      return;
+    }
+    setMarksheetAlert(null);
+    setMarksheetFile(file);
+  };
+
+  const handleUploadMarksheet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!marksheetFile) {
+      setMarksheetAlert("Please choose your IITM BS Grade Card / Marksheet PDF first.");
+      return;
+    }
+    const parsedCgpa = parseFloat(cgpaInput);
+    if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
+      setMarksheetAlert("Enter a valid CGPA between 0.00 and 10.00.");
+      return;
+    }
+    const sizeLabel = formatBytes(marksheetFile.size);
+    const record: MarksheetRecord = {
+      fileName: marksheetFile.name,
+      fileSize: sizeLabel,
+      cgpa: parsedCgpa.toFixed(2),
+      uploadedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+    };
+    setMarksheet(record);
+    setMarksheetFile(null);
+    setMarksheetAlert(null);
+    if (marksheetInputRef.current) marksheetInputRef.current.value = "";
+    appendAudit(
+      user.email,
+      user.role,
+      "MARKSHEET_UPLOADED",
+      `${record.fileName} (CGPA ${record.cgpa})`,
+      "SUCCESS"
+    );
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -394,8 +659,6 @@ export default function App() {
     appendAudit(user.email, user.role, "RESUME_ARCHIVED", title, "SUCCESS");
   };
 
-  const activeCourse = courses.find((c) => c.id === activeCourseId) || courses[0];
-
   const toggleModuleComplete = (courseId: string, moduleId: string) => {
     if (!user) return;
     setCourses((prev) =>
@@ -416,25 +679,30 @@ export default function App() {
     );
   };
 
-  const handleSubmitQuiz = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStartQuiz = () => {
     if (!user) return;
-
     if (activeCourse.attemptsUsed >= activeCourse.maxAttempts) {
       setQuizBanner({
         type: "BLOCKED",
         text: `BRULE-12 Enforcement: Maximum ${activeCourse.maxAttempts} assessment attempts exhausted for ${activeCourse.code}.`,
       });
-      appendAudit(
-        user.email,
-        user.role,
-        "BRULE_12_BLOCKED",
-        `${activeCourse.code} (Attempt #${activeCourse.attemptsUsed + 1})`,
-        "BLOCKED"
-      );
       return;
     }
+    setQuizAnswers({});
+    setQuizBanner(null);
+    setSecondsLeft(QUIZ_DURATION_SECONDS);
+    setIsQuizActive(true);
+    appendAudit(
+      user.email,
+      user.role,
+      "ASSESSMENT_STARTED",
+      `${activeCourse.code} • 30:00 Proctored Timer Armed`,
+      "SUCCESS"
+    );
+  };
 
+  const handleSubmitQuiz = (e: React.FormEvent) => {
+    e.preventDefault();
     const unanswered = activeCourse.questions.some((q) => quizAnswers[q.id] === undefined);
     if (unanswered) {
       setQuizBanner({
@@ -443,67 +711,7 @@ export default function App() {
       });
       return;
     }
-
-    const correctCount = activeCourse.questions.reduce(
-      (acc, q) => (quizAnswers[q.id] === q.correctIndex ? acc + 1 : acc),
-      0
-    );
-    const scorePct = Math.round((correctCount / activeCourse.questions.length) * 100);
-    const passed = scorePct >= activeCourse.passThresholdPct;
-    const nextAttemptNum = activeCourse.attemptsUsed + 1;
-
-    setCourses((prev) =>
-      prev.map((c) =>
-        c.id === activeCourse.id
-          ? {
-              ...c,
-              attemptsUsed: nextAttemptNum,
-              bestScorePct: Math.max(c.bestScorePct ?? 0, scorePct),
-            }
-          : c
-      )
-    );
-
-    appendAudit(
-      user.email,
-      user.role,
-      passed ? "ASSESSMENT_PASSED" : "ASSESSMENT_FAILED",
-      `${activeCourse.code} • Attempt ${nextAttemptNum}/${activeCourse.maxAttempts} (${scorePct}%)`,
-      "SUCCESS"
-    );
-
-    if (passed) {
-      const alreadyHasBadge = badges.some((b) => b.courseCode === activeCourse.code);
-      if (!alreadyHasBadge) {
-        const hash = Math.random().toString(36).substring(2, 10).toUpperCase();
-        const code = `BADGE-IITM-${activeCourse.code.replace("-", "")}-${hash}`;
-        const newBadge: SkillBadgeItem = {
-          code,
-          courseCode: activeCourse.code,
-          skillName: activeCourse.skillTag,
-          scorePct,
-          issuedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
-        };
-        setBadges((prev) => [newBadge, ...prev]);
-        appendAudit(
-          user.email,
-          user.role,
-          "BADGE_ISSUED",
-          `${code} (${activeCourse.skillTag})`,
-          "SUCCESS"
-        );
-      }
-      setQuizBanner({
-        type: "PASS",
-        text: `Passed with ${scorePct}%! Verified credential "${activeCourse.skillTag}" added to your profile.`,
-      });
-    } else {
-      const remaining = activeCourse.maxAttempts - nextAttemptNum;
-      setQuizBanner({
-        type: "FAIL",
-        text: `Scored ${scorePct}% (Threshold: ${activeCourse.passThresholdPct}%). ${remaining} attempt(s) remaining under BRULE-12.`,
-      });
-    }
+    finalizeQuizAttempt("NORMAL");
   };
 
   if (!user) {
@@ -512,14 +720,14 @@ export default function App() {
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-4">
             <ShieldCheck className="w-4 h-4" />
-            Increment 2 • IAM, Vault & Training Engine
+            Increment 1 & 2 • Proctored Career OS
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-white">
             IITM Placement & Career Portal
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Domain-validated SSO, verified skill badges, and immutable audit ledger.
+            Domain-validated SSO, BS Marksheet verification, and proctored skill assessments.
           </p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
@@ -597,7 +805,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">IITM Career & Placement OS</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Increment 2 • Live
+                  Increment 2 • Proctored
                 </span>
               </div>
               <p className="text-xs text-slate-400">{user.email}</p>
@@ -620,7 +828,10 @@ export default function App() {
               </button>
             ))}
             <button
-              onClick={() => setUser(null)}
+              onClick={() => {
+                setIsQuizActive(false);
+                setUser(null);
+              }}
               className="ml-2 p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400"
               title="Sign Out"
             >
@@ -630,7 +841,20 @@ export default function App() {
         </div>
 
         {/* Workspace Module Navigation */}
-        <div className="max-w-6xl mx-auto px-6 flex gap-2 border-t border-slate-800/70 pt-2 pb-2">
+        <div className="max-w-6xl mx-auto px-6 flex flex-wrap gap-2 border-t border-slate-800/70 pt-2 pb-2">
+          <button
+            disabled={isQuizActive}
+            onClick={() => setActiveTab("IDENTITY")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+              activeTab === "IDENTITY"
+                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Student Profile, Marksheet & Vault ({resumes.length}/3)
+          </button>
+
           <button
             onClick={() => setActiveTab("TRAINING")}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
@@ -640,7 +864,7 @@ export default function App() {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            Training & Assessments
+            Training & Proctored Quizzes
             {badges.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
                 {badges.length} Badges
@@ -649,23 +873,12 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab("IDENTITY")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "IDENTITY"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Student Identity & Resume Vault ({resumes.length}/3)
-          </button>
-
-          <button
+            disabled={isQuizActive}
             onClick={() => setActiveTab("GOVERNANCE")}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
               activeTab === "GOVERNANCE"
                 ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200"
+                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
@@ -675,264 +888,195 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {activeTab === "TRAINING" && (
+        {activeTab === "IDENTITY" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Course Catalog & Verified Badges */}
-            <div className="lg:col-span-5 space-y-6">
+            {/* Left Column: Identity, Social/Dev Handles & BS Marksheet */}
+            <div className="lg:col-span-6 space-y-6">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <BookOpen className="w-5 h-5 text-indigo-400" />
-                    <h2 className="font-semibold text-white">Placement Readiness Tracks</h2>
+                    <UserCheck className="w-5 h-5 text-indigo-400" />
+                    <h2 className="font-semibold text-white">Student Identity & Developer Handles</h2>
                   </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-                    BRULE-12 • 3 Attempts
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                    {user.role}
                   </span>
                 </div>
 
-                <div className="space-y-3">
-                  {courses.map((c) => {
-                    const completedCount = c.modules.filter((m) => m.completed).length;
-                    const earned = badges.some((b) => b.courseCode === c.code);
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setActiveCourseId(c.id);
-                          setQuizAnswers({});
-                          setQuizBanner(null);
-                        }}
-                        className={`w-full text-left p-4 rounded-xl border transition ${
-                          c.id === activeCourse.id
-                            ? "bg-indigo-600/15 border-indigo-500/50"
-                            : "bg-slate-950 border-slate-800 hover:border-slate-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-mono text-indigo-400">{c.code}</span>
-                          {earned ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
-                              VERIFIED BADGE
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">
-                              Attempts: {c.attemptsUsed}/{c.maxAttempts}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-semibold text-white mt-1">{c.title}</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Modules: {completedCount}/{c.modules.length} completed • Pass:{" "}
-                          {c.passThresholdPct}%
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Earned Skill Verification Badges */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Award className="w-5 h-5 text-emerald-400" />
-                  <h2 className="font-semibold text-white">Verified Skill Credentials</h2>
+                <div className="grid grid-cols-2 gap-3 text-xs mb-5">
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 block">Roll / Handle</span>
+                    <span className="text-slate-200 font-semibold mt-0.5 block">{user.name}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 block">Verified CGPA</span>
+                    <span className="text-emerald-400 font-semibold mt-0.5 block">
+                      {marksheet ? `${marksheet.cgpa} / 10.0` : `${cgpaInput} / 10.0`}
+                    </span>
+                  </div>
                 </div>
 
-                {badges.length === 0 ? (
-                  <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
-                    Score ≥ 75% on any course assessment to mint a recruiter-verifiable IITM Skill
-                    Badge.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {badges.map((b) => (
-                      <div
-                        key={b.code}
-                        className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            {b.skillName}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{b.scorePct}%</span>
-                        </div>
-                        <p className="font-mono text-[11px] text-emerald-200/90 mt-1.5">{b.code}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Issued {b.issuedAt} • Recruiter Verifiable
-                        </p>
-                      </div>
-                    ))}
+                {handlesSavedBanner && (
+                  <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{handlesSavedBanner}</span>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Active Course Modules & Assessment Engine */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-3">
+                <form onSubmit={handleSaveHandles} className="space-y-3 text-xs">
                   <div>
-                    <span className="text-xs font-mono text-indigo-400">{activeCourse.code}</span>
-                    <h2 className="text-lg font-bold text-white">{activeCourse.title}</h2>
+                    <label className="block text-slate-400 mb-1">LinkedIn User ID</label>
+                    <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
+                      <span className="text-slate-500 select-none">linkedin.com/in/</span>
+                      <input
+                        type="text"
+                        value={linkedinId}
+                        onChange={(e) => {
+                          setLinkedinId(e.target.value);
+                          setHandlesSavedBanner(null);
+                        }}
+                        placeholder="your-linkedin-id"
+                        className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
+                      />
+                    </div>
                   </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
-                    {activeCourse.category}
-                  </span>
-                </div>
 
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2.5">
-                  1. Learning Modules (Click to mark complete)
-                </h3>
-                <div className="space-y-2">
-                  {activeCourse.modules.map((m) => (
-                    <div
-                      key={m.id}
-                      onClick={() => toggleModuleComplete(activeCourse.id, m.id)}
-                      className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-start gap-3 cursor-pointer transition"
-                    >
-                      {m.completed ? (
-                        <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      ) : (
-                        <Square className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-xs font-semibold ${
-                              m.completed ? "text-emerald-300" : "text-slate-200"
-                            }`}
-                          >
-                            {m.title}
-                          </span>
-                          <span className="text-[11px] text-slate-500">{m.durationMinutes} min</span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5">{m.summary}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">GitHub Username</label>
+                      <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
+                        <span className="text-slate-500 select-none">@</span>
+                        <input
+                          type="text"
+                          value={githubUsername}
+                          onChange={(e) => {
+                            setGithubUsername(e.target.value);
+                            setHandlesSavedBanner(null);
+                          }}
+                          placeholder="github-user"
+                          className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
+                        />
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                <div className="border-t border-slate-800 my-6" />
-
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <PlayCircle className="w-4 h-4 text-indigo-400" />
-                    2. Skill Verification Assessment (Pass ≥ {activeCourse.passThresholdPct}%)
-                  </h3>
-                  <span
-                    className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                      activeCourse.attemptsUsed >= activeCourse.maxAttempts
-                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
-                        : "bg-slate-950 text-slate-300 border-slate-800"
-                    }`}
-                  >
-                    Attempts: {activeCourse.attemptsUsed} / {activeCourse.maxAttempts}
-                  </span>
-                </div>
-
-                {quizBanner && (
-                  <div
-                    className={`mb-4 p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
-                      quizBanner.type === "PASS"
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                        : quizBanner.type === "BLOCKED"
-                        ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                        : "bg-amber-500/10 border-amber-500/30 text-amber-300"
-                    }`}
-                  >
-                    {quizBanner.type === "PASS" ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    )}
-                    <span>{quizBanner.text}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmitQuiz} className="space-y-4">
-                  {activeCourse.questions.map((q, qIdx) => (
-                    <div
-                      key={q.id}
-                      className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
-                    >
-                      <p className="text-xs font-semibold text-slate-200">
-                        Q{qIdx + 1}. {q.prompt}
-                      </p>
-                      <div className="space-y-1.5 pt-1">
-                        {q.options.map((opt, optIdx) => (
-                          <label
-                            key={optIdx}
-                            className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition ${
-                              quizAnswers[q.id] === optIdx
-                                ? "bg-indigo-600/20 border-indigo-500/50 text-white"
-                                : "border-transparent text-slate-400 hover:bg-slate-900"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`${activeCourse.id}-${q.id}`}
-                              checked={quizAnswers[q.id] === optIdx}
-                              onChange={() =>
-                                setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
-                              }
-                              className="accent-indigo-500"
-                            />
-                            <span>{opt}</span>
-                          </label>
-                        ))}
+                    <div>
+                      <label className="block text-slate-400 mb-1">Kaggle Username</label>
+                      <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
+                        <span className="text-slate-500 select-none">kaggle.com/</span>
+                        <input
+                          type="text"
+                          value={kaggleUsername}
+                          onChange={(e) => {
+                            setKaggleUsername(e.target.value);
+                            setHandlesSavedBanner(null);
+                          }}
+                          placeholder="kaggle-user"
+                          className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
+                        />
                       </div>
                     </div>
-                  ))}
+                  </div>
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition"
+                    className="w-full py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold transition"
                   >
-                    Submit Assessment & Grade ({activeCourse.attemptsUsed}/{activeCourse.maxAttempts}{" "}
-                    Attempts Used)
+                    Save Developer & LinkedIn Handles
                   </button>
                 </form>
               </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === "IDENTITY" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-indigo-400" />
-                  <h2 className="font-semibold text-white">Verified Student Identity</h2>
-                </div>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  {user.role}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Roll / Handle</span>
-                  <span className="text-slate-200 font-semibold mt-0.5 block">{user.name}</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Program Track</span>
-                  <span className="text-slate-200 font-semibold mt-0.5 block">BS Data Science</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">CGPA Verified</span>
-                  <span className="text-emerald-400 font-semibold mt-0.5 block">8.92 / 10.0</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Verified Badges</span>
-                  <span className="text-indigo-300 font-semibold mt-0.5 block">
-                    {badges.length} Earned
+              {/* BS Course Marksheet Uploader */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5 text-emerald-400" />
+                    <h2 className="font-semibold text-white">IITM BS Course Marksheet</h2>
+                  </div>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full border ${
+                      marksheet
+                        ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                        : "bg-slate-950 text-slate-400 border-slate-800"
+                    }`}
+                  >
+                    {marksheet ? "Uploaded" : "Pending PDF"}
                   </span>
                 </div>
+
+                {marksheet && (
+                  <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-emerald-200">{marksheet.fileName}</p>
+                      <p className="text-slate-400 mt-0.5">
+                        CGPA: <span className="text-white font-semibold">{marksheet.cgpa}</span> •{" "}
+                        {marksheet.fileSize} • {marksheet.uploadedAt}
+                      </p>
+                    </div>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  </div>
+                )}
+
+                {marksheetAlert && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{marksheetAlert}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleUploadMarksheet} className="space-y-3">
+                  <div>
+                    <input
+                      ref={marksheetInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleMarksheetFileChange}
+                      className="hidden"
+                      id="bs-marksheet-upload"
+                    />
+                    <label
+                      htmlFor="bs-marksheet-upload"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-emerald-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="truncate">
+                          {marksheetFile
+                            ? `${marksheetFile.name} (${formatBytes(marksheetFile.size)})`
+                            : "Select BS Grade Card / Marksheet PDF (max 5 MB)..."}
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-semibold text-emerald-400 ml-2 shrink-0">
+                        Browse
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="10"
+                      value={cgpaInput}
+                      onChange={(e) => setCgpaInput(e.target.value)}
+                      placeholder="CGPA (e.g. 8.92)"
+                      className="w-36 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload Marksheet
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
 
-            <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            {/* Right Column: Resume Vault (BRULE-55) */}
+            <div className="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-indigo-400" />
@@ -1035,6 +1179,276 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === "TRAINING" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Course Catalog & Verified Badges */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-indigo-400" />
+                    <h2 className="font-semibold text-white">Placement Readiness Tracks</h2>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
+                    BRULE-12 • 30m Timer
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {courses.map((c) => {
+                    const completedCount = c.modules.filter((m) => m.completed).length;
+                    const earned = badges.some((b) => b.courseCode === c.code);
+                    return (
+                      <button
+                        key={c.id}
+                        disabled={isQuizActive}
+                        onClick={() => {
+                          setActiveCourseId(c.id);
+                          setQuizAnswers({});
+                          setQuizBanner(null);
+                        }}
+                        className={`w-full text-left p-4 rounded-xl border transition disabled:opacity-50 ${
+                          c.id === activeCourse.id
+                            ? "bg-indigo-600/15 border-indigo-500/50"
+                            : "bg-slate-950 border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-mono text-indigo-400">{c.code}</span>
+                          {earned ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
+                              VERIFIED BADGE
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Attempts: {c.attemptsUsed}/{c.maxAttempts}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-white mt-1">{c.title}</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Modules: {completedCount}/{c.modules.length} completed • Pass:{" "}
+                          {c.passThresholdPct}%
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Earned Skill Verification Badges */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Award className="w-5 h-5 text-emerald-400" />
+                  <h2 className="font-semibold text-white">Verified Skill Credentials</h2>
+                </div>
+
+                {badges.length === 0 ? (
+                  <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    Score ≥ 75% on any proctored course assessment to mint a recruiter-verifiable
+                    IITM Skill Badge.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {badges.map((b) => (
+                      <div
+                        key={b.code}
+                        className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            {b.skillName}
+                          </span>
+                          <span className="text-xs font-semibold text-white">{b.scorePct}%</span>
+                        </div>
+                        <p className="font-mono text-[11px] text-emerald-200/90 mt-1.5">{b.code}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Issued {b.issuedAt} • Recruiter Verifiable
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Active Course Modules & Proctored Assessment Engine */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <span className="text-xs font-mono text-indigo-400">{activeCourse.code}</span>
+                    <h2 className="text-lg font-bold text-white">{activeCourse.title}</h2>
+                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
+                    {activeCourse.category}
+                  </span>
+                </div>
+
+                {!isQuizActive && (
+                  <>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2.5">
+                      1. Learning Modules (Click to mark complete)
+                    </h3>
+                    <div className="space-y-2">
+                      {activeCourse.modules.map((m) => (
+                        <div
+                          key={m.id}
+                          onClick={() => toggleModuleComplete(activeCourse.id, m.id)}
+                          className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-start gap-3 cursor-pointer transition"
+                        >
+                          {m.completed ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span
+                                className={`text-xs font-semibold ${
+                                  m.completed ? "text-emerald-300" : "text-slate-200"
+                                }`}
+                              >
+                                {m.title}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                {m.durationMinutes} min
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">{m.summary}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-slate-800 my-6" />
+                  </>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <PlayCircle className="w-4 h-4 text-indigo-400" />
+                    Proctored Skill Assessment (Pass ≥ {activeCourse.passThresholdPct}%)
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {isQuizActive && (
+                      <span
+                        className={`text-xs font-mono font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
+                          secondsLeft <= 120
+                            ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
+                            : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        {formatTimer(secondsLeft)}
+                      </span>
+                    )}
+                    <span
+                      className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                        activeCourse.attemptsUsed >= activeCourse.maxAttempts
+                          ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                          : "bg-slate-950 text-slate-300 border-slate-800"
+                      }`}
+                    >
+                      Attempts: {activeCourse.attemptsUsed} / {activeCourse.maxAttempts}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Proctoring Guard Notice */}
+                <div className="mb-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+                  <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-amber-300">
+                      Strict Proctoring Active (30:00 Max • Zero Tab-Switch Tolerance):
+                    </span>{" "}
+                    Once started, switching browser tabs or leaving this window immediately
+                    terminates and fails your current attempt.
+                  </div>
+                </div>
+
+                {quizBanner && (
+                  <div
+                    className={`mb-4 p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
+                      quizBanner.type === "PASS"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                        : quizBanner.type === "BLOCKED"
+                        ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                        : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                    }`}
+                  >
+                    {quizBanner.type === "PASS" ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    )}
+                    <span>{quizBanner.text}</span>
+                  </div>
+                )}
+
+                {!isQuizActive ? (
+                  <button
+                    type="button"
+                    onClick={handleStartQuiz}
+                    disabled={activeCourse.attemptsUsed >= activeCourse.maxAttempts}
+                    className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition flex items-center justify-center gap-2"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {activeCourse.attemptsUsed >= activeCourse.maxAttempts
+                      ? `Maximum Attempts Exhausted (${activeCourse.attemptsUsed}/${activeCourse.maxAttempts})`
+                      : `Start 30-Minute Proctored Assessment (Attempt ${
+                          activeCourse.attemptsUsed + 1
+                        } of ${activeCourse.maxAttempts})`}
+                  </button>
+                ) : (
+                  <form onSubmit={handleSubmitQuiz} className="space-y-4">
+                    {activeCourse.questions.map((q, qIdx) => (
+                      <div
+                        key={q.id}
+                        className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
+                      >
+                        <p className="text-xs font-semibold text-slate-200">
+                          Q{qIdx + 1}. {q.prompt}
+                        </p>
+                        <div className="space-y-1.5 pt-1">
+                          {q.options.map((opt, optIdx) => (
+                            <label
+                              key={optIdx}
+                              className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition ${
+                                quizAnswers[q.id] === optIdx
+                                  ? "bg-indigo-600/20 border-indigo-500/50 text-white"
+                                  : "border-transparent text-slate-400 hover:bg-slate-900"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`${activeCourse.id}-${q.id}`}
+                                checked={quizAnswers[q.id] === optIdx}
+                                onChange={() =>
+                                  setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
+                                }
+                                className="accent-indigo-500"
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition"
+                    >
+                      Submit Assessment & Grade ({formatTimer(secondsLeft)} remaining)
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "GOVERNANCE" && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1043,7 +1457,7 @@ export default function App() {
                 <div>
                   <h2 className="font-semibold text-white">Immutable Governance & Audit Trail</h2>
                   <p className="text-xs text-slate-400">
-                    Append-only ledger capturing IAM, Resume Vault, and Assessment events
+                    Append-only ledger capturing IAM, Marksheets, Vault, and Proctoring Violations
                   </p>
                 </div>
               </div>

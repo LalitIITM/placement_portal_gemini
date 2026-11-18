@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -36,10 +36,17 @@ class ProfileUpdateIn(BaseModel):
     state: Optional[str] = Field(None, max_length=100)
     github_url: Optional[str] = Field(None, max_length=255)
     linkedin_url: Optional[str] = Field(None, max_length=255)
+    kaggle_url: Optional[str] = Field(None, max_length=255)
     portfolio_url: Optional[str] = Field(None, max_length=255)
     preferred_roles: Optional[str] = Field(None, max_length=255)
     preferred_locations: Optional[str] = Field(None, max_length=255)
     is_open_to_relocate: Optional[bool] = None
+
+
+class MarksheetUploadIn(BaseModel):
+    file_name: str = Field(..., min_length=1, max_length=255)
+    file_size_bytes: int = Field(..., gt=0, le=5 * 1024 * 1024)
+    cgpa: Optional[Decimal] = Field(None, ge=Decimal("0.00"), le=Decimal("10.00"))
 
 
 class SkillIn(BaseModel):
@@ -138,7 +145,13 @@ def _serialize_workspace(student: Student, principal: CurrentPrincipal) -> Stude
             "state": p.state if p else None,
             "github_url": p.github_url if p else None,
             "linkedin_url": p.linkedin_url if p else None,
+            "kaggle_url": p.kaggle_url if p else None,
             "portfolio_url": p.portfolio_url if p else None,
+            "marksheet_file_name": p.marksheet_file_name if p else None,
+            "marksheet_size_bytes": p.marksheet_size_bytes if p else None,
+            "marksheet_uploaded_at": p.marksheet_uploaded_at.isoformat()
+            if (p and p.marksheet_uploaded_at)
+            else None,
             "preferred_roles": p.preferred_roles if p else None,
             "preferred_locations": p.preferred_locations if p else None,
             "is_open_to_relocate": p.is_open_to_relocate if p else True,
@@ -204,6 +217,48 @@ async def update_my_profile(
         entity_id=str(profile.id),
         before_state=before,
         after_state=updates,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    student = await _get_or_create_student(db, principal)
+    return _serialize_workspace(student, principal)
+
+
+@router.post("/me/marksheet", response_model=StudentWorkspaceOut)
+async def upload_bs_marksheet(
+    payload: MarksheetUploadIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> StudentWorkspaceOut:
+    if not payload.file_name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF marksheets (.pdf) are supported.")
+
+    student = await _get_or_create_student(db, principal)
+    profile = student.profile
+    if profile is None:
+        profile = StudentProfile(student_id=student.id)
+        db.add(profile)
+        await db.flush()
+
+    profile.marksheet_file_name = payload.file_name
+    profile.marksheet_size_bytes = payload.file_size_bytes
+    profile.marksheet_uploaded_at = datetime.now(timezone.utc)
+    if payload.cgpa is not None:
+        student.cgpa = payload.cgpa
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="MARKSHEET_UPLOADED",
+        entity_type="StudentProfile",
+        entity_id=str(profile.id),
+        after_state={
+            "file_name": payload.file_name,
+            "cgpa": str(student.cgpa),
+        },
         ip_address=request.client.host if request.client else None,
     )
 

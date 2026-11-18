@@ -19,6 +19,7 @@ class Course(Base):
     skill_tag: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     pass_threshold_pct: Mapped[int] = mapped_column(Integer, default=75, nullable=False)
+    time_limit_seconds: Mapped[int] = mapped_column(Integer, default=1800, nullable=False)
     questions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -73,6 +74,8 @@ class QuizAttempt(Base):
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
     score_pct: Mapped[int] = mapped_column(Integer, nullable=False)
     passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    termination_reason: Mapped[str] = mapped_column(String(40), default="NORMAL", nullable=False)
+    elapsed_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

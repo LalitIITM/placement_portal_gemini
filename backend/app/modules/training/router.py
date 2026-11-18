@@ -1,7 +1,7 @@
 import hashlib
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -26,10 +26,13 @@ from app.shared.database import get_db
 router = APIRouter(prefix="/api/v1/training", tags=["Training & Assessment"])
 
 MAX_QUIZ_ATTEMPTS = 3  # BRULE-12
+MAX_QUIZ_DURATION_SECONDS = 1800  # 30 minutes
 
 
 class QuizSubmissionIn(BaseModel):
-    answers: list[int] = Field(..., min_length=1)
+    answers: list[int] = Field(default_factory=list)
+    termination_reason: Literal["NORMAL", "TIMEOUT", "TAB_SWITCH_VIOLATION"] = "NORMAL"
+    elapsed_seconds: int = Field(default=0, ge=0)
 
 
 class ModuleOut(BaseModel):
@@ -65,6 +68,7 @@ class CourseOut(BaseModel):
     skill_tag: str
     description: str
     pass_threshold_pct: int
+    time_limit_seconds: int
     attempts_used: int
     max_attempts: int
     best_score_pct: Optional[int]
@@ -78,6 +82,7 @@ class AttemptResultOut(BaseModel):
     attempts_remaining: int
     score_pct: int
     passed: bool
+    termination_reason: str
     pass_threshold_pct: int
     badge: Optional[BadgeOut]
 
@@ -148,6 +153,7 @@ async def list_training_courses(
                 skill_tag=c.skill_tag,
                 description=c.description,
                 pass_threshold_pct=c.pass_threshold_pct,
+                time_limit_seconds=c.time_limit_seconds,
                 attempts_used=len(c_attempts),
                 max_attempts=MAX_QUIZ_ATTEMPTS,
                 best_score_pct=best,
@@ -220,7 +226,7 @@ async def submit_quiz_attempt(
     principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
     db: AsyncSession = Depends(get_db),
 ) -> AttemptResultOut:
-    """Enforces BRULE-12: Maximum 3 quiz attempts per course assessment per student."""
+    """Enforces BRULE-12 (3-attempt cap), 30m timer, and tab-switch auto-fail proctoring."""
     student = await _get_or_create_student(db, principal)
     course = (
         await db.execute(select(Course).where(Course.id == course_id))
@@ -254,25 +260,36 @@ async def submit_quiz_attempt(
         )
 
     questions = course.questions_json
-    if len(payload.answers) != len(questions):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Expected {len(questions)} answers, received {len(payload.answers)}.",
+    effective_reason = payload.termination_reason
+    if effective_reason == "NORMAL" and payload.elapsed_seconds > MAX_QUIZ_DURATION_SECONDS:
+        effective_reason = "TIMEOUT"
+
+    if effective_reason == "TAB_SWITCH_VIOLATION":
+        score_pct = 0
+        passed = False
+    else:
+        if effective_reason == "NORMAL" and len(payload.answers) != len(questions):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Expected {len(questions)} answers, received {len(payload.answers)}.",
+            )
+        correct_count = sum(
+            1
+            for idx, q in enumerate(questions)
+            if idx < len(payload.answers) and payload.answers[idx] == q["correct_index"]
         )
+        score_pct = round((correct_count / len(questions)) * 100)
+        passed = effective_reason == "NORMAL" and score_pct >= course.pass_threshold_pct
 
-    correct_count = sum(
-        1 for idx, q in enumerate(questions) if payload.answers[idx] == q["correct_index"]
-    )
-    score_pct = round((correct_count / len(questions)) * 100)
-    passed = score_pct >= course.pass_threshold_pct
     attempt_number = len(prior_attempts) + 1
-
     attempt = QuizAttempt(
         student_id=student.id,
         course_id=course.id,
         attempt_number=attempt_number,
         score_pct=score_pct,
         passed=passed,
+        termination_reason=effective_reason,
+        elapsed_seconds=payload.elapsed_seconds,
     )
     db.add(attempt)
     await db.flush()
@@ -301,7 +318,6 @@ async def submit_quiz_attempt(
         )
         db.add(existing_badge)
 
-        # Also elevate or add verified skill on StudentProfile
         matching_skill = next(
             (s for s in student.skills if s.skill_name.lower() == course.skill_tag.lower()),
             None,
@@ -334,11 +350,16 @@ async def submit_quiz_attempt(
             ip_address=request.client.host if request.client else None,
         )
 
+    audit_action = (
+        "ASSESSMENT_TAB_VIOLATION"
+        if effective_reason == "TAB_SWITCH_VIOLATION"
+        else ("ASSESSMENT_TIMEOUT" if effective_reason == "TIMEOUT" else ("ASSESSMENT_PASSED" if passed else "ASSESSMENT_FAILED"))
+    )
     await record_audit_event(
         db,
         actor_id=principal.user.id,
         actor_role=principal.active_role.value,
-        action="ASSESSMENT_PASSED" if passed else "ASSESSMENT_FAILED",
+        action=audit_action,
         entity_type="QuizAttempt",
         entity_id=str(attempt.id),
         after_state={
@@ -346,6 +367,7 @@ async def submit_quiz_attempt(
             "attempt_number": attempt_number,
             "score_pct": score_pct,
             "passed": passed,
+            "termination_reason": effective_reason,
         },
         ip_address=request.client.host if request.client else None,
     )
@@ -366,6 +388,7 @@ async def submit_quiz_attempt(
         attempts_remaining=MAX_QUIZ_ATTEMPTS - attempt_number,
         score_pct=score_pct,
         passed=passed,
+        termination_reason=effective_reason,
         pass_threshold_pct=course.pass_threshold_pct,
         badge=badge_out,
     )
