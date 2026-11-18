@@ -37,6 +37,7 @@ type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
 type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
 type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
+type JobRoleTypeOption = "INTERNSHIP" | "FULL_TIME";
 type ProgramLevelOption = "FOUNDATION" | "DIPLOMA" | "BSC" | "BS";
 type AppStatusOption =
   | "APPLIED"
@@ -131,7 +132,7 @@ interface JobDriveItem {
   jobCode: string;
   companyName: string;
   title: string;
-  roleType: QuizTrackOption;
+  roleType: JobRoleTypeOption;
   domain: QuizDomainOption;
   location: string;
   compensation: string;
@@ -149,7 +150,7 @@ interface JobApplicationRecord {
   jobCode: string;
   companyName: string;
   jobTitle: string;
-  roleType: QuizTrackOption;
+  roleType: JobRoleTypeOption;
   studentRoll: string;
   studentName: string;
   studentCgpa: string;
@@ -467,7 +468,7 @@ export default function App() {
 
   // Question Bank Builder State
   const [qbDomain, setQbDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
-  const [qbTrack, setQbTrack] = useState<QuizTrackOption>("INTERNSHIP");
+  const [qbTrack, setQbTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
   const [qbPrompt, setQbPrompt] = useState("");
   const [qbOpt0, setQbOpt0] = useState("");
   const [qbOpt1, setQbOpt1] = useState("");
@@ -500,7 +501,7 @@ export default function App() {
   const [newJobCode, setNewJobCode] = useState("DRV-2026-SWIGGY");
   const [newCompany, setNewCompany] = useState("Swiggy");
   const [newJobTitle, setNewJobTitle] = useState("Data Science Intern — Logistics");
-  const [newRoleType, setNewRoleType] = useState<QuizTrackOption>("INTERNSHIP");
+  const [newRoleType, setNewRoleType] = useState<JobRoleTypeOption>("INTERNSHIP");
   const [newJobDomain, setNewJobDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
   const [newLocation, setNewLocation] = useState("Bengaluru");
   const [newCompensation, setNewCompensation] = useState("₹60,000 / month");
@@ -1555,11 +1556,11 @@ export default function App() {
                     <label className="block text-slate-400 mb-1">Role Type</label>
                     <select
                       value={newRoleType}
-                      onChange={(e) => setNewRoleType(e.target.value as QuizTrackOption)}
+                      onChange={(e) => setNewRoleType(e.target.value as JobRoleTypeOption)}
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                     >
                       <option value="INTERNSHIP">Internship</option>
-                      <option value="SOFTWARE_DEVELOPMENT">Full-Time</option>
+                      <option value="FULL_TIME">Full-Time</option>
                     </select>
                   </div>
                   <div>
@@ -2408,7 +2409,7 @@ export default function App() {
                         <label className="block text-slate-400 mb-1">Track</label>
                         <select
                           value={qbTrack}
-                          onChange={(e) => setQbTrack(e.target.value as QuizTrackOption)}
+                          onChange={(e) => setQbTrack(e.target.value as JobRoleTypeOption)}
                           className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                         >
                           <option value="INTERNSHIP">Internship</option>
