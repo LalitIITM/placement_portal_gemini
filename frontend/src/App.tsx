@@ -627,6 +627,8 @@ export default function App() {
   const [stateName, setStateName] = useState("Maharashtra");
   const [category, setCategory] = useState<CategoryOption>("GENERAL");
   const [degreeType, setDegreeType] = useState<DegreeTypeOption>("STANDALONE");
+  const [studentTargetDomain, setStudentTargetDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [studentApplyingTrack, setStudentApplyingTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
   const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
@@ -992,6 +994,14 @@ export default function App() {
       return;
     }
 
+    if (normalized !== "placement.admin@iitm.ac.in") {
+      setAuthError(
+        "Admin Access Denied: Only authorized Placement Admin accounts (placement.admin@iitm.ac.in) may sign in as ADMIN."
+      );
+      appendAudit(normalized, "ADMIN", "ADMIN_UNAUTHORIZED_EMAIL", "IAM Admin Guard", "BLOCKED");
+      return;
+    }
+
     if (password !== "123456") {
       setAuthError("Invalid Admin password. Please verify your credentials.");
       appendAudit(normalized, "ADMIN", "ADMIN_BAD_PASSWORD", "IAM Credential Check", "BLOCKED");
@@ -999,8 +1009,7 @@ export default function App() {
     }
 
     setAuthError(null);
-    const displayName = normalized.split("@")[0].toUpperCase();
-    setUser({ email: normalized, role: "ADMIN", name: displayName });
+    setUser({ email: normalized, role: "ADMIN", name: "Placement Admin" });
     appendAudit(normalized, "ADMIN", "ADMIN_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
   };
 
@@ -1276,6 +1285,8 @@ export default function App() {
     setStateName(studentDraft.stateName);
     setCategory(studentDraft.category);
     setDegreeType(studentDraft.degreeType);
+    setStudentTargetDomain(studentDraft.targetDomain);
+    setStudentApplyingTrack(studentDraft.applyingTrack);
     setIsWorkingProf(studentDraft.isWorkingProf);
     setYearsExp(studentDraft.yearsExp);
     setWorkDomain(studentDraft.workDomain);
@@ -2862,20 +2873,28 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 mr-1">RBAC View:</span>
-            {(["STUDENT", "RECRUITER", "EXAMINER", "ADMIN"] as Role[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => handleRoleSwitch(r)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                  user.role === r
-                    ? "bg-indigo-600 border-indigo-500 text-white"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {r}
-              </button>
-            ))}
+            {user.role === "ADMIN" ? (
+              <>
+                <span className="text-xs text-slate-400 mr-1">Admin View:</span>
+                {(["ADMIN", "STUDENT", "RECRUITER", "EXAMINER"] as Role[]).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => handleRoleSwitch(r)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                      user.role === r
+                        ? "bg-indigo-600 border-indigo-500 text-white"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </>
+            ) : (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 border border-indigo-500/40 text-indigo-300">
+                {user.role} PORTAL
+              </span>
+            )}
             <button
               onClick={() => {
                 setIsQuizActive(false);
@@ -2891,74 +2910,120 @@ export default function App() {
 
         {/* Workspace Module Navigation */}
         <div className="max-w-6xl mx-auto px-6 flex flex-wrap gap-2 border-t border-slate-800/70 pt-2 pb-2">
-          <button
-            disabled={isQuizActive}
-            onClick={() => setActiveTab("IDENTITY")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "IDENTITY"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            I1: Registration, Marksheet & Vault ({resumes.length}/3)
-          </button>
+          {user.role === "STUDENT" ? (
+            <>
+              <button
+                disabled={isQuizActive}
+                onClick={() => setActiveTab("IDENTITY")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "IDENTITY"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                My Profile, Scorecard & Resumes ({resumes.length}/3)
+              </button>
 
-          <button
-            onClick={() => setActiveTab("TRAINING")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "TRAINING"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            I2: Question Bank, 15-Q Quiz & Examiner Viva
-            {badges.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
-                {badges.length} Badges
-              </span>
-            )}
-          </button>
+              <button
+                onClick={() => setActiveTab("TRAINING")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "TRAINING"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Training & Readiness Progress
+                {badges.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
+                    {badges.length} Badges
+                  </span>
+                )}
+              </button>
 
-          <button
-            disabled={isQuizActive}
-            onClick={() => setActiveTab("RECRUITMENT")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "RECRUITMENT"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            I3: Jobs & Eligibility Engine ({jobs.length} Drives • {applications.length} Applied)
-          </button>
+              <button
+                disabled={isQuizActive}
+                onClick={() => setActiveTab("RECRUITMENT")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "RECRUITMENT"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Opportunities & Application Status ({applications.length} Applied)
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                disabled={isQuizActive}
+                onClick={() => setActiveTab("IDENTITY")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "IDENTITY"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Student Profiles & Vault ({resumes.length}/3)
+              </button>
 
-          <button
-            disabled={isQuizActive}
-            onClick={() => setActiveTab("PLACEMENT")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "PLACEMENT"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            Interviews, Offers & Analytics ({interviews.length + offers.length})
-          </button>
+              <button
+                onClick={() => setActiveTab("TRAINING")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "TRAINING"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Assessments & Viva Evaluations
+              </button>
 
-          <button
-            disabled={isQuizActive}
-            onClick={() => setActiveTab("GOVERNANCE")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-              activeTab === "GOVERNANCE"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
-                : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            Audit Ledger ({auditLogs.length})
-          </button>
+              <button
+                disabled={isQuizActive}
+                onClick={() => setActiveTab("RECRUITMENT")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "RECRUITMENT"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Drives & ATS Pipeline ({jobs.length} Drives • {applications.length} Applied)
+              </button>
+
+              <button
+                disabled={isQuizActive}
+                onClick={() => setActiveTab("PLACEMENT")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "PLACEMENT"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                Interviews, Offers & Analytics ({interviews.length + offers.length})
+              </button>
+
+              {user.role === "ADMIN" && (
+                <button
+                  disabled={isQuizActive}
+                  onClick={() => setActiveTab("GOVERNANCE")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                    activeTab === "GOVERNANCE"
+                      ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                      : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  Governance & Audit Ledger ({auditLogs.length})
+                </button>
+              )}
+            </>
+          )}
         </div>
       </header>
 
@@ -3152,9 +3217,43 @@ export default function App() {
               </div>
             )}
 
-            {/* Active Drives Grid with Real-Time Eligibility Badges */}
+            {/* Student Training Readiness Gate & Field-Specific Filter */}
+            {user.role === "STUDENT" && !(badges.length > 0 && Boolean(evaluations[0]?.isPlacementReady)) ? (
+              <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-300">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Complete Training to Unlock{" "}
+                  {studentTargetDomain === "DATA_SCIENCE"
+                    ? "Data Science"
+                    : "Software Development"}{" "}
+                  Opportunities
+                </h3>
+                <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                  Opportunities in your field ({studentTargetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} •{" "}
+                  {studentApplyingTrack}) become accessible once you pass the 15-Question Domain
+                  Assessment and receive Examiner Viva placement readiness sign-off.
+                </p>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("TRAINING")}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                  >
+                    Go to Training & Readiness Progress →
+                  </button>
+                </div>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {jobs.map((job) => {
+              {jobs
+                .filter((job) =>
+                  user.role === "STUDENT"
+                    ? job.domain === studentTargetDomain && job.roleType === studentApplyingTrack
+                    : true
+                )
+                .map((job) => {
                 const elig = evaluateEligibilityForDrive(job);
                 const existingApp = applications.find((a) => a.jobId === job.id);
 
@@ -3256,17 +3355,21 @@ export default function App() {
                 );
               })}
             </div>
+            )}
 
             {/* Applications & Recruiter ATS Pipeline */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-semibold text-white">
-                    Applications & Recruiter ATS Pipeline ({applications.length})
+                    {user.role === "STUDENT"
+                      ? `My Application Status Tracker (${applications.length})`
+                      : `Applications & Recruiter ATS Pipeline (${applications.length})`}
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Switch RBAC View to RECRUITER or ADMIN to shortlist, extend offers, or trigger
-                    BRULE-21 placement lock
+                    {user.role === "STUDENT"
+                      ? "Track live recruiter decisions, interview shortlists, and offer statuses for your submitted applications."
+                      : "Shortlist candidates, schedule interviews, extend offers, or trigger BRULE-21 placement lock."}
                   </p>
                 </div>
               </div>
@@ -3348,8 +3451,8 @@ export default function App() {
                     <UserCheck className="w-5 h-5 text-indigo-400" />
                     <h2 className="font-semibold text-white">Student Registration Dossier</h2>
                   </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                    Roll: {user.name}
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono">
+                    Roll: {user.email.split("@")[0].toUpperCase()}
                   </span>
                 </div>
 
@@ -3856,6 +3959,92 @@ export default function App() {
 
         {activeTab === "TRAINING" && (
           <div className="space-y-8">
+            {user.role === "STUDENT" && (() => {
+              const hasPassedQuiz = badges.length > 0;
+              const isVivaCleared = Boolean(evaluations[0]?.isPlacementReady);
+              const isReadyForJobs = hasPassedQuiz && isVivaCleared;
+              return (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Award className="w-5 h-5 text-indigo-400" />
+                        My Training & Placement Readiness Tracker
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Target Field:{" "}
+                        <span className="text-indigo-300 font-semibold">
+                          {studentTargetDomain === "DATA_SCIENCE"
+                            ? "Data Science"
+                            : "Software Development"}
+                        </span>{" "}
+                        • Track:{" "}
+                        <span className="text-indigo-300 font-semibold">{studentApplyingTrack}</span>
+                      </p>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                        isReadyForJobs
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                          : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {isReadyForJobs
+                        ? "ELIGIBLE TO APPLY FOR OPPORTUNITIES"
+                        : "TRAINING IN PROGRESS — COMPLETE STEPS BELOW"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 block">Step 1 • 15-Q Domain Assessment</span>
+                      <span
+                        className={`font-semibold mt-1 block ${
+                          hasPassedQuiz ? "text-emerald-400" : "text-amber-300"
+                        }`}
+                      >
+                        {hasPassedQuiz
+                          ? `Completed (${badges.length} Verified Badge${badges.length > 1 ? "s" : ""})`
+                          : "Pending — Attempt 15-Question Quiz"}
+                      </span>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 block">Step 2 • Examiner Viva Evaluation</span>
+                      <span
+                        className={`font-semibold mt-1 block ${
+                          isVivaCleared ? "text-emerald-400" : "text-amber-300"
+                        }`}
+                      >
+                        {isVivaCleared
+                          ? "Cleared — Placement Ready Signed Off"
+                          : "Awaiting Examiner Viva Sign-Off"}
+                      </span>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-slate-400 block">Step 3 • Field Opportunities</span>
+                        <span
+                          className={`font-semibold mt-1 block ${
+                            isReadyForJobs ? "text-emerald-400" : "text-slate-400"
+                          }`}
+                        >
+                          {isReadyForJobs ? "Unlocked" : "Locked Until Training Cleared"}
+                        </span>
+                      </div>
+                      {isReadyForJobs && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("RECRUITMENT")}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                        >
+                          View Jobs →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
