@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ShieldCheck,
   FileText,
@@ -11,6 +11,7 @@ import {
   LogOut,
   Activity,
   Award,
+  Upload,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
@@ -19,6 +20,7 @@ interface ResumeItem {
   id: string;
   title: string;
   targetRole: string;
+  fileSize: string;
   updatedAt: string;
   isPrimary: boolean;
 }
@@ -34,6 +36,7 @@ interface AuditEntry {
 }
 
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
+const MAX_PDF_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export default function App() {
   const [email, setEmail] = useState("22f3001234@ds.study.iitm.ac.in");
@@ -46,13 +49,15 @@ export default function App() {
       id: "res-1",
       title: "SDE_Backend_FastAPI_2026.pdf",
       targetRole: "Backend Engineer",
+      fileSize: "412 KB",
       updatedAt: "2026-11-17 19:30",
       isPrimary: true,
     },
   ]);
-  const [newTitle, setNewTitle] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newTarget, setNewTarget] = useState("");
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([
     {
@@ -116,6 +121,33 @@ export default function App() {
     appendAudit(user.email, nextRole, "ROLE_SWITCH", `RBAC Context -> ${nextRole}`, "SUCCESS");
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setVaultAlert("Invalid File Type: Only PDF resumes (.pdf) are accepted.");
+      setSelectedFile(null);
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      setVaultAlert("File Too Large: Resume PDF must be 5 MB or smaller.");
+      setSelectedFile(null);
+      e.target.value = "";
+      return;
+    }
+    setVaultAlert(null);
+    setSelectedFile(file);
+  };
+
   const handleAddResume = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -124,22 +156,31 @@ export default function App() {
       appendAudit(user.email, user.role, "BRULE_55_BLOCKED", "Attempted 4th active resume", "BLOCKED");
       return;
     }
-    if (!newTitle.trim() || !newTarget.trim()) {
-      setVaultAlert("Provide both a resume filename and target role.");
+    if (!selectedFile) {
+      setVaultAlert("Please select a PDF file from your device first.");
       return;
     }
+    if (!newTarget.trim()) {
+      setVaultAlert("Please specify the target role (e.g., Data Scientist, SDE).");
+      return;
+    }
+
+    const sizeLabel = formatBytes(selectedFile.size);
     const created: ResumeItem = {
       id: `res-${Date.now()}`,
-      title: newTitle.trim().endsWith(".pdf") ? newTitle.trim() : `${newTitle.trim()}.pdf`,
+      title: selectedFile.name,
       targetRole: newTarget.trim(),
+      fileSize: sizeLabel,
       updatedAt: "Just now",
       isPrimary: resumes.length === 0,
     };
+
     setResumes((prev) => [...prev, created]);
-    setNewTitle("");
+    setSelectedFile(null);
     setNewTarget("");
     setVaultAlert(null);
-    appendAudit(user.email, user.role, "RESUME_UPLOADED", created.title, "SUCCESS");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    appendAudit(user.email, user.role, "RESUME_UPLOADED", `${created.title} (${sizeLabel})`, "SUCCESS");
   };
 
   const handleDeleteResume = (id: string, title: string) => {
@@ -332,18 +373,18 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-slate-100 truncate">{res.title}</p>
                       {res.isPrimary && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
                           PRIMARY
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {res.targetRole} • {res.updatedAt}
+                      {res.targetRole} • {res.fileSize} • {res.updatedAt}
                     </p>
                   </div>
                   <button
                     onClick={() => handleDeleteResume(res.id, res.title)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition shrink-0"
                     title="Archive Resume"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -360,13 +401,33 @@ export default function App() {
             )}
 
             <form onSubmit={handleAddResume} className="space-y-2.5">
-              <input
-                type="text"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="e.g., Data_Scientist_ML_2026.pdf"
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="resume-pdf-upload"
+                />
+                <label
+                  htmlFor="resume-pdf-upload"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-indigo-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span className="truncate">
+                      {selectedFile
+                        ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
+                        : "Choose Resume PDF from device (max 5 MB)..."}
+                    </span>
+                  </span>
+                  <span className="text-[11px] font-semibold text-indigo-400 ml-2 shrink-0">
+                    Browse
+                  </span>
+                </label>
+              </div>
+
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -380,7 +441,7 @@ export default function App() {
                   className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
                 >
                   <Plus className="w-4 h-4" />
-                  Add
+                  Upload
                 </button>
               </div>
             </form>
