@@ -1767,10 +1767,6 @@ export default function App() {
           <h1 className="text-2xl font-bold tracking-tight text-white">
             IITM Placement & Career Portal
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Admin-verified onboarding, proctored assessments, examiner viva evaluations, and live
-            eligibility recruitment engine.
-          </p>
 
           <div className="mt-6 space-y-4">
             <div>
@@ -1986,7 +1982,7 @@ export default function App() {
                 <Lock className="w-4 h-4" />
                 {authMode === "SIGN_UP" && selectedRole !== "ADMIN"
                   ? `Submit ${selectedRole} Registration for Admin Approval`
-                  : "Sign In with Domain SSO"}
+                  : "Sign In"}
               </button>
             </form>
           </div>
