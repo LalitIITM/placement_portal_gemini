@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,11 +12,12 @@ from sqlalchemy.orm import selectinload
 from app.modules.audit.service import record_audit_event
 from app.modules.iam.models import RoleName
 from app.modules.iam.security import CurrentPrincipal, require_roles
-from app.modules.student.models import StudentSkill
+from app.modules.student.models import Student, StudentSkill
 from app.modules.student.router import _get_or_create_student
 from app.modules.training.models import (
     Course,
     CourseModule,
+    ExaminerEvaluation,
     ModuleProgress,
     QuizAttempt,
     SkillBadge,
@@ -33,6 +34,43 @@ class QuizSubmissionIn(BaseModel):
     answers: list[int] = Field(default_factory=list)
     termination_reason: Literal["NORMAL", "TIMEOUT", "TAB_SWITCH_VIOLATION"] = "NORMAL"
     elapsed_seconds: int = Field(default=0, ge=0)
+
+
+class ExaminerEvaluationIn(BaseModel):
+    student_roll_number: str = Field(..., min_length=2, max_length=32)
+    skillsets_observed: list[str] = Field(..., min_length=1)
+    programming_rating: int = Field(..., ge=1, le=5)
+    data_science_rating: int = Field(..., ge=1, le=5)
+    communication_rating: int = Field(..., ge=1, le=5)
+    is_placement_ready: bool
+    performing_exceptionally_good: bool = False
+    remedial_tasks: list[str] = Field(default_factory=list)
+    examiner_notes: Optional[str] = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def enforce_remedial_tasks_when_not_ready(self) -> "ExaminerEvaluationIn":
+        cleaned = [t.strip() for t in self.remedial_tasks if t.strip()]
+        self.remedial_tasks = cleaned
+        if not self.is_placement_ready and len(cleaned) == 0:
+            raise ValueError(
+                "BRULE-18: At least one remedial task must be specified when is_placement_ready is False."
+            )
+        return self
+
+
+class ExaminerEvaluationOut(BaseModel):
+    id: str
+    student_roll_number: str
+    examiner_email: str
+    skillsets_observed: list[str]
+    programming_rating: int
+    data_science_rating: int
+    communication_rating: int
+    is_placement_ready: bool
+    performing_exceptionally_good: bool
+    remedial_tasks: list[str]
+    examiner_notes: Optional[str]
+    evaluated_at: datetime
 
 
 class ModuleOut(BaseModel):
@@ -394,14 +432,114 @@ async def submit_quiz_attempt(
     )
 
 
+@router.post(
+    "/examiner/evaluations",
+    response_model=ExaminerEvaluationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_examiner_evaluation(
+    payload: ExaminerEvaluationIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    db: AsyncSession = Depends(get_db),
+) -> ExaminerEvaluationOut:
+    """Final stage interview evaluation by examiner with 1-5 skill ratings & remedial tasks."""
+    roll = payload.student_roll_number.strip().upper()
+    student = (
+        await db.execute(select(Student).where(Student.roll_number == roll))
+    ).scalar_one_or_none()
+    if student is None:
+        raise HTTPException(status_code=404, detail=f"Student roll number '{roll}' not found")
+
+    evaluation = ExaminerEvaluation(
+        student_id=student.id,
+        examiner_id=principal.user.id,
+        examiner_email=principal.user.email,
+        skillsets_observed=[s.strip() for s in payload.skillsets_observed if s.strip()],
+        programming_rating=payload.programming_rating,
+        data_science_rating=payload.data_science_rating,
+        communication_rating=payload.communication_rating,
+        is_placement_ready=payload.is_placement_ready,
+        performing_exceptionally_good=payload.performing_exceptionally_good,
+        remedial_tasks=payload.remedial_tasks,
+        examiner_notes=payload.examiner_notes,
+    )
+    db.add(evaluation)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="EXAMINER_INTERVIEW_EVALUATED",
+        entity_type="ExaminerEvaluation",
+        entity_id=str(evaluation.id),
+        after_state={
+            "student_roll_number": roll,
+            "programming_rating": evaluation.programming_rating,
+            "data_science_rating": evaluation.data_science_rating,
+            "communication_rating": evaluation.communication_rating,
+            "is_placement_ready": evaluation.is_placement_ready,
+            "performing_exceptionally_good": evaluation.performing_exceptionally_good,
+            "remedial_tasks_count": len(evaluation.remedial_tasks),
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return ExaminerEvaluationOut(
+        id=str(evaluation.id),
+        student_roll_number=roll,
+        examiner_email=evaluation.examiner_email,
+        skillsets_observed=evaluation.skillsets_observed,
+        programming_rating=evaluation.programming_rating,
+        data_science_rating=evaluation.data_science_rating,
+        communication_rating=evaluation.communication_rating,
+        is_placement_ready=evaluation.is_placement_ready,
+        performing_exceptionally_good=evaluation.performing_exceptionally_good,
+        remedial_tasks=evaluation.remedial_tasks,
+        examiner_notes=evaluation.examiner_notes,
+        evaluated_at=evaluation.evaluated_at,
+    )
+
+
+@router.get("/examiner/evaluations/me", response_model=list[ExaminerEvaluationOut])
+async def get_my_examiner_evaluations(
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> list[ExaminerEvaluationOut]:
+    student = await _get_or_create_student(db, principal)
+    rows = (
+        await db.execute(
+            select(ExaminerEvaluation)
+            .where(ExaminerEvaluation.student_id == student.id)
+            .order_by(ExaminerEvaluation.evaluated_at.desc())
+        )
+    ).scalars().all()
+    return [
+        ExaminerEvaluationOut(
+            id=str(e.id),
+            student_roll_number=student.roll_number,
+            examiner_email=e.examiner_email,
+            skillsets_observed=e.skillsets_observed,
+            programming_rating=e.programming_rating,
+            data_science_rating=e.data_science_rating,
+            communication_rating=e.communication_rating,
+            is_placement_ready=e.is_placement_ready,
+            performing_exceptionally_good=e.performing_exceptionally_good,
+            remedial_tasks=e.remedial_tasks,
+            examiner_notes=e.examiner_notes,
+            evaluated_at=e.evaluated_at,
+        )
+        for e in rows
+    ]
+
+
 @router.get("/badges/verify/{verification_code}", response_model=BadgeVerificationOut)
 async def verify_skill_badge(
     verification_code: str,
     db: AsyncSession = Depends(get_db),
 ) -> BadgeVerificationOut:
     """Public credential verification endpoint for recruiters and placement admins."""
-    from app.modules.student.models import Student
-
     row = (
         await db.execute(
             select(SkillBadge, Course, Student)

@@ -20,10 +20,16 @@ import {
   Clock,
   EyeOff,
   GraduationCap,
+  ClipboardCheck,
+  Briefcase,
+  Star,
 } from "lucide-react";
 
 type Role = "STUDENT" | "RECRUITER" | "ADMIN";
 type ActiveTab = "IDENTITY" | "TRAINING" | "GOVERNANCE";
+type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
+type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
+type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
 
 interface ResumeItem {
   id: string;
@@ -88,9 +94,44 @@ interface TrainingCourse {
   questions: QuizQuestion[];
 }
 
+interface ExaminerEvaluationRecord {
+  id: string;
+  studentRoll: string;
+  examinerEmail: string;
+  skillsets: string[];
+  programmingRating: number;
+  dataScienceRating: number;
+  communicationRating: number;
+  isPlacementReady: boolean;
+  performingExceptionallyGood: boolean;
+  remedialTasks: string[];
+  notes: string;
+  evaluatedAt: string;
+}
+
 const ALLOWED_DOMAINS = ["@ds.study.iitm.ac.in", "@es.study.iitm.ac.in"];
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
-const QUIZ_DURATION_SECONDS = 30 * 60; // 30 minutes (1800 seconds)
+const QUIZ_DURATION_SECONDS = 30 * 60;
+
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Bihar",
+  "Delhi",
+  "Gujarat",
+  "Haryana",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Tamil Nadu",
+  "Telangana",
+  "Uttar Pradesh",
+  "West Bengal",
+  "Other",
+];
 
 const INITIAL_COURSES: TrainingCourse[] = [
   {
@@ -247,7 +288,22 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("IDENTITY");
 
-  // Increment 1: Student Handles & BS Marksheet
+  // Increment 1: Complete Student Registration Dossier
+  const [fullName, setFullName] = useState("Aarav Sharma");
+  const [cgpaInput, setCgpaInput] = useState("8.92");
+  const [gender, setGender] = useState("Male");
+  const [mobileNumber, setMobileNumber] = useState("+91 9876543210");
+  const [personalEmail, setPersonalEmail] = useState("aarav.sharma@gmail.com");
+  const [stateName, setStateName] = useState("Maharashtra");
+  const [category, setCategory] = useState<CategoryOption>("GENERAL");
+  const [degreeType, setDegreeType] = useState<DegreeTypeOption>("STANDALONE");
+  const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
+  const [yearsExp, setYearsExp] = useState("2.0");
+  const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
+  const [presentCompany, setPresentCompany] = useState("");
+  const [regAlert, setRegAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+
+  // Increment 1: Developer Handles & BS Marksheet
   const [linkedinId, setLinkedinId] = useState("aarav-sharma-iitm");
   const [githubUsername, setGithubUsername] = useState("aarav-ds-iitm");
   const [kaggleUsername, setKaggleUsername] = useState("aaravml");
@@ -255,11 +311,10 @@ export default function App() {
 
   const [marksheet, setMarksheet] = useState<MarksheetRecord | null>(null);
   const [marksheetFile, setMarksheetFile] = useState<File | null>(null);
-  const [cgpaInput, setCgpaInput] = useState("8.92");
   const [marksheetAlert, setMarksheetAlert] = useState<string | null>(null);
   const marksheetInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Increment 1: Resume Vault state
+  // Increment 1: Resume Vault
   const [resumes, setResumes] = useState<ResumeItem[]>([
     {
       id: "res-1",
@@ -275,7 +330,7 @@ export default function App() {
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Increment 2: Training & Proctored Assessment state
+  // Increment 2: Training, Proctored Quiz & Examiner Final Stage Interview
   const [courses, setCourses] = useState<TrainingCourse[]>(INITIAL_COURSES);
   const [activeCourseId, setActiveCourseId] = useState<string>(INITIAL_COURSES[0].id);
   const [isQuizActive, setIsQuizActive] = useState<boolean>(false);
@@ -287,6 +342,20 @@ export default function App() {
   } | null>(null);
   const [badges, setBadges] = useState<SkillBadgeItem[]>([]);
 
+  // Increment 2: Final Stage Examiner Interview Evaluation State
+  const [evalSkillsets, setEvalSkillsets] = useState("Python, SQL, FastAPI, Machine Learning");
+  const [progRating, setProgRating] = useState<number>(4);
+  const [dsRating, setDsRating] = useState<number>(4);
+  const [commRating, setCommRating] = useState<number>(4);
+  const [isPlacementReady, setIsPlacementReady] = useState<boolean>(true);
+  const [performingExceptionallyGood, setPerformingExceptionallyGood] = useState<boolean>(false);
+  const [remedialTasksText, setRemedialTasksText] = useState(
+    "1. Solve 25 medium DSA graph & DP problems\n2. Complete 2 mock system design interviews"
+  );
+  const [examinerNotes, setExaminerNotes] = useState("");
+  const [evalBanner, setEvalBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const [evaluations, setEvaluations] = useState<ExaminerEvaluationRecord[]>([]);
+
   // Immutable Audit Trail
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([
     {
@@ -295,7 +364,7 @@ export default function App() {
       actor: "system@iitm.ac.in",
       role: "ADMIN",
       action: "POLICY_ENFORCED",
-      resource: "BRULE-55 (Max 3 Resumes) & BRULE-12 (30m Proctored Quiz)",
+      resource: "BRULE-55 (Max 3 Resumes), BRULE-12 (30m Proctored Quiz) & BRULE-18 (Examiner Eval)",
       status: "SUCCESS",
     },
   ]);
@@ -448,7 +517,6 @@ export default function App() {
     [activeCourse, appendAudit, badges, quizAnswers, user]
   );
 
-  // 30-Minute Countdown Timer Effect
   useEffect(() => {
     if (!isQuizActive) return;
     const interval = window.setInterval(() => {
@@ -464,20 +532,14 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [isQuizActive, finalizeQuizAttempt]);
 
-  // Tab-Switch / Window-Blur Auto-Fail Proctoring Effect
   useEffect(() => {
     if (!isQuizActive) return;
-
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        finalizeQuizAttempt("TAB_SWITCH_VIOLATION");
-      }
+      if (document.hidden) finalizeQuizAttempt("TAB_SWITCH_VIOLATION");
     };
-
     const handleWindowBlur = () => {
       finalizeQuizAttempt("TAB_SWITCH_VIOLATION");
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleWindowBlur);
     return () => {
@@ -526,6 +588,49 @@ export default function App() {
   const formatBytes = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleSaveRegistration = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const parsedCgpa = parseFloat(cgpaInput);
+    if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
+      setRegAlert({ type: "ERR", text: "Enter a valid CGPA between 0.00 and 10.00." });
+      return;
+    }
+    if (!fullName.trim() || !mobileNumber.trim() || !personalEmail.trim()) {
+      setRegAlert({
+        type: "ERR",
+        text: "Full name, mobile number, and personal email ID are required.",
+      });
+      return;
+    }
+    if (isWorkingProf) {
+      const exp = parseFloat(yearsExp);
+      if (isNaN(exp) || exp < 0 || !presentCompany.trim()) {
+        setRegAlert({
+          type: "ERR",
+          text: "Working professionals must provide years of experience, domain, and present company.",
+        });
+        return;
+      }
+    }
+
+    setRegAlert({
+      type: "OK",
+      text: `Registration Dossier Saved (${category} • ${degreeType.replace("_", " ")} • CGPA ${parsedCgpa.toFixed(
+        2
+      )}).`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "STUDENT_REGISTRATION_SAVED",
+      `${fullName} | ${category} | ${degreeType} | ${stateName} | Working: ${
+        isWorkingProf ? `Yes (${yearsExp}y, ${workDomain}, ${presentCompany})` : "No"
+      }`,
+      "SUCCESS"
+    );
   };
 
   const handleSaveHandles = (e: React.FormEvent) => {
@@ -714,6 +819,66 @@ export default function App() {
     finalizeQuizAttempt("NORMAL");
   };
 
+  const handleSaveExaminerEvaluation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const skills = evalSkillsets
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (skills.length === 0) {
+      setEvalBanner({ type: "ERR", text: "Specify at least one observed skillset." });
+      return;
+    }
+
+    const tasks = isPlacementReady
+      ? []
+      : remedialTasksText
+          .split("\n")
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+    if (!isPlacementReady && tasks.length === 0) {
+      setEvalBanner({
+        type: "ERR",
+        text: "BRULE-18: When student is marked Not Ready, please mention the list of tasks the student should do.",
+      });
+      return;
+    }
+
+    const record: ExaminerEvaluationRecord = {
+      id: `EVAL-${Date.now()}`,
+      studentRoll: user.name,
+      examinerEmail: user.email,
+      skillsets: skills,
+      programmingRating: progRating,
+      dataScienceRating: dsRating,
+      communicationRating: commRating,
+      isPlacementReady,
+      performingExceptionallyGood,
+      remedialTasks: tasks,
+      notes: examinerNotes.trim(),
+      evaluatedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+    };
+
+    setEvaluations((prev) => [record, ...prev]);
+    setEvalBanner({
+      type: "OK",
+      text: `Final Stage Examiner Evaluation recorded for ${user.name} (${
+        isPlacementReady ? "Placement Ready" : "Not Ready — Remedial Tasks Assigned"
+      }).`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "EXAMINER_INTERVIEW_EVALUATED",
+      `Prog ${progRating}/5 | DS ${dsRating}/5 | Comm ${commRating}/5 | Ready: ${
+        isPlacementReady ? "Yes" : "No"
+      } | Exceptional: ${performingExceptionallyGood ? "Yes" : "No"}`,
+      "SUCCESS"
+    );
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
@@ -727,7 +892,7 @@ export default function App() {
             IITM Placement & Career Portal
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Domain-validated SSO, BS Marksheet verification, and proctored skill assessments.
+            Student registration dossier, proctored assessments, and examiner viva evaluation.
           </p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
@@ -805,7 +970,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">IITM Career & Placement OS</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Increment 2 • Proctored
+                  Increment 1 & 2 • Complete
                 </span>
               </div>
               <p className="text-xs text-slate-400">{user.email}</p>
@@ -852,7 +1017,7 @@ export default function App() {
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            Student Profile, Marksheet & Vault ({resumes.length}/3)
+            Student Registration, Marksheet & Vault ({resumes.length}/3)
           </button>
 
           <button
@@ -864,7 +1029,7 @@ export default function App() {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            Training & Proctored Quizzes
+            Training, Proctored Quizzes & Examiner Viva
             {badges.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
                 {badges.length} Badges
@@ -890,44 +1055,248 @@ export default function App() {
       <main className="max-w-6xl mx-auto px-6 py-8">
         {activeTab === "IDENTITY" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: Identity, Social/Dev Handles & BS Marksheet */}
-            <div className="lg:col-span-6 space-y-6">
+            {/* Left Column: Complete Student Registration Dossier */}
+            <div className="lg:col-span-7 space-y-6">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-5 h-5 text-indigo-400" />
-                    <h2 className="font-semibold text-white">Student Identity & Developer Handles</h2>
+                    <h2 className="font-semibold text-white">Student Registration Dossier</h2>
                   </div>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                    {user.role}
+                    Roll: {user.name}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs mb-5">
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-slate-500 block">Roll / Handle</span>
-                    <span className="text-slate-200 font-semibold mt-0.5 block">{user.name}</span>
+                {regAlert && (
+                  <div
+                    className={`mb-4 p-3 rounded-lg border text-xs flex items-center gap-2 ${
+                      regAlert.type === "OK"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                        : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                    }`}
+                  >
+                    {regAlert.type === "OK" ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span>{regAlert.text}</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-slate-500 block">Verified CGPA</span>
-                    <span className="text-emerald-400 font-semibold mt-0.5 block">
-                      {marksheet ? `${marksheet.cgpa} / 10.0` : `${cgpaInput} / 10.0`}
-                    </span>
-                  </div>
-                </div>
+                )}
 
+                <form onSubmit={handleSaveRegistration} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Student Email ID (IITM)</label>
+                      <input
+                        type="email"
+                        value={user.email}
+                        disabled
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-800 text-slate-400 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Personal Email ID</label>
+                      <input
+                        type="email"
+                        value={personalEmail}
+                        onChange={(e) => setPersonalEmail(e.target.value)}
+                        placeholder="personal@gmail.com"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Mobile Number</label>
+                      <input
+                        type="tel"
+                        value={mobileNumber}
+                        onChange={(e) => setMobileNumber(e.target.value)}
+                        placeholder="+91 9876543210"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Current CGPA</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="10"
+                        value={cgpaInput}
+                        onChange={(e) => setCgpaInput(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Gender</label>
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">State</label>
+                      <select
+                        value={stateName}
+                        onChange={(e) => setStateName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        {INDIAN_STATES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Category</label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value as CategoryOption)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="GENERAL">General</option>
+                        <option value="OBC">OBC</option>
+                        <option value="OBC_NCL">OBC-NCL</option>
+                        <option value="SC_ST">SC/ST</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Degree Type</label>
+                      <select
+                        value={degreeType}
+                        onChange={(e) => setDegreeType(e.target.value as DegreeTypeOption)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="STANDALONE">Standalone</option>
+                        <option value="DUAL_DEGREE">Dual Degree</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Working Professional Conditional Section */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Briefcase className="w-4 h-4 text-indigo-400" />
+                        Working Professional?
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsWorkingProf(true)}
+                          className={`px-3 py-1 rounded-lg font-semibold border transition ${
+                            isWorkingProf
+                              ? "bg-indigo-600 border-indigo-500 text-white"
+                              : "bg-slate-900 border-slate-800 text-slate-400"
+                          }`}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsWorkingProf(false)}
+                          className={`px-3 py-1 rounded-lg font-semibold border transition ${
+                            !isWorkingProf
+                              ? "bg-indigo-600 border-indigo-500 text-white"
+                              : "bg-slate-900 border-slate-800 text-slate-400"
+                          }`}
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
+
+                    {isWorkingProf && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
+                        <div>
+                          <label className="block text-slate-400 mb-1">Years of Experience</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="40"
+                            value={yearsExp}
+                            onChange={(e) => setYearsExp(e.target.value)}
+                            placeholder="e.g., 2.5"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Domain</label>
+                          <select
+                            value={workDomain}
+                            onChange={(e) => setWorkDomain(e.target.value as WorkDomainOption)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="DATA_SCIENCE">Data Science</option>
+                            <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                            <option value="OTHERS">Others</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Present Company</label>
+                          <input
+                            type="text"
+                            value={presentCompany}
+                            onChange={(e) => setPresentCompany(e.target.value)}
+                            placeholder="e.g., TCS / Fractal / Zoho"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition"
+                  >
+                    Save Student Registration Dossier
+                  </button>
+                </form>
+              </div>
+
+              {/* Developer & LinkedIn Handles */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <h2 className="font-semibold text-white mb-3">
+                  LinkedIn, GitHub & Kaggle Handles
+                </h2>
                 {handlesSavedBanner && (
-                  <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                  <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>{handlesSavedBanner}</span>
                   </div>
                 )}
-
                 <form onSubmit={handleSaveHandles} className="space-y-3 text-xs">
-                  <div>
-                    <label className="block text-slate-400 mb-1">LinkedIn User ID</label>
-                    <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
-                      <span className="text-slate-500 select-none">linkedin.com/in/</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">LinkedIn User ID</label>
                       <input
                         type="text"
                         value={linkedinId}
@@ -935,48 +1304,37 @@ export default function App() {
                           setLinkedinId(e.target.value);
                           setHandlesSavedBanner(null);
                         }}
-                        placeholder="your-linkedin-id"
-                        className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
+                        placeholder="linkedin-id"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">GitHub Username</label>
+                      <input
+                        type="text"
+                        value={githubUsername}
+                        onChange={(e) => {
+                          setGithubUsername(e.target.value);
+                          setHandlesSavedBanner(null);
+                        }}
+                        placeholder="github-username"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Kaggle Username</label>
+                      <input
+                        type="text"
+                        value={kaggleUsername}
+                        onChange={(e) => {
+                          setKaggleUsername(e.target.value);
+                          setHandlesSavedBanner(null);
+                        }}
+                        placeholder="kaggle-username"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-400 mb-1">GitHub Username</label>
-                      <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
-                        <span className="text-slate-500 select-none">@</span>
-                        <input
-                          type="text"
-                          value={githubUsername}
-                          onChange={(e) => {
-                            setGithubUsername(e.target.value);
-                            setHandlesSavedBanner(null);
-                          }}
-                          placeholder="github-user"
-                          className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-400 mb-1">Kaggle Username</label>
-                      <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
-                        <span className="text-slate-500 select-none">kaggle.com/</span>
-                        <input
-                          type="text"
-                          value={kaggleUsername}
-                          onChange={(e) => {
-                            setKaggleUsername(e.target.value);
-                            setHandlesSavedBanner(null);
-                          }}
-                          placeholder="kaggle-user"
-                          className="flex-1 bg-transparent text-slate-100 focus:outline-none ml-1"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
                   <button
                     type="submit"
                     className="w-full py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold transition"
@@ -985,8 +1343,10 @@ export default function App() {
                   </button>
                 </form>
               </div>
+            </div>
 
-              {/* BS Course Marksheet Uploader */}
+            {/* Right Column: BS Marksheet & Resume Vault (BRULE-55) */}
+            <div className="lg:col-span-5 space-y-6">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -1043,7 +1403,7 @@ export default function App() {
                         <span className="truncate">
                           {marksheetFile
                             ? `${marksheetFile.name} (${formatBytes(marksheetFile.size)})`
-                            : "Select BS Grade Card / Marksheet PDF (max 5 MB)..."}
+                            : "Select BS Marksheet PDF (max 5 MB)..."}
                         </span>
                       </span>
                       <span className="text-[11px] font-semibold text-emerald-400 ml-2 shrink-0">
@@ -1052,398 +1412,666 @@ export default function App() {
                     </label>
                   </div>
 
+                  <button
+                    type="submit"
+                    className="w-full py-2 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload BS Marksheet
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-indigo-400" />
+                    <h2 className="font-semibold text-white">Resume Vault (BRULE-55)</h2>
+                  </div>
+                  <span
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                      resumes.length >= 3
+                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        : "bg-slate-950 text-slate-300 border-slate-800"
+                    }`}
+                  >
+                    {resumes.length} / 3 Active
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 mb-5">
+                  {resumes.map((res) => (
+                    <div
+                      key={res.id}
+                      className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-slate-100 truncate">{res.title}</p>
+                          {res.isPrimary && (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
+                              PRIMARY
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {res.targetRole} • {res.fileSize} • {res.updatedAt}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteResume(res.id, res.title)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition shrink-0"
+                        title="Archive Resume"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {vaultAlert && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{vaultAlert}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleAddResume} className="space-y-2.5">
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="resume-pdf-upload"
+                    />
+                    <label
+                      htmlFor="resume-pdf-upload"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-indigo-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <span className="truncate">
+                          {selectedFile
+                            ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
+                            : "Choose Resume PDF from device (max 5 MB)..."}
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-semibold text-indigo-400 ml-2 shrink-0">
+                        Browse
+                      </span>
+                    </label>
+                  </div>
+
                   <div className="flex gap-2">
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="10"
-                      value={cgpaInput}
-                      onChange={(e) => setCgpaInput(e.target.value)}
-                      placeholder="CGPA (e.g. 8.92)"
-                      className="w-36 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                      type="text"
+                      value={newTarget}
+                      onChange={(e) => setNewTarget(e.target.value)}
+                      placeholder="Target Role (e.g., ML Engineer)"
+                      className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
                     />
                     <button
                       type="submit"
-                      className="flex-1 py-2 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      Upload Marksheet
+                      <Plus className="w-4 h-4" />
+                      Upload
                     </button>
                   </div>
                 </form>
               </div>
             </div>
-
-            {/* Right Column: Resume Vault (BRULE-55) */}
-            <div className="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-400" />
-                  <h2 className="font-semibold text-white">Resume Vault (BRULE-55)</h2>
-                </div>
-                <span
-                  className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                    resumes.length >= 3
-                      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                      : "bg-slate-950 text-slate-300 border-slate-800"
-                  }`}
-                >
-                  {resumes.length} / 3 Active
-                </span>
-              </div>
-
-              <div className="space-y-2.5 mb-5">
-                {resumes.map((res) => (
-                  <div
-                    key={res.id}
-                    className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-slate-100 truncate">{res.title}</p>
-                        {res.isPrimary && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
-                            PRIMARY
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {res.targetRole} • {res.fileSize} • {res.updatedAt}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteResume(res.id, res.title)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition shrink-0"
-                      title="Archive Resume"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {vaultAlert && (
-                <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{vaultAlert}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleAddResume} className="space-y-2.5">
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="resume-pdf-upload"
-                  />
-                  <label
-                    htmlFor="resume-pdf-upload"
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-dashed border-slate-700 hover:border-indigo-500 text-xs text-slate-300 flex items-center justify-between cursor-pointer transition"
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                      <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <span className="truncate">
-                        {selectedFile
-                          ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
-                          : "Choose Resume PDF from device (max 5 MB)..."}
-                      </span>
-                    </span>
-                    <span className="text-[11px] font-semibold text-indigo-400 ml-2 shrink-0">
-                      Browse
-                    </span>
-                  </label>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTarget}
-                    onChange={(e) => setNewTarget(e.target.value)}
-                    placeholder="Target Role (e.g., ML Engineer)"
-                    className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Upload
-                  </button>
-                </div>
-              </form>
-            </div>
           </div>
         )}
 
         {activeTab === "TRAINING" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Course Catalog & Verified Badges */}
-            <div className="lg:col-span-5 space-y-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-5 h-5 text-indigo-400" />
-                    <h2 className="font-semibold text-white">Placement Readiness Tracks</h2>
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Course Catalog & Verified Badges */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-indigo-400" />
+                      <h2 className="font-semibold text-white">Placement Readiness Tracks</h2>
+                    </div>
+                    <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
+                      BRULE-12 • 30m Timer
+                    </span>
                   </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-                    BRULE-12 • 30m Timer
-                  </span>
-                </div>
 
-                <div className="space-y-3">
-                  {courses.map((c) => {
-                    const completedCount = c.modules.filter((m) => m.completed).length;
-                    const earned = badges.some((b) => b.courseCode === c.code);
-                    return (
-                      <button
-                        key={c.id}
-                        disabled={isQuizActive}
-                        onClick={() => {
-                          setActiveCourseId(c.id);
-                          setQuizAnswers({});
-                          setQuizBanner(null);
-                        }}
-                        className={`w-full text-left p-4 rounded-xl border transition disabled:opacity-50 ${
-                          c.id === activeCourse.id
-                            ? "bg-indigo-600/15 border-indigo-500/50"
-                            : "bg-slate-950 border-slate-800 hover:border-slate-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-mono text-indigo-400">{c.code}</span>
-                          {earned ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
-                              VERIFIED BADGE
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">
-                              Attempts: {c.attemptsUsed}/{c.maxAttempts}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-semibold text-white mt-1">{c.title}</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Modules: {completedCount}/{c.modules.length} completed • Pass:{" "}
-                          {c.passThresholdPct}%
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Earned Skill Verification Badges */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Award className="w-5 h-5 text-emerald-400" />
-                  <h2 className="font-semibold text-white">Verified Skill Credentials</h2>
-                </div>
-
-                {badges.length === 0 ? (
-                  <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
-                    Score ≥ 75% on any proctored course assessment to mint a recruiter-verifiable
-                    IITM Skill Badge.
-                  </p>
-                ) : (
                   <div className="space-y-3">
-                    {badges.map((b) => (
-                      <div
-                        key={b.code}
-                        className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            {b.skillName}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{b.scorePct}%</span>
-                        </div>
-                        <p className="font-mono text-[11px] text-emerald-200/90 mt-1.5">{b.code}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Issued {b.issuedAt} • Recruiter Verifiable
-                        </p>
-                      </div>
-                    ))}
+                    {courses.map((c) => {
+                      const completedCount = c.modules.filter((m) => m.completed).length;
+                      const earned = badges.some((b) => b.courseCode === c.code);
+                      return (
+                        <button
+                          key={c.id}
+                          disabled={isQuizActive}
+                          onClick={() => {
+                            setActiveCourseId(c.id);
+                            setQuizAnswers({});
+                            setQuizBanner(null);
+                          }}
+                          className={`w-full text-left p-4 rounded-xl border transition disabled:opacity-50 ${
+                            c.id === activeCourse.id
+                              ? "bg-indigo-600/15 border-indigo-500/50"
+                              : "bg-slate-950 border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono text-indigo-400">{c.code}</span>
+                            {earned ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
+                                VERIFIED BADGE
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">
+                                Attempts: {c.attemptsUsed}/{c.maxAttempts}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-white mt-1">{c.title}</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Modules: {completedCount}/{c.modules.length} completed • Pass:{" "}
+                            {c.passThresholdPct}%
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Active Course Modules & Proctored Assessment Engine */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="text-xs font-mono text-indigo-400">{activeCourse.code}</span>
-                    <h2 className="text-lg font-bold text-white">{activeCourse.title}</h2>
-                  </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
-                    {activeCourse.category}
-                  </span>
                 </div>
 
-                {!isQuizActive && (
-                  <>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2.5">
-                      1. Learning Modules (Click to mark complete)
-                    </h3>
-                    <div className="space-y-2">
-                      {activeCourse.modules.map((m) => (
+                {/* Earned Skill Verification Badges */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Award className="w-5 h-5 text-emerald-400" />
+                    <h2 className="font-semibold text-white">Verified Skill Credentials</h2>
+                  </div>
+
+                  {badges.length === 0 ? (
+                    <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
+                      Score ≥ 75% on any proctored course assessment to mint a recruiter-verifiable
+                      IITM Skill Badge.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {badges.map((b) => (
                         <div
-                          key={m.id}
-                          onClick={() => toggleModuleComplete(activeCourse.id, m.id)}
-                          className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-start gap-3 cursor-pointer transition"
+                          key={b.code}
+                          className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30"
                         >
-                          {m.completed ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span
-                                className={`text-xs font-semibold ${
-                                  m.completed ? "text-emerald-300" : "text-slate-200"
-                                }`}
-                              >
-                                {m.title}
-                              </span>
-                              <span className="text-[11px] text-slate-500">
-                                {m.durationMinutes} min
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-0.5">{m.summary}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              {b.skillName}
+                            </span>
+                            <span className="text-xs font-semibold text-white">{b.scorePct}%</span>
                           </div>
+                          <p className="font-mono text-[11px] text-emerald-200/90 mt-1.5">{b.code}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Issued {b.issuedAt} • Recruiter Verifiable
+                          </p>
                         </div>
                       ))}
                     </div>
-                    <div className="border-t border-slate-800 my-6" />
-                  </>
-                )}
+                  )}
+                </div>
+              </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <PlayCircle className="w-4 h-4 text-indigo-400" />
-                    Proctored Skill Assessment (Pass ≥ {activeCourse.passThresholdPct}%)
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    {isQuizActive && (
-                      <span
-                        className={`text-xs font-mono font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
-                          secondsLeft <= 120
-                            ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
-                            : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
-                        }`}
-                      >
-                        <Clock className="w-3.5 h-3.5" />
-                        {formatTimer(secondsLeft)}
-                      </span>
-                    )}
-                    <span
-                      className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                        activeCourse.attemptsUsed >= activeCourse.maxAttempts
-                          ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
-                          : "bg-slate-950 text-slate-300 border-slate-800"
-                      }`}
-                    >
-                      Attempts: {activeCourse.attemptsUsed} / {activeCourse.maxAttempts}
+              {/* Active Course Modules & Proctored Assessment Engine */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-xs font-mono text-indigo-400">{activeCourse.code}</span>
+                      <h2 className="text-lg font-bold text-white">{activeCourse.title}</h2>
+                    </div>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
+                      {activeCourse.category}
                     </span>
                   </div>
-                </div>
 
-                {/* Proctoring Guard Notice */}
-                <div className="mb-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
-                  <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-amber-300">
-                      Strict Proctoring Active (30:00 Max • Zero Tab-Switch Tolerance):
-                    </span>{" "}
-                    Once started, switching browser tabs or leaving this window immediately
-                    terminates and fails your current attempt.
-                  </div>
-                </div>
+                  {!isQuizActive && (
+                    <>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2.5">
+                        1. Learning Modules (Click to mark complete)
+                      </h3>
+                      <div className="space-y-2">
+                        {activeCourse.modules.map((m) => (
+                          <div
+                            key={m.id}
+                            onClick={() => toggleModuleComplete(activeCourse.id, m.id)}
+                            className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-start gap-3 cursor-pointer transition"
+                          >
+                            {m.completed ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            ) : (
+                              <Square className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                            )}
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className={`text-xs font-semibold ${
+                                    m.completed ? "text-emerald-300" : "text-slate-200"
+                                  }`}
+                                >
+                                  {m.title}
+                                </span>
+                                <span className="text-[11px] text-slate-500">
+                                  {m.durationMinutes} min
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">{m.summary}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-slate-800 my-6" />
+                    </>
+                  )}
 
-                {quizBanner && (
-                  <div
-                    className={`mb-4 p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
-                      quizBanner.type === "PASS"
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                        : quizBanner.type === "BLOCKED"
-                        ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                        : "bg-amber-500/10 border-amber-500/30 text-amber-300"
-                    }`}
-                  >
-                    {quizBanner.type === "PASS" ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    )}
-                    <span>{quizBanner.text}</span>
-                  </div>
-                )}
-
-                {!isQuizActive ? (
-                  <button
-                    type="button"
-                    onClick={handleStartQuiz}
-                    disabled={activeCourse.attemptsUsed >= activeCourse.maxAttempts}
-                    className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition flex items-center justify-center gap-2"
-                  >
-                    <Clock className="w-4 h-4" />
-                    {activeCourse.attemptsUsed >= activeCourse.maxAttempts
-                      ? `Maximum Attempts Exhausted (${activeCourse.attemptsUsed}/${activeCourse.maxAttempts})`
-                      : `Start 30-Minute Proctored Assessment (Attempt ${
-                          activeCourse.attemptsUsed + 1
-                        } of ${activeCourse.maxAttempts})`}
-                  </button>
-                ) : (
-                  <form onSubmit={handleSubmitQuiz} className="space-y-4">
-                    {activeCourse.questions.map((q, qIdx) => (
-                      <div
-                        key={q.id}
-                        className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <PlayCircle className="w-4 h-4 text-indigo-400" />
+                      2. Proctored Skill Assessment (Pass ≥ {activeCourse.passThresholdPct}%)
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {isQuizActive && (
+                        <span
+                          className={`text-xs font-mono font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
+                            secondsLeft <= 120
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
+                              : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          {formatTimer(secondsLeft)}
+                        </span>
+                      )}
+                      <span
+                        className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                          activeCourse.attemptsUsed >= activeCourse.maxAttempts
+                            ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                            : "bg-slate-950 text-slate-300 border-slate-800"
+                        }`}
                       >
-                        <p className="text-xs font-semibold text-slate-200">
-                          Q{qIdx + 1}. {q.prompt}
-                        </p>
-                        <div className="space-y-1.5 pt-1">
-                          {q.options.map((opt, optIdx) => (
-                            <label
-                              key={optIdx}
-                              className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition ${
-                                quizAnswers[q.id] === optIdx
-                                  ? "bg-indigo-600/20 border-indigo-500/50 text-white"
-                                  : "border-transparent text-slate-400 hover:bg-slate-900"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`${activeCourse.id}-${q.id}`}
-                                checked={quizAnswers[q.id] === optIdx}
-                                onChange={() =>
-                                  setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
-                                }
-                                className="accent-indigo-500"
-                              />
-                              <span>{opt}</span>
-                            </label>
-                          ))}
+                        Attempts: {activeCourse.attemptsUsed} / {activeCourse.maxAttempts}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+                    <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-amber-300">
+                        Strict Proctoring Active (30:00 Max • Zero Tab-Switch Tolerance):
+                      </span>{" "}
+                      Once started, switching browser tabs or leaving this window immediately
+                      terminates and fails your current attempt.
+                    </div>
+                  </div>
+
+                  {quizBanner && (
+                    <div
+                      className={`mb-4 p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
+                        quizBanner.type === "PASS"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : quizBanner.type === "BLOCKED"
+                          ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                          : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                      }`}
+                    >
+                      {quizBanner.type === "PASS" ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                      )}
+                      <span>{quizBanner.text}</span>
+                    </div>
+                  )}
+
+                  {!isQuizActive ? (
+                    <button
+                      type="button"
+                      onClick={handleStartQuiz}
+                      disabled={activeCourse.attemptsUsed >= activeCourse.maxAttempts}
+                      className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition flex items-center justify-center gap-2"
+                    >
+                      <Clock className="w-4 h-4" />
+                      {activeCourse.attemptsUsed >= activeCourse.maxAttempts
+                        ? `Maximum Attempts Exhausted (${activeCourse.attemptsUsed}/${activeCourse.maxAttempts})`
+                        : `Start 30-Minute Proctored Assessment (Attempt ${
+                            activeCourse.attemptsUsed + 1
+                          } of ${activeCourse.maxAttempts})`}
+                    </button>
+                  ) : (
+                    <form onSubmit={handleSubmitQuiz} className="space-y-4">
+                      {activeCourse.questions.map((q, qIdx) => (
+                        <div
+                          key={q.id}
+                          className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
+                        >
+                          <p className="text-xs font-semibold text-slate-200">
+                            Q{qIdx + 1}. {q.prompt}
+                          </p>
+                          <div className="space-y-1.5 pt-1">
+                            {q.options.map((opt, optIdx) => (
+                              <label
+                                key={optIdx}
+                                className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition ${
+                                  quizAnswers[q.id] === optIdx
+                                    ? "bg-indigo-600/20 border-indigo-500/50 text-white"
+                                    : "border-transparent text-slate-400 hover:bg-slate-900"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`${activeCourse.id}-${q.id}`}
+                                  checked={quizAnswers[q.id] === optIdx}
+                                  onChange={() =>
+                                    setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
+                                  }
+                                  className="accent-indigo-500"
+                                />
+                                <span>{opt}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition"
+                      >
+                        Submit Assessment & Grade ({formatTimer(secondsLeft)} remaining)
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Final Stage: Examiner Interview Evaluation (Stage 3 of Training) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <ClipboardCheck className="w-5 h-5 text-indigo-400" />
+                  <div>
+                    <h2 className="font-semibold text-white">
+                      3. Final Stage: Examiner Interview & Placement Readiness Evaluation
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      Examiner panel evaluates observed skillsets, 1–5 competency ratings, readiness,
+                      and remedial action tasks
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
+                  Active Role: {user.role}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Examiner Rubric Form (Editable when RBAC View is ADMIN or RECRUITER) */}
+                <div className="lg:col-span-6">
+                  {user.role === "STUDENT" ? (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+                      <p className="font-semibold text-indigo-300">
+                        Student View — Examiner Interview Rubric Locked
+                      </p>
+                      <p className="text-slate-400">
+                        Switch your RBAC View in the top bar to{" "}
+                        <span className="text-white font-semibold">ADMIN</span> or{" "}
+                        <span className="text-white font-semibold">RECRUITER</span> (Examiner) to
+                        submit a final-stage interview evaluation for{" "}
+                        <span className="text-white font-mono">{user.name}</span>.
+                      </p>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSaveExaminerEvaluation} className="space-y-3.5 text-xs">
+                      {evalBanner && (
+                        <div
+                          className={`p-3 rounded-lg border flex items-start gap-2 ${
+                            evalBanner.type === "OK"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                          }`}
+                        >
+                          {evalBanner.type === "OK" ? (
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                          )}
+                          <span>{evalBanner.text}</span>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-slate-400 mb-1">
+                          Skillsets of Student (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={evalSkillsets}
+                          onChange={(e) => setEvalSkillsets(e.target.value)}
+                          placeholder="e.g., Python, SQL, FastAPI, Machine Learning"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-slate-400 mb-1">
+                            Technical Skills in Programming (1–5)
+                          </label>
+                          <select
+                            value={progRating}
+                            onChange={(e) => setProgRating(Number(e.target.value))}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                          >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <option key={n} value={n}>
+                                {n} / 5
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-400 mb-1">
+                            Technical Skills in Data Science (1–5)
+                          </label>
+                          <select
+                            value={dsRating}
+                            onChange={(e) => setDsRating(Number(e.target.value))}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                          >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <option key={n} value={n}>
+                                {n} / 5
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-400 mb-1">
+                            Communication Skills (1–5)
+                          </label>
+                          <select
+                            value={commRating}
+                            onChange={(e) => setCommRating(Number(e.target.value))}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                          >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <option key={n} value={n}>
+                                {n} / 5
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                    ))}
 
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition"
-                    >
-                      Submit Assessment & Grade ({formatTimer(secondsLeft)} remaining)
-                    </button>
-                  </form>
-                )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                          <span className="text-slate-300 font-medium">
+                            Readiness for Placement
+                          </span>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setIsPlacementReady(true)}
+                              className={`px-2.5 py-1 rounded font-semibold ${
+                                isPlacementReady
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-900 text-slate-400"
+                              }`}
+                            >
+                              Ready
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsPlacementReady(false)}
+                              className={`px-2.5 py-1 rounded font-semibold ${
+                                !isPlacementReady
+                                  ? "bg-amber-600 text-white"
+                                  : "bg-slate-900 text-slate-400"
+                              }`}
+                            >
+                              Not Ready
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                          <span className="text-slate-300 font-medium flex items-center gap-1">
+                            <Star className="w-3.5 h-3.5 text-amber-400" />
+                            Performing Exceptionally Good
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={performingExceptionallyGood}
+                            onChange={(e) => setPerformingExceptionallyGood(e.target.checked)}
+                            className="accent-indigo-500 w-4 h-4"
+                          />
+                        </div>
+                      </div>
+
+                      {!isPlacementReady && (
+                        <div>
+                          <label className="block text-amber-300 font-semibold mb-1">
+                            Mandatory Remedial Tasks for Student (one task per line)
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={remedialTasksText}
+                            onChange={(e) => setRemedialTasksText(e.target.value)}
+                            placeholder="Enter required tasks the student must complete before re-evaluation..."
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-amber-500/40 text-slate-100 focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-slate-400 mb-1">Examiner Remarks</label>
+                        <input
+                          type="text"
+                          value={examinerNotes}
+                          onChange={(e) => setExaminerNotes(e.target.value)}
+                          placeholder="Optional interview summary..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition"
+                      >
+                        Record Final Examiner Interview Evaluation
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+                {/* Recorded Examiner Evaluations Feed */}
+                <div className="lg:col-span-6 space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Recorded Examiner Viva Evaluations ({evaluations.length})
+                  </h3>
+
+                  {evaluations.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                      No final-stage examiner interview evaluations recorded yet.
+                    </div>
+                  ) : (
+                    evaluations.map((ev) => (
+                      <div
+                        key={ev.id}
+                        className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-semibold ${
+                                ev.isPlacementReady
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : "bg-amber-500/20 text-amber-300"
+                              }`}
+                            >
+                              {ev.isPlacementReady ? "PLACEMENT READY" : "NOT READY"}
+                            </span>
+                            {ev.performingExceptionallyGood && (
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold flex items-center gap-1">
+                                <Star className="w-3 h-3" />
+                                EXCEPTIONALLY GOOD
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-slate-500">{ev.evaluatedAt}</span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                            <span className="text-slate-500 block text-[11px]">Programming</span>
+                            <span className="font-bold text-white">{ev.programmingRating} / 5</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                            <span className="text-slate-500 block text-[11px]">Data Science</span>
+                            <span className="font-bold text-white">{ev.dataScienceRating} / 5</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                            <span className="text-slate-500 block text-[11px]">Communication</span>
+                            <span className="font-bold text-white">
+                              {ev.communicationRating} / 5
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Observed Skillsets: </span>
+                          <span className="text-slate-200">{ev.skillsets.join(", ")}</span>
+                        </div>
+
+                        {!ev.isPlacementReady && ev.remedialTasks.length > 0 && (
+                          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                            <p className="font-semibold text-amber-300 mb-1">
+                              Assigned Tasks Before Placement Readiness:
+                            </p>
+                            <ul className="list-disc list-inside text-amber-100/90 space-y-0.5">
+                              {ev.remedialTasks.map((t, i) => (
+                                <li key={i}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1457,7 +2085,8 @@ export default function App() {
                 <div>
                   <h2 className="font-semibold text-white">Immutable Governance & Audit Trail</h2>
                   <p className="text-xs text-slate-400">
-                    Append-only ledger capturing IAM, Marksheets, Vault, and Proctoring Violations
+                    Append-only ledger capturing Student Registration, Proctoring & Examiner Viva
+                    Evaluations
                   </p>
                 </div>
               </div>

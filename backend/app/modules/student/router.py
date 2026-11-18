@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,18 +14,47 @@ from app.modules.iam.models import RoleName
 from app.modules.iam.security import CurrentPrincipal, require_roles
 from app.modules.student.models import (
     AcademicStanding,
+    DegreeType,
     ProgramLevel,
     ProgramType,
     Resume,
     Student,
+    StudentCategory,
     StudentProfile,
     StudentSkill,
+    WorkDomain,
 )
 from app.shared.database import get_db
 
 router = APIRouter(prefix="/api/v1/students", tags=["Student Core"])
 
 MAX_ACTIVE_RESUMES = 3
+
+
+class StudentRegistrationIn(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=160)
+    cgpa: Decimal = Field(..., ge=Decimal("0.00"), le=Decimal("10.00"))
+    gender: str = Field(..., min_length=1, max_length=32)
+    mobile_number: str = Field(..., min_length=8, max_length=24)
+    personal_email: str = Field(..., min_length=5, max_length=255)
+    state: str = Field(..., min_length=2, max_length=100)
+    category: StudentCategory
+    degree_type: DegreeType
+    is_working_professional: bool = False
+    years_of_experience: Optional[Decimal] = Field(None, ge=Decimal("0.0"), le=Decimal("50.0"))
+    work_domain: Optional[WorkDomain] = None
+    present_company: Optional[str] = Field(None, max_length=160)
+
+    @model_validator(mode="after")
+    def validate_working_professional_fields(self) -> "StudentRegistrationIn":
+        if self.is_working_professional:
+            if self.years_of_experience is None:
+                raise ValueError("years_of_experience is required when is_working_professional is True")
+            if self.work_domain is None:
+                raise ValueError("work_domain is required when is_working_professional is True")
+            if not self.present_company or not self.present_company.strip():
+                raise ValueError("present_company is required when is_working_professional is True")
+        return self
 
 
 class ProfileUpdateIn(BaseModel):
@@ -76,6 +105,7 @@ class StudentWorkspaceOut(BaseModel):
     full_name: str
     email: str
     program: ProgramType
+    degree_type: DegreeType
     current_level: ProgramLevel
     cgpa: Decimal
     active_backlogs: int
@@ -109,6 +139,7 @@ async def _get_or_create_student(db: AsyncSession, principal: CurrentPrincipal) 
             user_id=principal.user.id,
             roll_number=prefix,
             program=prog,
+            degree_type=DegreeType.STANDALONE,
             current_level=ProgramLevel.DIPLOMA,
             cgpa=Decimal("8.25"),
             active_backlogs=0,
@@ -131,6 +162,7 @@ def _serialize_workspace(student: Student, principal: CurrentPrincipal) -> Stude
         full_name=principal.user.full_name,
         email=principal.user.email,
         program=student.program,
+        degree_type=student.degree_type,
         current_level=student.current_level,
         cgpa=student.cgpa,
         active_backlogs=student.active_backlogs,
@@ -140,9 +172,18 @@ def _serialize_workspace(student: Student, principal: CurrentPrincipal) -> Stude
         profile={
             "headline": p.headline if p else None,
             "bio": p.bio if p else None,
+            "gender": p.gender if p else None,
+            "category": p.category.value if p else StudentCategory.GENERAL.value,
+            "personal_email": p.personal_email if p else None,
             "phone": p.phone if p else None,
             "city": p.city if p else None,
             "state": p.state if p else None,
+            "is_working_professional": p.is_working_professional if p else False,
+            "years_of_experience": str(p.years_of_experience)
+            if (p and p.years_of_experience is not None)
+            else None,
+            "work_domain": p.work_domain.value if (p and p.work_domain) else None,
+            "present_company": p.present_company if p else None,
             "github_url": p.github_url if p else None,
             "linkedin_url": p.linkedin_url if p else None,
             "kaggle_url": p.kaggle_url if p else None,
@@ -184,6 +225,64 @@ async def get_my_student_workspace(
     principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
     db: AsyncSession = Depends(get_db),
 ) -> StudentWorkspaceOut:
+    student = await _get_or_create_student(db, principal)
+    return _serialize_workspace(student, principal)
+
+
+@router.put("/me/registration", response_model=StudentWorkspaceOut)
+async def submit_student_registration(
+    payload: StudentRegistrationIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> StudentWorkspaceOut:
+    """Captures complete student registration dossier including category, degree type & work experience."""
+    student = await _get_or_create_student(db, principal)
+    profile = student.profile
+    if profile is None:
+        profile = StudentProfile(student_id=student.id)
+        db.add(profile)
+        await db.flush()
+
+    principal.user.full_name = payload.full_name.strip()
+    student.cgpa = payload.cgpa
+    student.degree_type = payload.degree_type
+
+    profile.gender = payload.gender.strip()
+    profile.phone = payload.mobile_number.strip()
+    profile.personal_email = payload.personal_email.strip().lower()
+    profile.state = payload.state.strip()
+    profile.category = payload.category
+    profile.is_working_professional = payload.is_working_professional
+    if payload.is_working_professional:
+        profile.years_of_experience = payload.years_of_experience
+        profile.work_domain = payload.work_domain
+        profile.present_company = payload.present_company.strip() if payload.present_company else None
+    else:
+        profile.years_of_experience = None
+        profile.work_domain = None
+        profile.present_company = None
+
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="STUDENT_REGISTRATION_SAVED",
+        entity_type="Student",
+        entity_id=str(student.id),
+        after_state={
+            "cgpa": str(student.cgpa),
+            "category": profile.category.value,
+            "degree_type": student.degree_type.value,
+            "state": profile.state,
+            "is_working_professional": profile.is_working_professional,
+            "work_domain": profile.work_domain.value if profile.work_domain else None,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
     student = await _get_or_create_student(db, principal)
     return _serialize_workspace(student, principal)
 

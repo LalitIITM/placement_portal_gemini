@@ -42,6 +42,24 @@ class AcademicStanding(str, enum.Enum):
     DEBARRED = "DEBARRED"
 
 
+class StudentCategory(str, enum.Enum):
+    GENERAL = "GENERAL"
+    OBC = "OBC"
+    OBC_NCL = "OBC_NCL"
+    SC_ST = "SC_ST"
+
+
+class DegreeType(str, enum.Enum):
+    STANDALONE = "STANDALONE"
+    DUAL_DEGREE = "DUAL_DEGREE"
+
+
+class WorkDomain(str, enum.Enum):
+    DATA_SCIENCE = "DATA_SCIENCE"
+    SOFTWARE_DEVELOPMENT = "SOFTWARE_DEVELOPMENT"
+    OTHERS = "OTHERS"
+
+
 class Student(Base, TimestampMixin):
     __tablename__ = "students"
     __table_args__ = (
@@ -56,6 +74,9 @@ class Student(Base, TimestampMixin):
     roll_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     program: Mapped[ProgramType] = mapped_column(
         Enum(ProgramType, name="program_type_enum"), nullable=False
+    )
+    degree_type: Mapped[DegreeType] = mapped_column(
+        Enum(DegreeType, name="degree_type_enum"), default=DegreeType.STANDALONE, nullable=False
     )
     current_level: Mapped[ProgramLevel] = mapped_column(
         Enum(ProgramLevel, name="program_level_enum"), default=ProgramLevel.FOUNDATION, nullable=False
@@ -96,9 +117,22 @@ class StudentProfile(Base, TimestampMixin):
     )
     headline: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    gender: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    category: Mapped[StudentCategory] = mapped_column(
+        Enum(StudentCategory, name="student_category_enum"),
+        default=StudentCategory.GENERAL,
+        nullable=False,
+    )
+    personal_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_working_professional: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    years_of_experience: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 1), nullable=True)
+    work_domain: Mapped[Optional[WorkDomain]] = mapped_column(
+        Enum(WorkDomain, name="work_domain_enum"), nullable=True
+    )
+    present_company: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     github_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     kaggle_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

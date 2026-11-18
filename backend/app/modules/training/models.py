@@ -1,8 +1,18 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -96,5 +106,35 @@ class SkillBadge(Base):
     skill_name: Mapped[str] = mapped_column(String(100), nullable=False)
     score_pct: Mapped[int] = mapped_column(Integer, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ExaminerEvaluation(Base):
+    """Final stage viva/interview assessment by a placement examiner."""
+    __tablename__ = "training_examiner_evaluations"
+    __table_args__ = (
+        CheckConstraint("programming_rating >= 1 AND programming_rating <= 5", name="ck_eval_prog_rating"),
+        CheckConstraint("data_science_rating >= 1 AND data_science_rating <= 5", name="ck_eval_ds_rating"),
+        CheckConstraint("communication_rating >= 1 AND communication_rating <= 5", name="ck_eval_comm_rating"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    examiner_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    examiner_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    skillsets_observed: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    programming_rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    data_science_rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    communication_rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_placement_ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    performing_exceptionally_good: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    remedial_tasks: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    examiner_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evaluated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
