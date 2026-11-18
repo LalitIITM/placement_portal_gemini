@@ -35,7 +35,7 @@ import {
   Video,
 } from "lucide-react";
 
-type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "ADMIN";
+type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "TRAINING_COORDINATOR" | "ADMIN";
 type AuthMode = "SIGN_IN" | "SIGN_UP";
 type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 type StudentOnboardingStep = "AUTH" | "STUDENT_FORM" | "PAYMENT";
@@ -95,6 +95,8 @@ interface TrainingStageScore {
   maxMarks: number;
   minRequired: number;
   obtainedMarks: number;
+  attemptsUsed: number;
+  maxAttempts: number;
   statusText: string; // e.g. "Hire" / "Pending" or "Yes" / "No"
 }
 
@@ -110,10 +112,17 @@ interface ActivityCatalogItem {
 }
 
 interface ActivitySubmission {
+  id: string;
+  studentName: string;
+  studentEmail: string;
   activityId: string;
-  proofUrl: string;
+  evidenceFileName: string;
+  evidenceFileType: string;
+  evidenceFileSize: string;
+  proofUrl?: string;
   completedDate: string;
-  verifiedByIic: boolean;
+  reviewStatus: "PENDING_COORDINATOR" | "APPROVED" | "REJECTED";
+  reviewerNote?: string;
 }
 
 const ACTIVITY_CATALOG: ActivityCatalogItem[] = [
@@ -158,22 +167,22 @@ const ACTIVITY_CATALOG: ActivityCatalogItem[] = [
 ];
 
 const INITIAL_TRAINING_STAGES: TrainingStageScore[] = [
-  // Level 1: Soft Skills Training (Overall Cutoff 80%, Stage Cutoff 70%)
-  { id: "L1-S1", level: 1, stageNum: 1, title: "Placement Prep", description: "Video-based communication training", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, statusText: "PASSED" },
-  { id: "L1-S2", level: 1, stageNum: 2, title: "Listening Comprehension I", description: "Listen to audio and write a paragraph response via LMS", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, statusText: "PASSED" },
-  { id: "L1-S3", level: 1, stageNum: 3, title: "Listening Comprehension II", description: "Listen and speak to answer given questions", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, statusText: "PASSED" },
-  { id: "L1-S4", level: 1, stageNum: 4, title: "Self-Introduction Video", description: "Formally dressed video recording", evaluationType: "MARKS", maxMarks: 40, minRequired: 28, obtainedMarks: 34, statusText: "PASSED" },
-  { id: "L1-S5", level: 1, stageNum: 5, title: "Email Writing", description: "Write formal/professional corporate emails", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, statusText: "PASSED" },
+  // Level 1: Soft Skills Training (Overall Cutoff 80%, Stage Cutoff 70%, Max 2 Attempts/Stage)
+  { id: "L1-S1", level: 1, stageNum: 1, title: "Placement Prep", description: "Video-based communication training", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L1-S2", level: 1, stageNum: 2, title: "Listening Comprehension I", description: "Listen to audio and write a paragraph response via LMS", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L1-S3", level: 1, stageNum: 3, title: "Listening Comprehension II", description: "Listen and speak to answer given questions", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 16, attemptsUsed: 2, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L1-S4", level: 1, stageNum: 4, title: "Self-Introduction Video", description: "Formally dressed video recording", evaluationType: "MARKS", maxMarks: 40, minRequired: 28, obtainedMarks: 34, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L1-S5", level: 1, stageNum: 5, title: "Email Writing", description: "Write formal/professional corporate emails", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 17, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
 
-  // Level 2: Focus Finder (Overall Cutoff 60%, Stage Cutoff 70%)
-  { id: "L2-S1", level: 2, stageNum: 1, title: "Behavioral Assessment", description: "Scenario-based response & live training assessment", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 15, statusText: "PASSED" },
-  { id: "L2-S2", level: 2, stageNum: 2, title: "Self-Paced Aptitude Test", description: "Analytical, quantitative, and logical tests", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 23, statusText: "PASSED" },
-  { id: "L2-S3", level: 2, stageNum: 3, title: "Project Presentation", description: "Present a short-term project added in resume", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 22, statusText: "PASSED" },
+  // Level 2: Focus Finder (Overall Cutoff 60%, Stage Cutoff 70%, Max 2 Attempts/Stage)
+  { id: "L2-S1", level: 2, stageNum: 1, title: "Behavioral Assessment", description: "Scenario-based response & live training assessment", evaluationType: "MARKS", maxMarks: 20, minRequired: 14, obtainedMarks: 15, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L2-S2", level: 2, stageNum: 2, title: "Self-Paced Aptitude Test", description: "Analytical, quantitative, and logical tests", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 23, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L2-S3", level: 2, stageNum: 3, title: "Project Presentation", description: "Present a short-term project added in resume", evaluationType: "MARKS", maxMarks: 30, minRequired: 21, obtainedMarks: 22, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
 
-  // Level 3: Hire Tracking (Overall Cutoff 60%, Stage Cutoff 60%)
-  { id: "L3-S1", level: 3, stageNum: 1, title: "Technical Comprehensive Test", description: "Test on syllabus and industry-based concepts", evaluationType: "MARKS", maxMarks: 25, minRequired: 15, obtainedMarks: 18, statusText: "PASSED" },
-  { id: "L3-S2", level: 3, stageNum: 2, title: "Technical AI Mock Interview", description: "Realistic, AI-evaluated interview simulation", evaluationType: "AI_MOCK", maxMarks: 0, minRequired: 0, obtainedMarks: 0, statusText: "Hire" },
-  { id: "L3-S3", level: 3, stageNum: 3, title: "1-on-1 Session with Examiner", description: "Domain fundamentals, resume deep-dive & placement readiness", evaluationType: "ONE_ON_ONE", maxMarks: 0, minRequired: 0, obtainedMarks: 0, statusText: "No" },
+  // Level 3: Hire Tracking (Overall Cutoff 60%, Stage Cutoff 60%, Max 2 Attempts/Stage)
+  { id: "L3-S1", level: 3, stageNum: 1, title: "Technical Comprehensive Test", description: "Test on syllabus and industry-based concepts", evaluationType: "MARKS", maxMarks: 25, minRequired: 15, obtainedMarks: 18, attemptsUsed: 1, maxAttempts: 2, statusText: "PASSED" },
+  { id: "L3-S2", level: 3, stageNum: 2, title: "Technical AI Mock Interview", description: "Realistic, AI-evaluated interview simulation", evaluationType: "AI_MOCK", maxMarks: 0, minRequired: 0, obtainedMarks: 0, attemptsUsed: 1, maxAttempts: 2, statusText: "Hire" },
+  { id: "L3-S3", level: 3, stageNum: 3, title: "1-on-1 Session with Examiner", description: "Domain fundamentals, resume deep-dive & placement readiness", evaluationType: "ONE_ON_ONE", maxMarks: 0, minRequired: 0, obtainedMarks: 0, attemptsUsed: 0, maxAttempts: 2, statusText: "No" },
 ];
 
 type AppStatusOption =
@@ -723,15 +732,17 @@ export default function App() {
   const [studentApplyingTrack, setStudentApplyingTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
   const [trainingStages, setTrainingStages] = useState<TrainingStageScore[]>(INITIAL_TRAINING_STAGES);
   const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([
-    { activityId: "T1-DBMS-1", proofUrl: "https://www.hackerrank.com/certificates/sql-basic", completedDate: "2026-08-12", verifiedByIic: true },
-    { activityId: "T1-PDSA-2", proofUrl: "https://leetcode.com/u/iitm_bs_student", completedDate: "2026-09-04", verifiedByIic: true },
-    { activityId: "T1-SYS-1", proofUrl: "https://www.hackerrank.com/domains/shell", completedDate: "2026-09-19", verifiedByIic: true },
-    { activityId: "T1-CLD-1", proofUrl: "https://www.simplilearn.com/cloud-cert", completedDate: "2026-10-02", verifiedByIic: true },
+    { id: "ACT-201", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-DBMS-1", evidenceFileName: "HackerRank_SQL_Basic_Cert.pdf", evidenceFileType: "PDF", evidenceFileSize: "340 KB", proofUrl: "https://www.hackerrank.com/certificates/sql-basic", completedDate: "2026-08-12", reviewStatus: "APPROVED" },
+    { id: "ACT-202", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-PDSA-2", evidenceFileName: "LeetCode_25_Medium_Profile.jpg", evidenceFileType: "JPG", evidenceFileSize: "512 KB", proofUrl: "https://leetcode.com/u/iitm_bs_student", completedDate: "2026-09-04", reviewStatus: "APPROVED" },
+    { id: "ACT-203", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-SYS-1", evidenceFileName: "VMT1_Linux_Shell_Completion.pdf", evidenceFileType: "PDF", evidenceFileSize: "620 KB", proofUrl: "https://www.hackerrank.com/domains/shell", completedDate: "2026-09-19", reviewStatus: "APPROVED" },
+    { id: "ACT-204", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-CLD-1", evidenceFileName: "AWS_Cloud_Foundations_Cert.pdf", evidenceFileType: "PDF", evidenceFileSize: "480 KB", proofUrl: "https://www.simplilearn.com/cloud-cert", completedDate: "2026-10-02", reviewStatus: "APPROVED" },
   ]);
   const [selectedActivityToLog, setSelectedActivityToLog] = useState<string>("T22-KAG-1");
+  const [activityEvidenceFile, setActivityEvidenceFile] = useState<File | null>(null);
   const [activityProofUrl, setActivityProofUrl] = useState<string>("");
   const [activityCompletedDate, setActivityCompletedDate] = useState<string>("2026-11-15");
   const [activityAlert, setActivityAlert] = useState<string | null>(null);
+  const activityFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
@@ -1092,7 +1103,7 @@ export default function App() {
         return;
       }
       setAuthError(null);
-      setActiveTab("IDENTITY");
+      setActiveTab(selectedRole === "TRAINING_COORDINATOR" ? "TRAINING" : "IDENTITY");
       setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
       appendAudit(normalized, selectedRole, "USER_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
       return;
@@ -1995,7 +2006,7 @@ export default function App() {
 
     const validSubmittedIds = new Set(
       activitySubmissions
-        .filter((sub) => new Date(sub.completedDate) >= oneYearAgo)
+        .filter((sub) => sub.reviewStatus === "APPROVED" && new Date(sub.completedDate) >= oneYearAgo)
         .map((sub) => sub.activityId)
     );
 
@@ -2054,35 +2065,119 @@ export default function App() {
     };
   };
 
+  const handleActivityEvidenceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setActivityAlert(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const validExt = /\.(pdf|jpg|jpeg|png)$/i.test(file.name);
+    if (!validTypes.includes(file.type) && !validExt) {
+      setActivityAlert("Invalid file format: Please upload only a PDF or JPG/PNG certificate/screenshot as activity evidence.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setActivityAlert("Evidence file exceeds 5 MB limit. Please upload a compressed PDF or JPG.");
+      e.target.value = "";
+      return;
+    }
+    setActivityEvidenceFile(file);
+  };
+
   const handleLogActivityPoint = (e: React.FormEvent) => {
     e.preventDefault();
     setActivityAlert(null);
-    if (!activityProofUrl.trim()) {
-      setActivityAlert("Please provide a valid public credential / platform URL (HackerRank, LeetCode, Kaggle, GitHub, Exercism, or Certificate link).");
+    if (!activityEvidenceFile) {
+      setActivityAlert("Evidence Required: Please attach a PDF or JPG proof of completing this activity.");
       return;
     }
     const item = ACTIVITY_CATALOG.find((a) => a.id === selectedActivityToLog);
     if (!item) return;
 
+    const extLabel = activityEvidenceFile.name.split(".").pop()?.toUpperCase() || "PDF";
+    const sizeLabel = `${Math.max(1, Math.round(activityEvidenceFile.size / 1024))} KB`;
+
     setActivitySubmissions((prev) => {
       const filtered = prev.filter((s) => s.activityId !== item.id);
       return [
-        ...filtered,
         {
+          id: `ACT-${Math.floor(205 + Math.random() * 790)}`,
+          studentName: fullName || user?.name || "Student",
+          studentEmail: user?.email || "student@ds.study.iitm.ac.in",
           activityId: item.id,
-          proofUrl: activityProofUrl.trim(),
+          evidenceFileName: activityEvidenceFile.name,
+          evidenceFileType: extLabel,
+          evidenceFileSize: sizeLabel,
+          proofUrl: activityProofUrl.trim() || undefined,
           completedDate: activityCompletedDate || "2026-11-15",
-          verifiedByIic: true,
+          reviewStatus: "PENDING_COORDINATOR",
         },
+        ...filtered,
       ];
     });
+    setActivityEvidenceFile(null);
     setActivityProofUrl("");
+    if (activityFileInputRef.current) activityFileInputRef.current.value = "";
     appendAudit(
       user?.email || "student@ds.study.iitm.ac.in",
       user?.role || "STUDENT",
-      "ACTIVITY_POINTS_LOGGED",
-      `${item.title} (+${item.points} pts)`,
+      "ACTIVITY_EVIDENCE_SUBMITTED",
+      `${item.title} (${extLabel}) -> Awaiting Training Coordinator`,
       "SUCCESS"
+    );
+  };
+
+  const handleCoordinatorReviewActivity = (
+    submissionId: string,
+    decision: "APPROVED" | "REJECTED",
+    note?: string
+  ) => {
+    setActivitySubmissions((prev) =>
+      prev.map((sub) =>
+        sub.id === submissionId
+          ? {
+              ...sub,
+              reviewStatus: decision,
+              reviewerNote:
+                note ||
+                (decision === "APPROVED"
+                  ? "Evidence verified by IIC Training Coordinator"
+                  : "Evidence unclear or invalid — re-upload valid PDF/JPG"),
+            }
+          : sub
+      )
+    );
+    appendAudit(
+      user?.email || "coordinator@iitm.ac.in",
+      "TRAINING_COORDINATOR",
+      `ACTIVITY_${decision}`,
+      `Submission ${submissionId} marked ${decision}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleAttemptTrainingStage = (stageId: string) => {
+    setActivityAlert(null);
+    setTrainingStages((prev) =>
+      prev.map((st) => {
+        if (st.id !== stageId) return st;
+        if (st.attemptsUsed >= st.maxAttempts) return st;
+        const nextAttempt = st.attemptsUsed + 1;
+        if (st.evaluationType === "MARKS") {
+          const improvedScore = Math.min(st.maxMarks, Math.max(st.minRequired + 1, st.obtainedMarks + 2));
+          return {
+            ...st,
+            attemptsUsed: nextAttempt,
+            obtainedMarks: improvedScore,
+            statusText: improvedScore >= st.minRequired ? "PASSED" : "BELOW_CUTOFF",
+          };
+        }
+        return {
+          ...st,
+          attemptsUsed: nextAttempt,
+          statusText: "Hire",
+        };
+      })
     );
   };
 
@@ -2870,7 +2965,7 @@ export default function App() {
                 Select Role Context
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(["STUDENT", "RECRUITER", "EXAMINER", "ADMIN"] as Role[]).map((r) => (
+                {(["STUDENT", "RECRUITER", "EXAMINER", "TRAINING_COORDINATOR", "ADMIN"] as Role[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -3124,7 +3219,7 @@ export default function App() {
             {user.role === "ADMIN" ? (
               <>
                 <span className="text-xs text-slate-400 mr-1">Admin View:</span>
-                {(["ADMIN", "STUDENT", "RECRUITER", "EXAMINER"] as Role[]).map((r) => (
+                {(["ADMIN", "STUDENT", "RECRUITER", "EXAMINER", "TRAINING_COORDINATOR"] as Role[]).map((r) => (
                   <button
                     key={r}
                     onClick={() => handleRoleSwitch(r)}
@@ -3201,6 +3296,21 @@ export default function App() {
               >
                 <Building2 className="w-3.5 h-3.5" />
                 Opportunities & Application Status ({applications.length} Applied)
+              </button>
+            </>
+          ) : user.role === "TRAINING_COORDINATOR" ? (
+            <>
+              <button
+                onClick={() => setActiveTab("TRAINING")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "TRAINING"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Activity Evidence Verification & 3-Level Progress (
+                {activitySubmissions.filter((s) => s.reviewStatus === "PENDING_COORDINATOR").length} Pending)
               </button>
             </>
           ) : (
@@ -4364,6 +4474,27 @@ export default function App() {
                                       )}
                                     </div>
                                     <p className="text-[11px] text-slate-400 mt-1">{st.description}</p>
+                                    {st.evaluationType !== "ONE_ON_ONE" && (
+                                      <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                                        <span className="text-slate-400">
+                                          Attempts:{" "}
+                                          <strong className={st.attemptsUsed >= st.maxAttempts ? "text-amber-300" : "text-slate-200"}>
+                                            {st.attemptsUsed} / {st.maxAttempts}
+                                          </strong>
+                                        </span>
+                                        {st.attemptsUsed < st.maxAttempts ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAttemptTrainingStage(st.id)}
+                                            className="px-2 py-0.5 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 font-semibold"
+                                          >
+                                            Attempt ({st.maxAttempts - st.attemptsUsed} left)
+                                          </button>
+                                        ) : (
+                                          <span className="text-slate-500 font-semibold">Max 2 Attempts Used</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -4424,9 +4555,9 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Log Completed Activity Form */}
+                    {/* Submit Activity Evidence (PDF / JPG) for Training Coordinator Approval */}
                     <form onSubmit={handleLogActivityPoint} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs">
-                      <div className="md:col-span-5">
+                      <div className="md:col-span-4">
                         <label className="block text-slate-400 mb-1">Select IIC Activity (Table 1 / 2 / 3)</label>
                         <select
                           value={selectedActivityToLog}
@@ -4441,15 +4572,24 @@ export default function App() {
                         </select>
                       </div>
                       <div className="md:col-span-4">
-                        <label className="block text-slate-400 mb-1">Public Platform / Certificate URL</label>
+                        <label className="block text-slate-400 mb-1">Upload Evidence (PDF / JPG, max 5 MB)</label>
                         <input
-                          type="url"
-                          required
-                          value={activityProofUrl}
-                          onChange={(e) => setActivityProofUrl(e.target.value)}
-                          placeholder="https://kaggle.com/... or hackerrank.com/..."
-                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          ref={activityFileInputRef}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          onChange={handleActivityEvidenceFileChange}
+                          className="hidden"
+                          id="activity-evidence-upload"
                         />
+                        <label
+                          htmlFor="activity-evidence-upload"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-dashed border-slate-700 hover:border-indigo-500 text-slate-200 flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="truncate">
+                            {activityEvidenceFile ? activityEvidenceFile.name : "Choose PDF or JPG proof..."}
+                          </span>
+                          <span className="text-indigo-400 font-semibold ml-2 shrink-0">Browse</span>
+                        </label>
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-slate-400 mb-1">Completion Date</label>
@@ -4461,17 +4601,17 @@ export default function App() {
                           className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                         />
                       </div>
-                      <div className="md:col-span-1 flex items-end">
+                      <div className="md:col-span-2 flex items-end">
                         <button
                           type="submit"
                           className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
                         >
-                          Log
+                          Submit Proof
                         </button>
                       </div>
                     </form>
 
-                    {/* Activity Checklist Table */}
+                    {/* Activity Checklist & Coordinator Verification Status Table */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
@@ -4479,8 +4619,8 @@ export default function App() {
                             <th className="py-2 pr-3">Table</th>
                             <th className="py-2 px-3">Topic & Activity</th>
                             <th className="py-2 px-3">Points</th>
-                            <th className="py-2 px-3">Credential / Proof Link</th>
-                            <th className="py-2 pl-3">Status</th>
+                            <th className="py-2 px-3">Submitted PDF / JPG Evidence</th>
+                            <th className="py-2 pl-3">Coordinator Status</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/70">
@@ -4498,26 +4638,34 @@ export default function App() {
                                 <td className="py-2.5 px-3 font-bold text-emerald-300">+{act.points} pts</td>
                                 <td className="py-2.5 px-3 text-[11px]">
                                   {sub ? (
-                                    <a
-                                      href={sub.proofUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-indigo-400 hover:underline break-all"
-                                    >
-                                      {sub.proofUrl} ({sub.completedDate})
-                                    </a>
+                                    <div>
+                                      <span className="text-indigo-300 font-medium block">
+                                        {sub.evidenceFileName} ({sub.evidenceFileType} • {sub.evidenceFileSize})
+                                      </span>
+                                      <span className="text-slate-500">Completed: {sub.completedDate}</span>
+                                    </div>
                                   ) : (
                                     <span className="text-slate-500">{act.platformHint}</span>
                                   )}
                                 </td>
                                 <td className="py-2.5 pl-3">
                                   {sub ? (
-                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-semibold">
-                                      Earned (+{act.points})
-                                    </span>
+                                    sub.reviewStatus === "APPROVED" ? (
+                                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-semibold">
+                                        Approved (+{act.points} pts)
+                                      </span>
+                                    ) : sub.reviewStatus === "PENDING_COORDINATOR" ? (
+                                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-semibold">
+                                        Awaiting Coordinator
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 font-semibold">
+                                        Rejected — Re-upload
+                                      </span>
+                                    )
                                   ) : (
                                     <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                                      Pending
+                                      Not Submitted
                                     </span>
                                   )}
                                 </td>
@@ -4531,6 +4679,101 @@ export default function App() {
                 </div>
               );
             })()}
+            {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (
+              <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <UserCheck className="w-5 h-5 text-indigo-400" />
+                      Training Coordinator — Activity Evidence (PDF/JPG) Verification Queue
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Verify student-uploaded PDF/JPG certificates & screenshots (1-year validity). Approved points automatically unlock the 1-on-1 Examiner Session (25 pts Internship / 50 pts Placement).
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    {activitySubmissions.filter((s) => s.reviewStatus === "PENDING_COORDINATOR").length} Pending Verification
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                        <th className="py-2.5 pr-3">ID</th>
+                        <th className="py-2.5 px-3">Student</th>
+                        <th className="py-2.5 px-3">Activity & Points</th>
+                        <th className="py-2.5 px-3">Uploaded PDF / JPG Evidence</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 pl-3">Coordinator Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/70">
+                      {activitySubmissions.map((sub) => {
+                        const act = ACTIVITY_CATALOG.find((a) => a.id === sub.activityId);
+                        return (
+                          <tr key={sub.id}>
+                            <td className="py-3 pr-3 font-mono text-slate-300">{sub.id}</td>
+                            <td className="py-3 px-3">
+                              <span className="font-semibold text-white block">{sub.studentName}</span>
+                              <span className="text-[11px] text-slate-400">{sub.studentEmail}</span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="font-semibold text-slate-100 block">
+                                {act?.title || sub.activityId}
+                              </span>
+                              <span className="text-emerald-300 font-bold">
+                                +{act?.points || 0} Points ({act?.table.replace("_", " ")})
+                              </span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-indigo-300 font-mono text-[11px] block w-fit">
+                                {sub.evidenceFileName} ({sub.evidenceFileType} • {sub.evidenceFileSize})
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                Completed: {sub.completedDate}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-semibold ${
+                                  sub.reviewStatus === "APPROVED"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : sub.reviewStatus === "PENDING_COORDINATOR"
+                                    ? "bg-amber-500/15 text-amber-300"
+                                    : "bg-rose-500/15 text-rose-300"
+                                }`}
+                              >
+                                {sub.reviewStatus}
+                              </span>
+                            </td>
+                            <td className="py-3 pl-3">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCoordinatorReviewActivity(sub.id, "APPROVED")}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                                >
+                                  Approve (+{act?.points || 0})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCoordinatorReviewActivity(sub.id, "REJECTED")}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-semibold"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
