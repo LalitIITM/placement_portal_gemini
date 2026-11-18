@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.models import AuditLog
 from app.modules.audit.service import record_audit_event
-from app.modules.iam.models import RoleName
+from app.modules.iam.models import RoleName, User
 from app.modules.iam.security import CurrentPrincipal, require_roles
 from app.modules.placement.models import (
     InterviewMode,
@@ -62,13 +62,16 @@ class RespondOfferRequest(BaseModel):
 
 
 def _serialize_interview(
-    iv: InterviewSchedule, job: Optional[JobPosting] = None, student: Optional[Student] = None
+    iv: InterviewSchedule,
+    job: Optional[JobPosting] = None,
+    student: Optional[Student] = None,
+    user: Optional[User] = None,
 ) -> dict:
     return {
         "id": str(iv.id),
         "application_id": str(iv.application_id),
         "student_id": str(iv.student_id),
-        "student_name": student.full_name if student else None,
+        "student_name": user.full_name if user else (student.roll_number if student else None),
         "student_roll": student.roll_number if student else None,
         "job_id": str(iv.job_id),
         "company_name": job.company_name if job else None,
@@ -85,13 +88,15 @@ def _serialize_interview(
     }
 
 
-def _serialize_offer(offer: OfferLetter, student: Optional[Student] = None) -> dict:
+def _serialize_offer(
+    offer: OfferLetter, student: Optional[Student] = None, user: Optional[User] = None
+) -> dict:
     return {
         "id": str(offer.id),
         "offer_code": offer.offer_code,
         "application_id": str(offer.application_id),
         "student_id": str(offer.student_id),
-        "student_name": student.full_name if student else None,
+        "student_name": user.full_name if user else (student.roll_number if student else None),
         "student_roll": student.roll_number if student else None,
         "job_id": str(offer.job_id),
         "company_name": offer.company_name,
@@ -172,6 +177,11 @@ async def schedule_interview(
 
     job = (await db.execute(select(JobPosting).where(JobPosting.id == app_row.job_id))).scalar_one_or_none()
     student = (await db.execute(select(Student).where(Student.id == app_row.student_id))).scalar_one_or_none()
+    stu_user = (
+        (await db.execute(select(User).where(User.id == student.user_id))).scalar_one_or_none()
+        if student
+        else None
+    )
 
     await record_audit_event(
         db,
@@ -184,7 +194,7 @@ async def schedule_interview(
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    return _serialize_interview(interview, job, student)
+    return _serialize_interview(interview, job, student, stu_user)
 
 
 @router.get("/interviews")
@@ -215,7 +225,21 @@ async def list_interviews(
             await db.execute(select(Student).where(Student.id.in_({i.student_id for i in interviews})))
         ).scalars().all()
     }
-    return [_serialize_interview(iv, jobs.get(iv.job_id), students.get(iv.student_id)) for iv in interviews]
+    users = {
+        u.id: u
+        for u in (
+            await db.execute(select(User).where(User.id.in_({s.user_id for s in students.values()})))
+        ).scalars().all()
+    }
+    return [
+        _serialize_interview(
+            iv,
+            jobs.get(iv.job_id),
+            students.get(iv.student_id),
+            users.get(students[iv.student_id].user_id) if iv.student_id in students else None,
+        )
+        for iv in interviews
+    ]
 
 
 @router.patch("/interviews/{interview_id}")
@@ -262,7 +286,12 @@ async def update_interview(
 
     job = (await db.execute(select(JobPosting).where(JobPosting.id == interview.job_id))).scalar_one_or_none()
     student = (await db.execute(select(Student).where(Student.id == interview.student_id))).scalar_one_or_none()
-    return _serialize_interview(interview, job, student)
+    stu_user = (
+        (await db.execute(select(User).where(User.id == student.user_id))).scalar_one_or_none()
+        if student
+        else None
+    )
+    return _serialize_interview(interview, job, student, stu_user)
 
 
 @router.post("/offers", status_code=status.HTTP_201_CREATED)
@@ -286,6 +315,7 @@ async def issue_offer_letter(
 
     job = (await db.execute(select(JobPosting).where(JobPosting.id == app_row.job_id))).scalar_one()
     student = (await db.execute(select(Student).where(Student.id == app_row.student_id))).scalar_one()
+    stu_user = (await db.execute(select(User).where(User.id == student.user_id))).scalar_one_or_none()
 
     offer_code = f"OFR-2026-{uuid.uuid4().hex[:6].upper()}"
     offer = OfferLetter(
@@ -316,7 +346,7 @@ async def issue_offer_letter(
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    return _serialize_offer(offer, student)
+    return _serialize_offer(offer, student, stu_user)
 
 
 @router.get("/offers")
@@ -341,7 +371,20 @@ async def list_offers(
             await db.execute(select(Student).where(Student.id.in_({o.student_id for o in offers})))
         ).scalars().all()
     }
-    return [_serialize_offer(o, students.get(o.student_id)) for o in offers]
+    users = {
+        u.id: u
+        for u in (
+            await db.execute(select(User).where(User.id.in_({s.user_id for s in students.values()})))
+        ).scalars().all()
+    }
+    return [
+        _serialize_offer(
+            o,
+            students.get(o.student_id),
+            users.get(students[o.student_id].user_id) if o.student_id in students else None,
+        )
+        for o in offers
+    ]
 
 
 @router.post("/offers/{offer_id}/respond")
@@ -390,6 +433,8 @@ async def respond_to_offer(
                 detail=f"BRULE-35: You have already accepted a full-time offer from {existing_accepted_ft.company_name}.",
             )
 
+        student.is_placed = True
+
         # Auto-decline any other ISSUED full-time offers for this student
         other_issued = (
             await db.execute(
@@ -421,7 +466,7 @@ async def respond_to_offer(
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    return _serialize_offer(offer, student)
+    return _serialize_offer(offer, student, principal.user)
 
 
 @router.get("/analytics/overview")
