@@ -10,6 +10,9 @@ from app.modules.iam.router import router as iam_router
 from app.modules.iam.seed import ensure_base_seed
 from app.modules.student import models as student_models  # noqa: F401
 from app.modules.student.router import router as student_router
+from app.modules.training import models as training_models  # noqa: F401
+from app.modules.training.router import router as training_router
+from app.modules.training.seed import ensure_training_seed
 from app.shared.database import AsyncSessionLocal, Base, engine
 
 
@@ -19,13 +22,14 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as session:
         await ensure_base_seed(session)
+        await ensure_training_seed(session)
         await session.commit()
     yield
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -39,6 +43,7 @@ app.add_middleware(
 
 app.include_router(iam_router)
 app.include_router(student_router)
+app.include_router(training_router)
 
 
 @app.get("/health", tags=["System"])
