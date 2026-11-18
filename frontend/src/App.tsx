@@ -43,6 +43,7 @@ interface RegistrationRequestRecord {
   email: string;
   role: Exclude<Role, "ADMIN">;
   orgOrDept: string;
+  password: string;
   status: RegistrationApprovalStatus;
   submittedAt: string;
   reviewedBy?: string;
@@ -495,56 +496,63 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("SIGN_IN");
+  const [password, setPassword] = useState("123456");
   const [regFullName, setRegFullName] = useState("");
   const [regOrgOrDept, setRegOrgOrDept] = useState("");
   const [registrations, setRegistrations] = useState<RegistrationRequestRecord[]>([
     {
       id: "REG-101",
-      fullName: "Aarav Sharma",
-      email: "22f3001234@ds.study.iitm.ac.in",
+      fullName: "Test Student (22F3001013)",
+      email: "22f3001013@ds.study.iitm.ac.in",
       role: "STUDENT",
-      orgOrDept: "BS Data Science • Roll 22F3001234",
+      orgOrDept: "BS Data Science • Roll 22F3001013",
+      password: "123456",
       status: "APPROVED",
       submittedAt: "2026-11-10 09:15 IST",
       reviewedBy: "placement.admin@iitm.ac.in",
     },
     {
       id: "REG-102",
-      fullName: "Neha Kulkarni",
-      email: "neha.kulkarni@fractal.ai",
+      fullName: "Shyam (Viva Examiner)",
+      email: "shyam@ds.iitm.ac.in",
+      role: "EXAMINER",
+      orgOrDept: "Technical Viva & Assessment Panel",
+      password: "123456",
+      status: "APPROVED",
+      submittedAt: "2026-11-11 11:00 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
+      id: "REG-103",
+      fullName: "Ricoh India HR",
+      email: "hr@ricoh.in",
       role: "RECRUITER",
-      orgOrDept: "Fractal Analytics • Talent Acquisition Lead",
+      orgOrDept: "Ricoh India • Talent Acquisition",
+      password: "123456",
       status: "APPROVED",
       submittedAt: "2026-11-11 14:20 IST",
       reviewedBy: "placement.admin@iitm.ac.in",
     },
     {
-      id: "REG-103",
-      fullName: "Dr. Meera Subramanian",
-      email: "meera.subramanian@study.iitm.ac.in",
-      role: "EXAMINER",
-      orgOrDept: "Data Science & AI Viva Panel",
+      id: "REG-104",
+      fullName: "Aarav Sharma",
+      email: "22f3001234@ds.study.iitm.ac.in",
+      role: "STUDENT",
+      orgOrDept: "BS Data Science • Roll 22F3001234",
+      password: "123456",
       status: "APPROVED",
-      submittedAt: "2026-11-12 11:00 IST",
+      submittedAt: "2026-11-12 09:30 IST",
       reviewedBy: "placement.admin@iitm.ac.in",
     },
     {
-      id: "REG-104",
+      id: "REG-105",
       fullName: "Rohan Deshmukh",
       email: "23f1004512@ds.study.iitm.ac.in",
       role: "STUDENT",
       orgOrDept: "BS Data Science • Roll 23F1004512",
+      password: "123456",
       status: "PENDING",
       submittedAt: "2026-11-18 10:05 IST",
-    },
-    {
-      id: "REG-105",
-      fullName: "Prof. Karthik Narayanan",
-      email: "karthik.viva@study.iitm.ac.in",
-      role: "EXAMINER",
-      orgOrDept: "Software Systems & Backend Architecture Panel",
-      status: "PENDING",
-      submittedAt: "2026-11-18 11:40 IST",
     },
   ]);
   const [activeTab, setActiveTab] = useState<ActiveTab>("RECRUITMENT");
@@ -913,9 +921,20 @@ export default function App() {
         appendAudit(normalized, selectedRole, "LOGIN_REJECTED_ACCOUNT", "IAM Approval Gate", "BLOCKED");
         return;
       }
+      if (password !== matchedReg.password) {
+        setAuthError("Invalid password. Please verify your credentials.");
+        appendAudit(normalized, selectedRole, "LOGIN_BAD_PASSWORD", "IAM Credential Check", "BLOCKED");
+        return;
+      }
       setAuthError(null);
       setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
       appendAudit(normalized, selectedRole, "USER_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
+      return;
+    }
+
+    if (password !== "123456") {
+      setAuthError("Invalid Admin password. Please verify your credentials.");
+      appendAudit(normalized, "ADMIN", "ADMIN_BAD_PASSWORD", "IAM Credential Check", "BLOCKED");
       return;
     }
 
@@ -978,6 +997,7 @@ export default function App() {
       email: normalized,
       role: selectedRole,
       orgOrDept: cleanOrg,
+      password: password || "123456",
       status: "PENDING",
       submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
     };
@@ -1856,11 +1876,11 @@ export default function App() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={
                     selectedRole === "STUDENT"
-                      ? "22f3001234@ds.study.iitm.ac.in"
+                      ? "22f3001013@ds.study.iitm.ac.in"
                       : selectedRole === "RECRUITER"
-                      ? "neha.kulkarni@fractal.ai"
+                      ? "hr@ricoh.in"
                       : selectedRole === "EXAMINER"
-                      ? "meera.subramanian@study.iitm.ac.in"
+                      ? "shyam@ds.iitm.ac.in"
                       : "placement.admin@iitm.ac.in"
                   }
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
@@ -1908,6 +1928,42 @@ export default function App() {
                   />
                 </div>
               )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
+                    Password
+                  </label>
+                  {authMode === "SIGN_IN" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail(
+                          selectedRole === "STUDENT"
+                            ? "22f3001013@ds.study.iitm.ac.in"
+                            : selectedRole === "EXAMINER"
+                            ? "shyam@ds.iitm.ac.in"
+                            : selectedRole === "RECRUITER"
+                            ? "hr@ricoh.in"
+                            : "placement.admin@iitm.ac.in"
+                        );
+                        setPassword("123456");
+                        setAuthError(null);
+                      }}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
+                    >
+                      Fill Test {selectedRole}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password (default: 123456)"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
 
               {authNotice && (
                 <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">

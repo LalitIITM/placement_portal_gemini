@@ -31,6 +31,7 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     approval_status: Mapped[str] = mapped_column(String(32), default="APPROVED", nullable=False)
     organization_or_dept: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user_roles: Mapped[list["UserRole"]] = relationship(

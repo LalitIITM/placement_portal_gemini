@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.audit.service import list_audit_logs, record_audit_event
 from app.modules.iam.models import Role, RoleName, User, UserRole
+from app.modules.iam.seed import hash_password
 from app.modules.iam.security import (
     CurrentPrincipal,
     create_session_token,
@@ -27,12 +28,14 @@ SELF_REGISTERABLE_ROLES = {RoleName.STUDENT, RoleName.RECRUITER, RoleName.EXAMIN
 
 class LoginRequest(BaseModel):
     email: EmailStr
+    password: Optional[str] = None
     full_name: str = "IITM Candidate"
     role: RoleName = RoleName.STUDENT
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
+    password: str = Field(default="123456", min_length=4, max_length=128)
     full_name: str = Field(..., min_length=2, max_length=255)
     role: RoleName
     organization_or_dept: Optional[str] = Field(default=None, max_length=255)
@@ -113,6 +116,7 @@ async def register_account(
         is_active=False,
         approval_status="PENDING",
         organization_or_dept=payload.organization_or_dept.strip() if payload.organization_or_dept else None,
+        password_hash=hash_password(payload.password),
     )
     db.add(user)
     await db.flush()
@@ -269,6 +273,13 @@ async def sso_login(
         db.add(UserRole(user_id=user.id, role_id=role_obj.id, is_primary=True))
         await db.flush()
         user = (await db.execute(stmt)).scalar_one()
+
+    if payload.password is not None and user.password_hash:
+        if hash_password(payload.password) != user.password_hash:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid password. Please verify your credentials.",
+            )
 
     if user.approval_status == "PENDING" or not user.is_active:
         raise HTTPException(
