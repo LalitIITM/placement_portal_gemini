@@ -743,6 +743,9 @@ export default function App() {
   const [activityCompletedDate, setActivityCompletedDate] = useState<string>("2026-11-15");
   const [activityAlert, setActivityAlert] = useState<string | null>(null);
   const activityFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [coordTargetRoll, setCoordTargetRoll] = useState<string>("21F3001013");
+  const [coordFeedback, setCoordFeedback] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const coordCsvInputRef = useRef<HTMLInputElement | null>(null);
   const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
   const [yearsExp, setYearsExp] = useState("2.0");
   const [workDomain, setWorkDomain] = useState<WorkDomainOption>("DATA_SCIENCE");
@@ -2154,6 +2157,207 @@ export default function App() {
       `Submission ${submissionId} marked ${decision}`,
       "SUCCESS"
     );
+  };
+
+  const handleCoordinatorUpdateStageScore = (
+    stageId: string,
+    newMarksOrOutcome: string,
+    incrementAttempt: boolean
+  ) => {
+    setCoordFeedback(null);
+    const stage = trainingStages.find((s) => s.id === stageId);
+    if (!stage || stage.evaluationType === "ONE_ON_ONE") return;
+
+    if (incrementAttempt && stage.attemptsUsed >= stage.maxAttempts) {
+      setCoordFeedback({
+        type: "ERR",
+        text: `Blocked: ${stage.id} (${stage.title}) has already used ${stage.maxAttempts}/${stage.maxAttempts} attempts.`,
+      });
+      return;
+    }
+
+    const nextAttempt = incrementAttempt
+      ? Math.min(stage.maxAttempts, stage.attemptsUsed + 1)
+      : Math.max(1, stage.attemptsUsed);
+
+    if (stage.evaluationType === "MARKS") {
+      const parsed = Number(newMarksOrOutcome);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > stage.maxMarks) {
+        setCoordFeedback({
+          type: "ERR",
+          text: `Invalid marks for ${stage.id}: Enter a value between 0 and ${stage.maxMarks}.`,
+        });
+        return;
+      }
+      setTrainingStages((prev) =>
+        prev.map((s) =>
+          s.id === stageId
+            ? {
+                ...s,
+                obtainedMarks: parsed,
+                attemptsUsed: nextAttempt,
+                statusText: parsed >= s.minRequired ? "PASSED" : "BELOW_CUTOFF",
+              }
+            : s
+        )
+      );
+      setCoordFeedback({
+        type: "OK",
+        text: `Updated ${coordTargetRoll} • ${stage.id} (${stage.title}): ${parsed}/${stage.maxMarks} (Attempt ${nextAttempt}/${stage.maxAttempts}).`,
+      });
+      appendAudit(
+        user?.email || "coordinator@iitm.ac.in",
+        "TRAINING_COORDINATOR",
+        "TRAINING_STAGE_UPDATED",
+        `${coordTargetRoll} • ${stage.id}: ${parsed}/${stage.maxMarks} (Attempt ${nextAttempt}/2)`,
+        "SUCCESS"
+      );
+    } else if (stage.evaluationType === "AI_MOCK") {
+      const outcome = newMarksOrOutcome === "Hire" ? "Hire" : "No-Hire";
+      setTrainingStages((prev) =>
+        prev.map((s) =>
+          s.id === stageId
+            ? {
+                ...s,
+                attemptsUsed: nextAttempt,
+                statusText: outcome,
+              }
+            : s
+        )
+      );
+      setCoordFeedback({
+        type: "OK",
+        text: `Updated ${coordTargetRoll} • ${stage.id} (${stage.title}): ${outcome} (Attempt ${nextAttempt}/${stage.maxAttempts}).`,
+      });
+      appendAudit(
+        user?.email || "coordinator@iitm.ac.in",
+        "TRAINING_COORDINATOR",
+        "AI_MOCK_OUTCOME_UPDATED",
+        `${coordTargetRoll} • ${stage.id}: ${outcome} (Attempt ${nextAttempt}/2)`,
+        "SUCCESS"
+      );
+    }
+  };
+
+  const handleDownloadSampleTrainingCsv = () => {
+    const header = "roll_no,stage_id,attempt_no,score_or_outcome";
+    const sampleRows = [
+      `${coordTargetRoll},L1-S1,1,18`,
+      `${coordTargetRoll},L1-S2,1,17`,
+      `${coordTargetRoll},L1-S3,2,18`,
+      `${coordTargetRoll},L1-S4,1,36`,
+      `${coordTargetRoll},L1-S5,1,18`,
+      `${coordTargetRoll},L2-S1,1,16`,
+      `${coordTargetRoll},L2-S2,1,25`,
+      `${coordTargetRoll},L2-S3,1,24`,
+      `${coordTargetRoll},L3-S1,1,20`,
+      `${coordTargetRoll},L3-S2,1,Hire`,
+    ];
+    const blob = new Blob([[header, ...sampleRows].join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `iitm_training_scores_${coordTargetRoll}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBatchTrainingCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCoordFeedback(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      if (lines.length < 2) {
+        setCoordFeedback({ type: "ERR", text: "CSV file is empty. Include header and at least one score row." });
+        return;
+      }
+
+      const stageUpdates = new Map<string, { attemptNo: number; rawVal: string }>();
+      const errors: string[] = [];
+      let appliedCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",").map((c) => c.trim());
+        if (cols.length < 4) {
+          errors.push(`Row ${i + 1}: Expected 4 columns (roll_no,stage_id,attempt_no,score_or_outcome).`);
+          continue;
+        }
+        const [rollNo, stageId, attemptStr, rawVal] = cols;
+        const stage = trainingStages.find((s) => s.id === stageId.toUpperCase());
+        if (!stage || stage.evaluationType === "ONE_ON_ONE") {
+          errors.push(`Row ${i + 1}: Unknown or Examiner-only stage '${stageId}'.`);
+          continue;
+        }
+        const attemptNo = Number(attemptStr);
+        if (![1, 2].includes(attemptNo)) {
+          errors.push(`Row ${i + 1} (${rollNo}): Attempt ${attemptStr} violates max 2 attempts rule.`);
+          continue;
+        }
+        if (stage.evaluationType === "MARKS") {
+          const score = Number(rawVal);
+          if (Number.isNaN(score) || score < 0 || score > stage.maxMarks) {
+            errors.push(`Row ${i + 1} (${stage.id}): Score '${rawVal}' out of range 0-${stage.maxMarks}.`);
+            continue;
+          }
+        }
+        stageUpdates.set(stage.id, { attemptNo, rawVal });
+        appliedCount++;
+      }
+
+      if (stageUpdates.size > 0) {
+        setTrainingStages((prev) =>
+          prev.map((st) => {
+            const upd = stageUpdates.get(st.id);
+            if (!upd) return st;
+            if (st.evaluationType === "MARKS") {
+              const score = Number(upd.rawVal);
+              return {
+                ...st,
+                attemptsUsed: upd.attemptNo,
+                obtainedMarks: score,
+                statusText: score >= st.minRequired ? "PASSED" : "BELOW_CUTOFF",
+              };
+            }
+            const outcome = upd.rawVal.toLowerCase() === "hire" ? "Hire" : "No-Hire";
+            return {
+              ...st,
+              attemptsUsed: upd.attemptNo,
+              statusText: outcome,
+            };
+          })
+        );
+      }
+
+      appendAudit(
+        user?.email || "coordinator@iitm.ac.in",
+        "TRAINING_COORDINATOR",
+        "BATCH_TRAINING_CSV_UPLOADED",
+        `Applied ${appliedCount} stage updates (${errors.length} rejected)`,
+        appliedCount > 0 ? "SUCCESS" : "BLOCKED"
+      );
+
+      if (errors.length > 0) {
+        setCoordFeedback({
+          type: appliedCount > 0 ? "OK" : "ERR",
+          text: `Batch Processed: ${appliedCount} stages updated. ${errors.length} row(s) skipped: ${errors.slice(0, 2).join(" | ")}`,
+        });
+      } else {
+        setCoordFeedback({
+          type: "OK",
+          text: `Batch CSV Success: Updated ${appliedCount} stage records with 2-attempt validation. Student dashboard is now synced.`,
+        });
+      }
+      if (coordCsvInputRef.current) coordCsvInputRef.current.value = "";
+    };
+    reader.readAsText(file);
   };
 
   const handleAttemptTrainingStage = (stageId: string) => {
@@ -4773,6 +4977,224 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
+              const prog = computeTrainingAndActivityProgress();
+              return (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Award className="w-5 h-5 text-emerald-400" />
+                        Training Coordinator — 3-Level Marks & Batch CSV Updater (Single Source of Truth)
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Update Level 1 (80% cutoff), Level 2 (60% cutoff), and Level 3 Stage 1–2 scores individually or via LMS CSV upload. Enforces max 2 attempts per stage and syncs directly to the Student Dashboard.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadSampleTrainingCsv}
+                        className="px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200"
+                      >
+                        Download Sample CSV
+                      </button>
+                      <input
+                        ref={coordCsvInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={handleBatchTrainingCsvUpload}
+                        className="hidden"
+                        id="coord-batch-csv-upload"
+                      />
+                      <label
+                        htmlFor="coord-batch-csv-upload"
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload LMS Batch CSV
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Student Roll Selector & Live Level Cutoff Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Active Student Roll No.</label>
+                      <input
+                        type="text"
+                        value={coordTargetRoll}
+                        onChange={(e) => setCoordTargetRoll(e.target.value.toUpperCase())}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono font-semibold"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-slate-400">Level 1 Soft Skills (80% Cutoff)</span>
+                      <span className={`font-bold mt-0.5 ${prog.l1Passed ? "text-emerald-400" : "text-amber-300"}`}>
+                        {prog.l1Obt}/{prog.l1Max} ({prog.l1Pct.toFixed(1)}%) • {prog.l1Passed ? "PASSED" : "BELOW CUTOFF"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-slate-400">Level 2 Focus Finder (60% Cutoff)</span>
+                      <span className={`font-bold mt-0.5 ${prog.l2Passed ? "text-emerald-400" : "text-amber-300"}`}>
+                        {prog.l2Obt}/{prog.l2Max} ({prog.l2Pct.toFixed(1)}%) • {prog.l2Passed ? "PASSED" : "BELOW CUTOFF"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-slate-400">1-on-1 Examiner Gate Status</span>
+                      <span className={`font-bold mt-0.5 ${prog.eligibleForOneOnOne ? "text-emerald-400" : "text-amber-300"}`}>
+                        {prog.eligibleForOneOnOne
+                          ? "UNLOCKED FOR EXAMINER"
+                          : `LOCKED (${prog.earnedPointsForTrack}/${prog.requiredTotalPoints} Activity Pts)`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {coordFeedback && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs ${
+                        coordFeedback.type === "OK"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                      }`}
+                    >
+                      {coordFeedback.text}
+                    </div>
+                  )}
+
+                  {/* Stage-by-Stage Inline Score & Attempt Editor */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                          <th className="py-2.5 pr-3">Stage ID</th>
+                          <th className="py-2.5 px-3">Level & Activity</th>
+                          <th className="py-2.5 px-3">Cutoff / Max</th>
+                          <th className="py-2.5 px-3">Attempts (Max 2)</th>
+                          <th className="py-2.5 px-3">Current Score</th>
+                          <th className="py-2.5 pl-3">Coordinator Update</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/70">
+                        {trainingStages.map((st) => {
+                          const stageCleared =
+                            st.evaluationType === "MARKS"
+                              ? st.obtainedMarks >= st.minRequired
+                              : st.evaluationType === "AI_MOCK"
+                              ? st.statusText === "Hire"
+                              : prog.oneOnOneCleared;
+
+                          return (
+                            <tr key={st.id}>
+                              <td className="py-2.5 pr-3 font-mono text-indigo-300 font-semibold">{st.id}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="font-semibold text-slate-100 block">
+                                  Level {st.level} • {st.title}
+                                </span>
+                                <span className="text-[11px] text-slate-400">{st.description}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-300 font-mono">
+                                {st.evaluationType === "MARKS"
+                                  ? `Min ${st.minRequired} / ${st.maxMarks}`
+                                  : st.evaluationType === "AI_MOCK"
+                                  ? "Hire Required"
+                                  : "Examiner Sign-Off"}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded font-mono font-semibold ${
+                                    st.attemptsUsed >= st.maxAttempts
+                                      ? "bg-amber-500/15 text-amber-300"
+                                      : "bg-slate-800 text-slate-200"
+                                  }`}
+                                >
+                                  {st.attemptsUsed} / {st.maxAttempts}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={`font-bold ${
+                                    stageCleared ? "text-emerald-400" : "text-rose-400"
+                                  }`}
+                                >
+                                  {st.evaluationType === "MARKS"
+                                    ? `${st.obtainedMarks}/${st.maxMarks} (${stageCleared ? "PASS" : "FAIL"})`
+                                    : st.statusText}
+                                </span>
+                              </td>
+                              <td className="py-2.5 pl-3">
+                                {st.evaluationType === "ONE_ON_ONE" ? (
+                                  <span className="text-[11px] text-slate-500 italic">
+                                    Examiner Portal Only
+                                  </span>
+                                ) : st.evaluationType === "MARKS" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={st.maxMarks}
+                                      defaultValue={st.obtainedMarks}
+                                      id={`coord-input-${st.id}`}
+                                      className="w-16 px-2 py-1 rounded bg-slate-950 border border-slate-700 text-white font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const el = document.getElementById(
+                                          `coord-input-${st.id}`
+                                        ) as HTMLInputElement | null;
+                                        if (el) handleCoordinatorUpdateStageScore(st.id, el.value, false);
+                                      }}
+                                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                                      title="Save marks on current attempt"
+                                    >
+                                      Save
+                                    </button>
+                                    {st.attemptsUsed < st.maxAttempts && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const el = document.getElementById(
+                                            `coord-input-${st.id}`
+                                          ) as HTMLInputElement | null;
+                                          if (el) handleCoordinatorUpdateStageScore(st.id, el.value, true);
+                                        }}
+                                        className="px-2 py-1 rounded bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 font-semibold"
+                                        title="Record 2nd attempt marks"
+                                      >
+                                        +2nd Attempt
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCoordinatorUpdateStageScore(st.id, "Hire", false)}
+                                      className="px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 font-semibold"
+                                    >
+                                      Hire
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCoordinatorUpdateStageScore(st.id, "No-Hire", false)}
+                                      className="px-2 py-1 rounded bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-semibold"
+                                    >
+                                      No-Hire
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
