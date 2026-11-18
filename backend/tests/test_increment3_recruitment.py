@@ -91,13 +91,17 @@ async def test_eligibility_engine_and_application_lifecycle():
         )
         assert dup_apply.status_code == 409
 
-        # 6. Switch to RECRUITER role, post a new drive, and shortlist the applicant
-        rec_switch = await client.post(
-            "/api/v1/auth/switch-role",
-            json={"target_role": "RECRUITER"},
-            headers=stu_headers,
+        # 6. Authenticate as Recruiter, post a new drive, and shortlist the applicant
+        rec_login = await client.post(
+            "/api/v1/auth/sso-login",
+            json={
+                "email": "talent@flipkart.com",
+                "full_name": "Flipkart Campus Hiring",
+                "role": "RECRUITER",
+            },
         )
-        rec_headers = {"Authorization": f"Bearer {rec_switch.json()['access_token']}"}
+        assert rec_login.status_code == 200
+        rec_headers = {"Authorization": f"Bearer {rec_login.json()['access_token']}"}
 
         new_job = await client.post(
             "/api/v1/recruitment/jobs",
