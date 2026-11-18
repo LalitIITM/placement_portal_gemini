@@ -37,6 +37,31 @@ import {
 type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "ADMIN";
 type AuthMode = "SIGN_IN" | "SIGN_UP";
 type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+type StudentOnboardingStep = "AUTH" | "STUDENT_FORM" | "PAYMENT";
+
+interface StudentOnboardingDraft {
+  fullName: string;
+  email: string;
+  password: string;
+  personalEmail: string;
+  mobileNumber: string;
+  cgpa: string;
+  activeBacklogs: number;
+  programLevel: ProgramLevelOption;
+  hasDiplomaDataScience: boolean;
+  hasDiplomaProgramming: boolean;
+  applyingTrack: JobRoleTypeOption;
+  targetDomain: QuizDomainOption;
+  gender: string;
+  stateName: string;
+  category: CategoryOption;
+  degreeType: DegreeTypeOption;
+  isWorkingProf: boolean;
+  yearsExp: string;
+  workDomain: WorkDomainOption;
+  presentCompany: string;
+}
+
 interface RegistrationRequestRecord {
   id: string;
   fullName: string;
@@ -47,6 +72,7 @@ interface RegistrationRequestRecord {
   status: RegistrationApprovalStatus;
   submittedAt: string;
   reviewedBy?: string;
+  paymentStatus?: "PAID" | "NOT_REQUIRED";
 }
 type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
@@ -496,6 +522,34 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("SIGN_IN");
+  const [onboardingStep, setOnboardingStep] = useState<StudentOnboardingStep>("AUTH");
+  const [studentDraft, setStudentDraft] = useState<StudentOnboardingDraft>({
+    fullName: "",
+    email: "",
+    password: "",
+    personalEmail: "",
+    mobileNumber: "",
+    cgpa: "",
+    activeBacklogs: 0,
+    programLevel: "DIPLOMA",
+    hasDiplomaDataScience: false,
+    hasDiplomaProgramming: false,
+    applyingTrack: "INTERNSHIP",
+    targetDomain: "DATA_SCIENCE",
+    gender: "",
+    stateName: "",
+    category: "GENERAL",
+    degreeType: "STANDALONE",
+    isWorkingProf: false,
+    yearsExp: "",
+    workDomain: "DATA_SCIENCE",
+    presentCompany: "",
+  });
+  const [eligibilityVerdict, setEligibilityVerdict] = useState<{
+    eligible: boolean;
+    message: string;
+  } | null>(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [password, setPassword] = useState("123456");
   const [regFullName, setRegFullName] = useState("");
   const [regOrgOrDept, setRegOrgOrDept] = useState("");
@@ -1038,6 +1092,204 @@ export default function App() {
         "SUCCESS"
       );
     }
+  };
+
+  const evaluateStudentEligibility = (draft: StudentOnboardingDraft): { eligible: boolean; message: string } => {
+    if (draft.applyingTrack === "INTERNSHIP") {
+      if (draft.targetDomain === "DATA_SCIENCE") {
+        if (!draft.hasDiplomaDataScience) {
+          return {
+            eligible: false,
+            message:
+              "Eligibility Check Failed: For Data Science Internship, completing the Diploma in Data Science is mandatory.",
+          };
+        }
+        return {
+          eligible: true,
+          message:
+            "Eligible for Data Science Internship (Diploma in Data Science verified).",
+        };
+      }
+      if (draft.targetDomain === "SOFTWARE_DEVELOPMENT") {
+        if (!draft.hasDiplomaProgramming) {
+          return {
+            eligible: false,
+            message:
+              "Eligibility Check Failed: For Software Development Internship, completing the Diploma in Programming is mandatory.",
+          };
+        }
+        return {
+          eligible: true,
+          message:
+            "Eligible for Software Development Internship (Diploma in Programming verified).",
+        };
+      }
+    }
+
+    // FULL_TIME track requires minimum BSc Pass (BSC or BS)
+    if (draft.programLevel !== "BSC" && draft.programLevel !== "BS") {
+      return {
+        eligible: false,
+        message:
+          "Eligibility Check Failed: For Full-Time Placement, minimum BSc Pass (BSc / BS level) is mandatory.",
+      };
+    }
+
+    return {
+      eligible: true,
+      message: `Eligible for Full-Time Placement (${draft.programLevel} Pass verified • ${
+        draft.targetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"
+      } Track).`,
+    };
+  };
+
+  const handleStudentRegistrationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setEligibilityVerdict(null);
+
+    const normalizedEmail = studentDraft.email.trim().toLowerCase();
+    const cleanFullName = studentDraft.fullName.trim();
+    const cleanPersonalEmail = studentDraft.personalEmail.trim().toLowerCase();
+    const cleanMobile = studentDraft.mobileNumber.trim();
+    const cgpaNum = Number(studentDraft.cgpa);
+
+    if (
+      !cleanFullName ||
+      !normalizedEmail ||
+      !studentDraft.password.trim() ||
+      !cleanPersonalEmail ||
+      !cleanMobile ||
+      !studentDraft.cgpa.trim() ||
+      Number.isNaN(cgpaNum) ||
+      cgpaNum < 0 ||
+      cgpaNum > 10 ||
+      !studentDraft.gender ||
+      !studentDraft.stateName
+    ) {
+      setAuthError("All fields marked with * are mandatory. Please fill in every required field.");
+      return;
+    }
+
+    if (studentDraft.isWorkingProf) {
+      if (
+        !studentDraft.yearsExp.trim() ||
+        Number(studentDraft.yearsExp) <= 0 ||
+        !studentDraft.presentCompany.trim()
+      ) {
+        setAuthError(
+          "Working Professional details (Years of Experience, Work Domain, Present Company) are mandatory when 'Yes' is selected."
+        );
+        return;
+      }
+    }
+
+    const validDomain = ALLOWED_DOMAINS.some((d) => normalizedEmail.endsWith(d));
+    if (!validDomain) {
+      setAuthError(
+        "Institutional Email must end with @ds.study.iitm.ac.in or @es.study.iitm.ac.in."
+      );
+      appendAudit(normalizedEmail, "STUDENT", "STUDENT_REG_DOMAIN_REJECTED", "IAM Domain Guard", "BLOCKED");
+      return;
+    }
+
+    const existing = registrations.find(
+      (r) => r.email.toLowerCase() === normalizedEmail && r.role === "STUDENT"
+    );
+    if (existing) {
+      setAuthError(
+        `An account for ${normalizedEmail} is already registered. Please use Sign In instead.`
+      );
+      return;
+    }
+
+    const verdict = evaluateStudentEligibility(studentDraft);
+    setEligibilityVerdict(verdict);
+
+    if (!verdict.eligible) {
+      appendAudit(
+        normalizedEmail,
+        "STUDENT",
+        "ELIGIBILITY_CHECK_FAILED",
+        verdict.message,
+        "BLOCKED"
+      );
+      return;
+    }
+
+    appendAudit(
+      normalizedEmail,
+      "STUDENT",
+      "ELIGIBILITY_CHECK_PASSED",
+      verdict.message,
+      "SUCCESS"
+    );
+    setOnboardingStep("PAYMENT");
+  };
+
+  const handleConfirmPaymentAndEnterDashboard = () => {
+    setPaymentProcessing(true);
+    const normalizedEmail = studentDraft.email.trim().toLowerCase();
+    const cleanFullName = studentDraft.fullName.trim();
+    const rollCode = normalizedEmail.split("@")[0].toUpperCase();
+
+    const diplomasLabel = [
+      studentDraft.hasDiplomaDataScience ? "Diploma in Data Science" : null,
+      studentDraft.hasDiplomaProgramming ? "Diploma in Programming" : null,
+    ]
+      .filter(Boolean)
+      .join(" + ");
+
+    const newRecord: RegistrationRequestRecord = {
+      id: `REG-${101 + registrations.length}`,
+      fullName: cleanFullName,
+      email: normalizedEmail,
+      role: "STUDENT",
+      orgOrDept: `${studentDraft.programLevel} (${diplomasLabel || "Degree"}) • ${
+        studentDraft.applyingTrack
+      } • ${studentDraft.targetDomain}`,
+      password: studentDraft.password,
+      status: "APPROVED",
+      paymentStatus: "PAID",
+      submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
+      reviewedBy: "AUTO_ELIGIBILITY_&_PAYMENT_GATE",
+    };
+
+    setRegistrations((prev) => [newRecord, ...prev]);
+
+    // Hydrate student workspace profile states so dashboard reflects registration immediately
+    setFullName(cleanFullName);
+    setPersonalEmail(studentDraft.personalEmail.trim().toLowerCase());
+    setMobileNumber(studentDraft.mobileNumber.trim());
+    setCgpaInput(studentDraft.cgpa);
+    setActiveBacklogs(studentDraft.activeBacklogs);
+    setProgramLevel(studentDraft.programLevel);
+    setGender(studentDraft.gender);
+    setStateName(studentDraft.stateName);
+    setCategory(studentDraft.category);
+    setDegreeType(studentDraft.degreeType);
+    setIsWorkingProf(studentDraft.isWorkingProf);
+    setYearsExp(studentDraft.yearsExp);
+    setWorkDomain(studentDraft.workDomain);
+    setPresentCompany(studentDraft.presentCompany);
+
+    appendAudit(
+      normalizedEmail,
+      "STUDENT",
+      "REGISTRATION_PAYMENT_CONFIRMED",
+      `${newRecord.id} (${rollCode}) -> Payment Confirmed & Dashboard Unlocked`,
+      "SUCCESS"
+    );
+
+    setPaymentProcessing(false);
+    setOnboardingStep("AUTH");
+    setAuthMode("SIGN_IN");
+    setActiveTab("IDENTITY");
+    setUser({
+      email: normalizedEmail,
+      role: "STUDENT",
+      name: cleanFullName,
+    });
   };
 
   const handleRoleSwitch = (nextRole: Role) => {
@@ -1756,6 +2008,542 @@ export default function App() {
   };
 
   if (!user) {
+    if (onboardingStep === "STUDENT_FORM") {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-2">
+                  <GraduationCap className="w-4 h-4" />
+                  Step 1 of 2 • Student Registration & Eligibility Verification
+                </div>
+                <h1 className="text-xl font-bold text-white">New Student Registration</h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  All fields marked with <span className="text-rose-400 font-bold">*</span> are
+                  mandatory. Your domain & degree eligibility will be verified upon submission.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnboardingStep("AUTH");
+                  setAuthMode("SIGN_IN");
+                  setAuthError(null);
+                  setEligibilityVerdict(null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:border-slate-700"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+
+            {authError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {eligibilityVerdict && !eligibilityVerdict.eligible && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs space-y-1.5">
+                <div className="font-semibold flex items-center gap-2 text-amber-300">
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  Eligibility Requirement Not Met
+                </div>
+                <p>{eligibilityVerdict.message}</p>
+                <p className="text-[11px] text-amber-300/80">
+                  Rule: Internship requires minimum 1 Diploma in the exact chosen domain (Diploma in
+                  Data Science for Data Science; Diploma in Programming for Software Development).
+                  Full-Time placement requires minimum BSc Pass.
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={handleStudentRegistrationSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Full Name <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={studentDraft.fullName}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, fullName: e.target.value })}
+                    placeholder="e.g., Ananya Krishnan"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    IITM Student Email <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={studentDraft.email}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, email: e.target.value })}
+                    placeholder="23f1002345@ds.study.iitm.ac.in"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Create Password <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={4}
+                    value={studentDraft.password}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, password: e.target.value })}
+                    placeholder="Minimum 4 characters"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Personal Email ID <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={studentDraft.personalEmail}
+                    onChange={(e) =>
+                      setStudentDraft({ ...studentDraft, personalEmail: e.target.value })
+                    }
+                    placeholder="ananya.personal@gmail.com"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Mobile Number <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={studentDraft.mobileNumber}
+                    onChange={(e) =>
+                      setStudentDraft({ ...studentDraft, mobileNumber: e.target.value })
+                    }
+                    placeholder="+91 9876543210"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Current CGPA <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    step="0.01"
+                    min="0"
+                    max="10"
+                    value={studentDraft.cgpa}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, cgpa: e.target.value })}
+                    placeholder="e.g., 8.45"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Active Backlogs <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="10"
+                    value={studentDraft.activeBacklogs}
+                    onChange={(e) =>
+                      setStudentDraft({ ...studentDraft, activeBacklogs: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Gender <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={studentDraft.gender}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, gender: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    State <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={studentDraft.stateName}
+                    onChange={(e) => setStudentDraft({ ...studentDraft, stateName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  >
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Category <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={studentDraft.category}
+                    onChange={(e) =>
+                      setStudentDraft({ ...studentDraft, category: e.target.value as CategoryOption })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  >
+                    <option value="GENERAL">General</option>
+                    <option value="OBC">OBC</option>
+                    <option value="OBC_NCL">OBC-NCL</option>
+                    <option value="SC_ST">SC/ST</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Degree Type <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={studentDraft.degreeType}
+                    onChange={(e) =>
+                      setStudentDraft({
+                        ...studentDraft,
+                        degreeType: e.target.value as DegreeTypeOption,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                  >
+                    <option value="STANDALONE">Standalone</option>
+                    <option value="DUAL_DEGREE">Dual Degree</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Academic Standing, Diplomas & Placement Track (Used for Mandatory Eligibility Gate) */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-indigo-500/30 space-y-3">
+                <div className="font-semibold text-indigo-300 flex items-center gap-1.5">
+                  <Award className="w-4 h-4" />
+                  Academic Qualification & Track Eligibility <span className="text-rose-400">*</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1">
+                      Current Program Level <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={studentDraft.programLevel}
+                      onChange={(e) =>
+                        setStudentDraft({
+                          ...studentDraft,
+                          programLevel: e.target.value as ProgramLevelOption,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                    >
+                      <option value="FOUNDATION">Foundation</option>
+                      <option value="DIPLOMA">Diploma</option>
+                      <option value="BSC">BSc Pass</option>
+                      <option value="BS">BS Level</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1">
+                      Applying For <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={studentDraft.applyingTrack}
+                      onChange={(e) =>
+                        setStudentDraft({
+                          ...studentDraft,
+                          applyingTrack: e.target.value as JobRoleTypeOption,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                    >
+                      <option value="INTERNSHIP">Internship (Min 1 Domain Diploma)</option>
+                      <option value="FULL_TIME">Full-Time Placement (Min BSc Pass)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1">
+                      Target Domain <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={studentDraft.targetDomain}
+                      onChange={(e) =>
+                        setStudentDraft({
+                          ...studentDraft,
+                          targetDomain: e.target.value as QuizDomainOption,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                    >
+                      <option value="DATA_SCIENCE">Data Science</option>
+                      <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1.5">
+                    Completed IITM Diplomas <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
+                      <input
+                        type="checkbox"
+                        checked={studentDraft.hasDiplomaDataScience}
+                        onChange={(e) =>
+                          setStudentDraft({
+                            ...studentDraft,
+                            hasDiplomaDataScience: e.target.checked,
+                          })
+                        }
+                        className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-slate-200">Diploma in Data Science Completed</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
+                      <input
+                        type="checkbox"
+                        checked={studentDraft.hasDiplomaProgramming}
+                        onChange={(e) =>
+                          setStudentDraft({
+                            ...studentDraft,
+                            hasDiplomaProgramming: e.target.checked,
+                          })
+                        }
+                        className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-slate-200">Diploma in Programming Completed</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Working Professional Mandatory Section */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Briefcase className="w-4 h-4 text-indigo-400" />
+                    Working Professional? <span className="text-rose-400">*</span>
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStudentDraft({ ...studentDraft, isWorkingProf: true })}
+                      className={`px-3 py-1 rounded-lg font-semibold border transition ${
+                        studentDraft.isWorkingProf
+                          ? "bg-indigo-600 border-indigo-500 text-white"
+                          : "bg-slate-900 border-slate-800 text-slate-400"
+                      }`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentDraft({ ...studentDraft, isWorkingProf: false })}
+                      className={`px-3 py-1 rounded-lg font-semibold border transition ${
+                        !studentDraft.isWorkingProf
+                          ? "bg-indigo-600 border-indigo-500 text-white"
+                          : "bg-slate-900 border-slate-800 text-slate-400"
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+
+                {studentDraft.isWorkingProf && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
+                    <div>
+                      <label className="block text-slate-300 mb-1">
+                        Years of Experience <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        step="0.5"
+                        min="0.5"
+                        max="40"
+                        value={studentDraft.yearsExp}
+                        onChange={(e) =>
+                          setStudentDraft({ ...studentDraft, yearsExp: e.target.value })
+                        }
+                        placeholder="e.g., 2.5"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1">
+                        Work Domain <span className="text-rose-400">*</span>
+                      </label>
+                      <select
+                        required
+                        value={studentDraft.workDomain}
+                        onChange={(e) =>
+                          setStudentDraft({
+                            ...studentDraft,
+                            workDomain: e.target.value as WorkDomainOption,
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                      >
+                        <option value="DATA_SCIENCE">Data Science</option>
+                        <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                        <option value="OTHERS">Others</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1">
+                        Present Company <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={studentDraft.presentCompany}
+                        onChange={(e) =>
+                          setStudentDraft({ ...studentDraft, presentCompany: e.target.value })
+                        }
+                        placeholder="e.g., TCS / Fractal / Zoho"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Verify Eligibility & Proceed to Payment
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    if (onboardingStep === "PAYMENT") {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-2">
+                  <BadgeCheck className="w-4 h-4" />
+                  Step 2 of 2 • Eligibility Verified
+                </div>
+                <h1 className="text-xl font-bold text-white">Placement Portal Registration Fee</h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOnboardingStep("STUDENT_FORM")}
+                className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:border-slate-700"
+              >
+                ← Edit Form
+              </button>
+            </div>
+
+            {eligibilityVerdict && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-emerald-300">Eligibility Check Passed</p>
+                  <p className="mt-0.5">{eligibilityVerdict.message}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Candidate Name</span>
+                <span className="text-white font-semibold">{studentDraft.fullName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">IITM Email</span>
+                <span className="text-slate-200">{studentDraft.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Selected Track & Domain</span>
+                <span className="text-indigo-300 font-semibold">
+                  {studentDraft.applyingTrack} •{" "}
+                  {studentDraft.targetDomain === "DATA_SCIENCE"
+                    ? "Data Science"
+                    : "Software Development"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Program Level / CGPA</span>
+                <span className="text-slate-200">
+                  {studentDraft.programLevel} • {studentDraft.cgpa} CGPA
+                </span>
+              </div>
+            </div>
+
+            {/* Payment Gateway Placeholder */}
+            <div className="p-5 rounded-xl bg-indigo-950/30 border border-dashed border-indigo-500/40 text-center space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                Payment Gateway Integration Placeholder
+              </p>
+              <p className="text-xs text-slate-400">
+                Official IITM Payment Gateway link will be embedded here. Click below to simulate
+                payment confirmation and activate your Student Dashboard.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              disabled={paymentProcessing}
+              onClick={handleConfirmPaymentAndEnterDashboard}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {paymentProcessing
+                ? "Confirming Payment..."
+                : "Confirm Payment & Go to Student Dashboard"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
@@ -1817,9 +2605,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    setAuthMode("SIGN_UP");
                     setAuthError(null);
                     setAuthNotice(null);
+                    setEligibilityVerdict(null);
+                    if (selectedRole === "STUDENT") {
+                      setOnboardingStep("STUDENT_FORM");
+                    } else {
+                      setAuthMode("SIGN_UP");
+                    }
                   }}
                   className={`py-2 rounded-lg text-xs font-semibold transition ${
                     authMode === "SIGN_UP"
