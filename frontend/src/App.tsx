@@ -990,6 +990,7 @@ export default function App() {
         return;
       }
       setAuthError(null);
+      setActiveTab("IDENTITY");
       setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
       appendAudit(normalized, selectedRole, "USER_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
       return;
@@ -1010,6 +1011,7 @@ export default function App() {
     }
 
     setAuthError(null);
+    setActiveTab("GOVERNANCE");
     setUser({ email: normalized, role: "ADMIN", name: "Placement Admin" });
     appendAudit(normalized, "ADMIN", "ADMIN_LOGIN", "Sliding 30m Session (BRULE-03)", "SUCCESS");
   };
@@ -4707,7 +4709,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === "PLACEMENT" && (() => {
+        {activeTab === "PLACEMENT" && user.role !== "STUDENT" && (() => {
           const acceptedOffers = offers.filter((o) => o.status === "ACCEPTED");
           const ftOffers = offers.filter((o) => o.roleType === "FULL_TIME");
           const avgCtc = ftOffers.length
@@ -5098,7 +5100,7 @@ export default function App() {
           );
         })()}
 
-        {activeTab === "GOVERNANCE" && (
+        {activeTab === "GOVERNANCE" && user.role === "ADMIN" && (
           <div className="space-y-6">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
