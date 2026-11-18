@@ -5,6 +5,7 @@ import {
   Trash2,
   Plus,
   Lock,
+  Shield,
   UserCheck,
   AlertTriangle,
   CheckCircle2,
