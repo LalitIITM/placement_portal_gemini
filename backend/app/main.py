@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.modules.audit import models as audit_models  # noqa: F401
-from app.modules.audit.router import router as audit_router
 from app.modules.iam import models as iam_models  # noqa: F401
 from app.modules.iam.router import router as iam_router
 from app.modules.iam.seed import ensure_base_seed
@@ -50,7 +49,6 @@ app.include_router(iam_router)
 app.include_router(student_router)
 app.include_router(training_router)
 app.include_router(recruitment_router)
-app.include_router(audit_router)
 
 
 @app.get("/healthz", tags=["System"])
