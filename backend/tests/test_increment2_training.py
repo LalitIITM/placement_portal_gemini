@@ -51,6 +51,8 @@ async def test_full_student_registration_marksheet_and_social_handles():
                 "years_of_experience": "2.5",
                 "work_domain": "DATA_SCIENCE",
                 "present_company": "Fractal Analytics",
+                "work_location": "Bengaluru",
+                "current_ctc_lpa": "14.50",
             },
             headers=headers,
         )
