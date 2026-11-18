@@ -44,6 +44,7 @@ class AcademicStanding(str, enum.Enum):
 
 class StudentCategory(str, enum.Enum):
     GENERAL = "GENERAL"
+    GENERAL_EWS = "GENERAL_EWS"
     OBC = "OBC"
     OBC_NCL = "OBC_NCL"
     SC_ST = "SC_ST"

@@ -75,7 +75,7 @@ interface RegistrationRequestRecord {
   paymentStatus?: "PAID" | "NOT_REQUIRED";
 }
 type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
-type CategoryOption = "GENERAL" | "OBC" | "OBC_NCL" | "SC_ST";
+type CategoryOption = "GENERAL" | "GENERAL_EWS" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
 type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
@@ -2220,6 +2220,7 @@ export default function App() {
                     className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                   >
                     <option value="GENERAL">General</option>
+                    <option value="GENERAL_EWS">General-EWS</option>
                     <option value="OBC">OBC</option>
                     <option value="OBC_NCL">OBC-NCL</option>
                     <option value="SC_ST">SC/ST</option>
@@ -3440,6 +3441,7 @@ export default function App() {
                         className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                       >
                         <option value="GENERAL">General</option>
+                    <option value="GENERAL_EWS">General-EWS</option>
                         <option value="OBC">OBC</option>
                         <option value="OBC_NCL">OBC-NCL</option>
                         <option value="SC_ST">SC/ST</option>
