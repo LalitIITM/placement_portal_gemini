@@ -1078,9 +1078,9 @@ export default function App() {
       status: "SCHEDULED",
     };
     setInterviews((prev) => [created, ...prev]);
-    if (targetApp && (targetApp.status === "APPLIED" || targetApp.status === "SHORTLISTED")) {
+    if (targetApp && targetApp.status === "APPLIED") {
       setApplications((prev) =>
-        prev.map((a) => (a.id === targetApp.id ? { ...a, status: "INTERVIEWING" } : a))
+        prev.map((a) => (a.id === targetApp.id ? { ...a, status: "SHORTLISTED" } : a))
       );
     }
     setPlacementAlert({
