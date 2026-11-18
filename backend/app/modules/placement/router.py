@@ -61,7 +61,9 @@ class RespondOfferRequest(BaseModel):
     student_remarks: Optional[str] = Field(default=None, max_length=500)
 
 
-def _serialize_interview(iv: InterviewSchedule, job: Optional[JobPosting] = None, student: Optional[Student] = None) -> dict:
+def _serialize_interview(
+    iv: InterviewSchedule, job: Optional[JobPosting] = None, student: Optional[Student] = None
+) -> dict:
     return {
         "id": str(iv.id),
         "application_id": str(iv.application_id),
@@ -121,7 +123,7 @@ async def schedule_interview(
     if app_row.status == ApplicationStatus.REJECTED:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot schedule interview for application in {app_row.status.value} state.",
+            detail="Cannot schedule interview for application in REJECTED state.",
         )
 
     # BRULE-31: Prevent overlapping student interview slots within +/- 45 minutes
@@ -173,13 +175,12 @@ async def schedule_interview(
 
     await record_audit_event(
         db,
-        actor_user_id=principal.user.id,
-        actor_email=principal.user.email,
+        actor_id=principal.user.id,
         actor_role=principal.active_role.value,
         action="INTERVIEW_SCHEDULED",
-        resource_type="placement_interviews",
-        resource_id=str(interview.id),
-        details={"round": payload.round_type.value, "scheduled_at": target_start.isoformat()},
+        entity_type="placement_interviews",
+        entity_id=str(interview.id),
+        after_state={"round": payload.round_type.value, "scheduled_at": target_start.isoformat()},
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
@@ -249,13 +250,12 @@ async def update_interview(
 
     await record_audit_event(
         db,
-        actor_user_id=principal.user.id,
-        actor_email=principal.user.email,
+        actor_id=principal.user.id,
         actor_role=principal.active_role.value,
         action="INTERVIEW_STATUS_UPDATED",
-        resource_type="placement_interviews",
-        resource_id=str(interview.id),
-        details={"status": payload.status.value},
+        entity_type="placement_interviews",
+        entity_id=str(interview.id),
+        after_state={"status": payload.status.value},
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
@@ -307,13 +307,12 @@ async def issue_offer_letter(
 
     await record_audit_event(
         db,
-        actor_user_id=principal.user.id,
-        actor_email=principal.user.email,
+        actor_id=principal.user.id,
         actor_role=principal.active_role.value,
         action="OFFER_LETTER_ISSUED",
-        resource_type="placement_offers",
-        resource_id=str(offer.id),
-        details={"offer_code": offer_code, "ctc_lpa": float(payload.ctc_lpa)},
+        entity_type="placement_offers",
+        entity_id=str(offer.id),
+        after_state={"offer_code": offer_code, "ctc_lpa": float(payload.ctc_lpa)},
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
@@ -413,13 +412,12 @@ async def respond_to_offer(
 
     await record_audit_event(
         db,
-        actor_user_id=principal.user.id,
-        actor_email=principal.user.email,
+        actor_id=principal.user.id,
         actor_role=principal.active_role.value,
         action=f"OFFER_{payload.decision.value}",
-        resource_type="placement_offers",
-        resource_id=str(offer.id),
-        details={"offer_code": offer.offer_code, "company": offer.company_name},
+        entity_type="placement_offers",
+        entity_id=str(offer.id),
+        after_state={"offer_code": offer.offer_code, "company": offer.company_name},
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
@@ -463,11 +461,11 @@ async def get_placement_analytics(
         "audit_logs": [
             {
                 "id": str(a.id),
-                "actor_email": a.actor_email,
+                "actor_id": str(a.actor_id) if a.actor_id else None,
                 "actor_role": a.actor_role,
                 "action": a.action,
-                "resource_type": a.resource_type,
-                "resource_id": a.resource_id,
+                "entity_type": a.entity_type,
+                "entity_id": a.entity_id,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in recent_audits
