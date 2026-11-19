@@ -817,28 +817,12 @@ export default function App() {
   const [kaggleUsername, setKaggleUsername] = useState("aaravml");
   const [handlesSavedBanner, setHandlesSavedBanner] = useState<string | null>(null);
 
-  const [marksheet, setMarksheet] = useState<MarksheetRecord | null>({
-    fileName: "IITM_BS_Official_Scorecard.pdf",
-    driveUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view",
-    fileSize: "Google Drive",
-    cgpa: "8.74",
-    uploadedAt: "BS Portal PDF",
-  });
+  const [marksheet, setMarksheet] = useState<MarksheetRecord | null>(null);
   const [marksheetDriveUrl, setMarksheetDriveUrl] = useState<string>("");
   const [marksheetAlert, setMarksheetAlert] = useState<string | null>(null);
 
-  // Increment 1: Resume Vault (3 Google Drive Resume Links)
-  const [resumes, setResumes] = useState<ResumeItem[]>([
-    {
-      id: "res-1",
-      title: "SDE_Backend_FastAPI_2026.pdf",
-      targetRole: "Backend & Full-Stack Engineer",
-      driveUrl: "https://drive.google.com/file/d/195lHv9-2mK8qR7xPwN3tY6sW4zQ1cVbN8mL2kJ5hG9f/view",
-      fileSize: "Google Drive",
-      updatedAt: "08:00 IST",
-      isPrimary: true,
-    },
-  ]);
+  // Increment 1: Resume Vault (3 Google Drive Resume Links — isolated per student roll)
+  const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [newResumeTitle, setNewResumeTitle] = useState("");
   const [newResumeDriveUrl, setNewResumeDriveUrl] = useState("");
   const [newTarget, setNewTarget] = useState("");
@@ -1001,15 +985,29 @@ export default function App() {
     };
   }, [authToken, user?.role]);
 
-  // Hydrate persisted state from FastAPI + PostgreSQL on initial load & when active roll changes
+  const loadedRollRef = useRef<string | null>(null);
+
+  const resolveActiveStudentRoll = (): string => {
+    if (user?.role === "STUDENT" && user.email) {
+      return user.email.split("@")[0].trim().toUpperCase();
+    }
+    return (coordTargetRoll || "21F3001013").trim().toUpperCase();
+  };
+
+  // Hydrate roll-isolated training stages, activity submissions, resumes, and scorecard from PostgreSQL
   useEffect(() => {
     let cancelled = false;
-    const rollToFetch = (coordTargetRoll || (user?.email?.includes("@ds.study.iitm.ac.in") ? user.email.split("@")[0] : "") || "21F3001013").trim().toUpperCase();
+    const isStudentUser = user?.role === "STUDENT";
+    const rollToFetch = resolveActiveStudentRoll();
+    loadedRollRef.current = null;
+    setDbHydrated(false);
 
     (async () => {
       try {
         const res = await fetch(
-          `${API_BASE_URL}/api/v1/portal-state/bootstrap?student_roll=${encodeURIComponent(rollToFetch)}`
+          `${API_BASE_URL}/api/v1/portal-state/bootstrap?student_roll=${encodeURIComponent(
+            rollToFetch
+          )}&scope_student_only=${isStudentUser ? "true" : "false"}`
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -1037,15 +1035,15 @@ export default function App() {
         if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
           setAuditLogs(snap.auditLogs);
         }
-        if (Array.isArray(snap.resumes) && snap.resumes.length > 0) {
-          setResumes(snap.resumes);
-        }
-        if (snap.marksheet && typeof snap.marksheet === "object") {
-          setMarksheet(snap.marksheet);
-        }
+        setResumes(Array.isArray(snap.resumes) ? snap.resumes : []);
+        setMarksheet(snap.marksheet && typeof snap.marksheet === "object" ? snap.marksheet : null);
+        loadedRollRef.current = rollToFetch;
         setDbSyncStatus("SYNCED");
       } catch {
-        if (!cancelled) setDbSyncStatus("LOCAL_FALLBACK");
+        if (!cancelled) {
+          loadedRollRef.current = rollToFetch;
+          setDbSyncStatus("LOCAL_FALLBACK");
+        }
       } finally {
         if (!cancelled) setDbHydrated(true);
       }
@@ -1054,12 +1052,13 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [coordTargetRoll]);
+  }, [user?.email, user?.role, coordTargetRoll]);
 
-  // Write-through sync to PostgreSQL whenever core portal records change
+  // Write-through sync to PostgreSQL scoped strictly to loadedRollRef.current
   useEffect(() => {
     if (!dbHydrated) return;
-    const rollToSave = (coordTargetRoll || (user?.email?.includes("@ds.study.iitm.ac.in") ? user.email.split("@")[0] : "") || "21F3001013").trim().toUpperCase();
+    const rollToSave = resolveActiveStudentRoll();
+    if (loadedRollRef.current !== rollToSave) return;
     setDbSyncStatus("SYNCING");
 
     const timer = window.setTimeout(async () => {
@@ -1092,8 +1091,9 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [
     dbHydrated,
-    coordTargetRoll,
     user?.email,
+    user?.role,
+    coordTargetRoll,
     trainingStages,
     activitySubmissions,
     registrations,

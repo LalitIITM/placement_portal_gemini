@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.portal_state.models import (
@@ -15,18 +15,32 @@ from app.shared.database import get_db
 router = APIRouter(prefix="/api/v1/portal-state", tags=["Portal Persistence"])
 
 DEFAULT_STAGE_ROWS = [
-    {"stage_id": "L1-S1", "level": 1, "stage_num": 1, "title": "Placement Prep", "description": "Video-based communication training", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 17, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L1-S2", "level": 1, "stage_num": 2, "title": "Listening Comprehension I", "description": "Listen to audio and write a paragraph response via LMS", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 16, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L1-S3", "level": 1, "stage_num": 3, "title": "Listening Comprehension II", "description": "Listen and speak to answer given questions", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 16, "attempts_used": 2, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L1-S4", "level": 1, "stage_num": 4, "title": "Self-Introduction Video", "description": "Formally dressed video recording", "evaluation_type": "MARKS", "max_marks": 40, "min_required": 28, "obtained_marks": 34, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L1-S5", "level": 1, "stage_num": 5, "title": "Email Writing", "description": "Write formal/professional corporate emails", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 17, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L2-S1", "level": 2, "stage_num": 1, "title": "Behavioral Assessment", "description": "Scenario-based response & live training assessment", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 15, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L2-S2", "level": 2, "stage_num": 2, "title": "Self-Paced Aptitude Test", "description": "Analytical, quantitative, and logical tests", "evaluation_type": "MARKS", "max_marks": 30, "min_required": 21, "obtained_marks": 23, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L2-S3", "level": 2, "stage_num": 3, "title": "Project Presentation", "description": "Present a short-term project added in resume", "evaluation_type": "MARKS", "max_marks": 30, "min_required": 21, "obtained_marks": 22, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L3-S1", "level": 3, "stage_num": 1, "title": "Technical Comprehensive Test", "description": "Test on syllabus and industry-based concepts", "evaluation_type": "MARKS", "max_marks": 25, "min_required": 15, "obtained_marks": 18, "attempts_used": 1, "max_attempts": 2, "status_text": "PASSED"},
-    {"stage_id": "L3-S2", "level": 3, "stage_num": 2, "title": "Technical AI Mock Interview", "description": "Realistic, AI-evaluated interview simulation", "evaluation_type": "AI_MOCK", "max_marks": 0, "min_required": 0, "obtained_marks": 0, "attempts_used": 1, "max_attempts": 2, "status_text": "Hire"},
+    {"stage_id": "L1-S1", "level": 1, "stage_num": 1, "title": "Placement Prep", "description": "Video-based communication training", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L1-S2", "level": 1, "stage_num": 2, "title": "Listening Comprehension I", "description": "Listen to audio and write a paragraph response via LMS", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L1-S3", "level": 1, "stage_num": 3, "title": "Listening Comprehension II", "description": "Listen and speak to answer given questions", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L1-S4", "level": 1, "stage_num": 4, "title": "Self-Introduction Video", "description": "Formally dressed video recording", "evaluation_type": "MARKS", "max_marks": 40, "min_required": 28, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L1-S5", "level": 1, "stage_num": 5, "title": "Email Writing", "description": "Write formal/professional corporate emails", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L2-S1", "level": 2, "stage_num": 1, "title": "Behavioral Assessment", "description": "Scenario-based response & live training assessment", "evaluation_type": "MARKS", "max_marks": 20, "min_required": 14, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L2-S2", "level": 2, "stage_num": 2, "title": "Self-Paced Aptitude Test", "description": "Analytical, quantitative, and logical tests", "evaluation_type": "MARKS", "max_marks": 30, "min_required": 21, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L2-S3", "level": 2, "stage_num": 3, "title": "Project Presentation", "description": "Present a short-term project added in resume", "evaluation_type": "MARKS", "max_marks": 30, "min_required": 21, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L3-S1", "level": 3, "stage_num": 1, "title": "Technical Comprehensive Test", "description": "Test on syllabus and industry-based concepts", "evaluation_type": "MARKS", "max_marks": 25, "min_required": 15, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
+    {"stage_id": "L3-S2", "level": 3, "stage_num": 2, "title": "Technical AI Mock Interview", "description": "Realistic, AI-evaluated interview simulation", "evaluation_type": "AI_MOCK", "max_marks": 0, "min_required": 0, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "PENDING"},
     {"stage_id": "L3-S3", "level": 3, "stage_num": 3, "title": "1-on-1 Session with Examiner", "description": "Domain fundamentals, resume deep-dive & placement readiness", "evaluation_type": "ONE_ON_ONE", "max_marks": 0, "min_required": 0, "obtained_marks": 0, "attempts_used": 0, "max_attempts": 2, "status_text": "No"},
 ]
+
+DEMO_STAGE_OVERRIDES = {
+    "L1-S1": (17, 1, "PASSED"),
+    "L1-S2": (16, 1, "PASSED"),
+    "L1-S3": (16, 2, "PASSED"),
+    "L1-S4": (34, 1, "PASSED"),
+    "L1-S5": (17, 1, "PASSED"),
+    "L2-S1": (15, 1, "PASSED"),
+    "L2-S2": (23, 1, "PASSED"),
+    "L2-S3": (22, 1, "PASSED"),
+    "L3-S1": (18, 1, "PASSED"),
+    "L3-S2": (0, 1, "Hire"),
+    "L3-S3": (0, 0, "No"),
+}
 
 DEFAULT_ACTIVITIES = [
     {"id": "ACT-201", "student_name": "Aarav Sharma", "student_email": "22f3001234@ds.study.iitm.ac.in", "activity_id": "T1-DBMS-1", "evidence_file_name": "HackerRank_SQL_Basic_Cert.pdf", "evidence_file_type": "PDF", "evidence_file_size": "340 KB", "proof_url": "https://www.hackerrank.com/certificates/sql-basic", "completed_date": "2026-08-12", "review_status": "APPROVED", "reviewer_note": None},
@@ -82,8 +96,15 @@ async def _ensure_roll_stages(db: AsyncSession, roll: str) -> list[StudentTraini
         )
     ).scalars().all()
     if not rows:
+        is_demo_roll = normalized_roll in {"21F3001013", "22F3001234"}
         for item in DEFAULT_STAGE_ROWS:
-            db.add(StudentTrainingStageRecord(student_roll=normalized_roll, **item))
+            row_data = dict(item)
+            if is_demo_roll and item["stage_id"] in DEMO_STAGE_OVERRIDES:
+                marks, attempts, st = DEMO_STAGE_OVERRIDES[item["stage_id"]]
+                row_data["obtained_marks"] = marks
+                row_data["attempts_used"] = attempts
+                row_data["status_text"] = st
+            db.add(StudentTrainingStageRecord(student_roll=normalized_roll, **row_data))
         await db.flush()
         rows = (
             await db.execute(
@@ -95,38 +116,57 @@ async def _ensure_roll_stages(db: AsyncSession, roll: str) -> list[StudentTraini
     return list(rows)
 
 
-async def _ensure_activities(db: AsyncSession) -> list[ActivityPointSubmissionRecord]:
-    rows = (
-        await db.execute(
-            select(ActivityPointSubmissionRecord).order_by(ActivityPointSubmissionRecord.created_at.desc())
-        )
-    ).scalars().all()
-    if not rows:
+async def _ensure_activities(db: AsyncSession, roll: Optional[str] = None) -> list[ActivityPointSubmissionRecord]:
+    any_row = (await db.execute(select(ActivityPointSubmissionRecord).limit(1))).scalar_one_or_none()
+    if any_row is None:
         for item in DEFAULT_ACTIVITIES:
             db.add(ActivityPointSubmissionRecord(**item))
         await db.flush()
-        rows = (
-            await db.execute(
-                select(ActivityPointSubmissionRecord).order_by(ActivityPointSubmissionRecord.created_at.desc())
-            )
-        ).scalars().all()
+
+    stmt = select(ActivityPointSubmissionRecord).order_by(ActivityPointSubmissionRecord.created_at.desc())
+    if roll:
+        prefix = f"{roll.strip().lower()}@"
+        stmt = stmt.where(ActivityPointSubmissionRecord.student_email.ilike(f"{prefix}%"))
+
+    rows = (await db.execute(stmt)).scalars().all()
     return list(rows)
 
 
 @router.get("/bootstrap", response_model=PortalSyncPayload)
 async def get_portal_bootstrap_state(
     student_roll: str = "21F3001013",
+    scope_student_only: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> PortalSyncPayload:
-    """Fetches persisted 3-level stages, activity evidence submissions, and portal collections from PostgreSQL."""
+    """Fetches roll-isolated 3-level stages, activity evidence, resumes, scorecard, and global portal collections."""
     normalized_roll = student_roll.strip().upper() or "21F3001013"
     stage_rows = await _ensure_roll_stages(db, normalized_roll)
-    act_rows = await _ensure_activities(db)
-    snap_row = (
+    act_rows = await _ensure_activities(db, roll=normalized_roll if scope_student_only else None)
+
+    global_snap_row = (
         await db.execute(
             select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
         )
     ).scalar_one_or_none()
+    global_payload = dict(global_snap_row.payload) if global_snap_row else {}
+
+    # Strip any legacy global resumes/marksheet so each roll gets isolated documents
+    global_payload.pop("resumes", None)
+    global_payload.pop("marksheet", None)
+
+    roll_docs_key = f"STUDENT_DOCS::{normalized_roll}"
+    roll_docs_row = (
+        await db.execute(
+            select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == roll_docs_key)
+        )
+    ).scalar_one_or_none()
+
+    if roll_docs_row and isinstance(roll_docs_row.payload, dict):
+        global_payload["resumes"] = roll_docs_row.payload.get("resumes", [])
+        global_payload["marksheet"] = roll_docs_row.payload.get("marksheet", None)
+    else:
+        global_payload["resumes"] = []
+        global_payload["marksheet"] = None
 
     return PortalSyncPayload(
         studentRoll=normalized_roll,
@@ -163,7 +203,7 @@ async def get_portal_bootstrap_state(
             )
             for a in act_rows
         ],
-        snapshot=snap_row.payload if snap_row else {},
+        snapshot=global_payload,
     )
 
 
@@ -172,7 +212,7 @@ async def sync_portal_state(
     payload: PortalSyncPayload,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Persists 3-level training attempts (max 2 attempts enforced), activity submissions, and portal state."""
+    """Persists roll-isolated stages, resumes, scorecard, and upserts activity submissions in PostgreSQL."""
     normalized_roll = payload.studentRoll.strip().upper() or "21F3001013"
 
     if payload.trainingStages:
@@ -190,10 +230,9 @@ async def sync_portal_state(
                 rec.attempts_used = st.attemptsUsed
                 rec.status_text = st.statusText
 
-    if payload.activitySubmissions is not None:
-        await db.execute(delete(ActivityPointSubmissionRecord))
+    if payload.activitySubmissions:
         for sub in payload.activitySubmissions:
-            db.add(
+            await db.merge(
                 ActivityPointSubmissionRecord(
                     id=sub.id,
                     student_name=sub.studentName,
@@ -210,15 +249,36 @@ async def sync_portal_state(
             )
 
     if payload.snapshot:
+        snap_copy = dict(payload.snapshot)
+        roll_resumes = snap_copy.pop("resumes", None)
+        roll_marksheet = snap_copy.pop("marksheet", None)
+
+        # 1. Persist per-roll Resumes & IITM BS Scorecard under STUDENT_DOCS::<ROLL>
+        roll_docs_key = f"STUDENT_DOCS::{normalized_roll}"
+        roll_docs_row = (
+            await db.execute(
+                select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == roll_docs_key)
+            )
+        ).scalar_one_or_none()
+        roll_docs_payload = {
+            "resumes": roll_resumes if roll_resumes is not None else [],
+            "marksheet": roll_marksheet,
+        }
+        if roll_docs_row is None:
+            db.add(PortalStateSnapshot(scope_key=roll_docs_key, payload=roll_docs_payload))
+        else:
+            roll_docs_row.payload = roll_docs_payload
+
+        # 2. Persist shared marketplace collections under GLOBAL_PORTAL_STATE
         snap_row = (
             await db.execute(
                 select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
             )
         ).scalar_one_or_none()
         if snap_row is None:
-            db.add(PortalStateSnapshot(scope_key="GLOBAL_PORTAL_STATE", payload=payload.snapshot))
+            db.add(PortalStateSnapshot(scope_key="GLOBAL_PORTAL_STATE", payload=snap_copy))
         else:
-            snap_row.payload = payload.snapshot
+            snap_row.payload = snap_copy
 
     await db.flush()
     return {"status": "persisted", "student_roll": normalized_roll}
