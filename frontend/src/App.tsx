@@ -5933,6 +5933,91 @@ export default function App() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
+              {user.role === "EXAMINER" && (
+                <div className="p-5 rounded-2xl bg-slate-900/90 border border-indigo-500/30 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+                        Level 3 • Stage 3 — 1-on-1 Viva Examiner Console
+                      </span>
+                      <h2 className="text-lg font-bold text-slate-100 mt-0.5">
+                        Candidate Verification &amp; Viva Readiness Dossier
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Select a student roll number to inspect their 3-level readiness, BS scorecard, and resumes before recording the final viva verdict.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 font-medium">Candidate Roll:</label>
+                      <input
+                        type="text"
+                        value={coordTargetRoll}
+                        onChange={(e) => setCoordTargetRoll(e.target.value.toUpperCase())}
+                        placeholder="22F3001234"
+                        className="w-36 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 font-mono text-xs text-indigo-300 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-200">
+                        Documents on File • Roll <span className="font-mono text-indigo-300">{resolveActiveStudentRoll()}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Open Google Drive links inline without leaving the viva evaluation screen.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {marksheet ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDriveDocPreview({
+                              title: `${resolveActiveStudentRoll()} — IITM BS Official Scorecard`,
+                              subtitle: `Verified CGPA: ${marksheet.cgpa}`,
+                              url: marksheet.driveUrl,
+                            })
+                          }
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold"
+                        >
+                          Preview BS Scorecard (CGPA {marksheet.cgpa})
+                        </button>
+                      ) : (
+                        <span className="px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 text-xs">
+                          No BS Scorecard Linked
+                        </span>
+                      )}
+                      {resumes.length > 0 ? (
+                        resumes.map((resItem, rIdx) => (
+                          <button
+                            key={resItem.id}
+                            type="button"
+                            onClick={() =>
+                              setDriveDocPreview({
+                                title: `${resolveActiveStudentRoll()} — Resume #${rIdx + 1}: ${resItem.title}`,
+                                subtitle: `Target Role: ${resItem.targetRole}`,
+                                url: resItem.driveUrl,
+                              })
+                            }
+                            className="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs font-semibold"
+                          >
+                            Preview Resume #{rIdx + 1}
+                          </button>
+                        ))
+                      ) : (
+                        <span className="px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 text-xs">
+                          No Resumes Linked
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {user.role !== "EXAMINER" && (
+                <>
+
               <div className="lg:col-span-5 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -6316,12 +6401,14 @@ export default function App() {
 
             {/* Final Stage: Examiner Interview Evaluation */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                </>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2.5">
                   <ClipboardCheck className="w-5 h-5 text-indigo-400" />
                   <div>
                     <h2 className="font-semibold text-white">
-                      3. Final Stage: Examiner Interview & Placement Readiness Evaluation
+                      {user.role === "EXAMINER" ? "1-on-1 Viva & Placement Readiness Evaluation" : "3. Final Stage: Examiner Interview & Placement Readiness Evaluation"}
                     </h2>
                     <p className="text-xs text-slate-400">
                       Examiner panel evaluates observed skillsets, 1–5 competency ratings, readiness,
