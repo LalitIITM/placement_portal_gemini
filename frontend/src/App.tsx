@@ -1675,7 +1675,7 @@ export default function App() {
         REMOTE: "Remote",
         FLEXIBLE: "Flexible",
       };
-      cleanOrg = `${cleanCompany} (${companyTypeLabels[recruiterDraft.companyType]} • ${recruiterDraft.companySize}) • HQ: ${cleanHq} • Hiring: ${cleanHiringLocs} (${workModeLabels[recruiterDraft.workMode]}) • ${cleanDesig}`;
+      cleanOrg = `${cleanCompany} (${companyTypeLabels[recruiterDraft.companyType]} • ${recruiterDraft.companySize}) • HQ: ${cleanHq} • Hiring: ${cleanHiringLocs} (${workModeLabels[recruiterDraft.workMode]}) • ${hiringModeLabels[recruiterDraft.hiringMode]} • ${cleanDesig}`;
       var recruiterDetailsPayload: RecruiterOnboardingDetails | undefined = {
         ...recruiterDraft,
         mobileNumber: cleanMobile,
