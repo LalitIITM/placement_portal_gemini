@@ -971,7 +971,7 @@ export default function App() {
         setActiveTab(
           mappedRole === "ADMIN"
             ? "GOVERNANCE"
-            : mappedRole === "TRAINING_COORDINATOR"
+            : mappedRole === "TRAINING_COORDINATOR" || mappedRole === "EXAMINER"
             ? "TRAINING"
             : "IDENTITY"
         );
@@ -1401,7 +1401,7 @@ export default function App() {
         setActiveTab(
           resolvedRole === "ADMIN"
             ? "GOVERNANCE"
-            : resolvedRole === "TRAINING_COORDINATOR"
+            : resolvedRole === "TRAINING_COORDINATOR" || resolvedRole === "EXAMINER"
             ? "TRAINING"
             : "IDENTITY"
         );
@@ -1443,7 +1443,7 @@ export default function App() {
         return;
       }
       setAuthError(null);
-      setActiveTab(selectedRole === "TRAINING_COORDINATOR" ? "TRAINING" : "IDENTITY");
+      setActiveTab(selectedRole === "TRAINING_COORDINATOR" || selectedRole === "EXAMINER" ? "TRAINING" : "IDENTITY");
       setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
       appendAudit(normalized, selectedRole, "USER_LOGIN_LOCAL", "Offline Fallback Session", "SUCCESS");
       return;
@@ -4193,6 +4193,20 @@ export default function App() {
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Activity Evidence Verification & 3-Level Progress (
                 {activitySubmissions.filter((s) => s.reviewStatus === "PENDING_COORDINATOR").length} Pending)
+              </button>
+            </>
+          ) : user.role === "EXAMINER" ? (
+            <>
+              <button
+                onClick={() => setActiveTab("TRAINING")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "TRAINING"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                1-on-1 Viva &amp; Student Readiness Evaluation
               </button>
             </>
           ) : (
