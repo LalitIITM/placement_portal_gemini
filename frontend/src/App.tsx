@@ -85,9 +85,15 @@ interface RecruiterOnboardingDetails {
   mobileNumber: string;
   companyName: string;
   companyType: "PRODUCT" | "MNC_ENTERPRISE" | "STARTUP" | "CONSULTING_ANALYTICS" | "RESEARCH_PSU";
+  companySize: string;
+  foundedYear?: string;
   companyWebsite: string;
+  companyLinkedinUrl?: string;
   cinOrGstNumber?: string;
   headquartersLocation: string;
+  hiringLocations: string;
+  workMode: "HYBRID" | "ONSITE" | "REMOTE" | "FLEXIBLE";
+  companyOverview: string;
   designation: string;
   linkedinUrl: string;
   hiringMode: "INTERNSHIP" | "FULL_TIME" | "BOTH";
@@ -754,9 +760,15 @@ export default function App() {
     mobileNumber: "",
     companyName: "",
     companyType: "PRODUCT",
+    companySize: "251–1,000 employees",
+    foundedYear: "",
     companyWebsite: "",
+    companyLinkedinUrl: "",
     cinOrGstNumber: "",
     headquartersLocation: "",
+    hiringLocations: "",
+    workMode: "HYBRID",
+    companyOverview: "",
     designation: "",
     linkedinUrl: "",
     hiringMode: "BOTH",
@@ -1590,6 +1602,8 @@ export default function App() {
       const cleanCompany = recruiterDraft.companyName.trim();
       const cleanWebsite = recruiterDraft.companyWebsite.trim();
       const cleanHq = recruiterDraft.headquartersLocation.trim();
+      const cleanHiringLocs = recruiterDraft.hiringLocations.trim();
+      const cleanOverview = recruiterDraft.companyOverview.trim();
       const cleanDesig = recruiterDraft.designation.trim();
       const cleanLinkedin = recruiterDraft.linkedinUrl.trim();
       const cleanRoles = recruiterDraft.targetRoles.trim();
@@ -1603,13 +1617,15 @@ export default function App() {
         !cleanCompany ||
         !cleanWebsite ||
         !cleanHq ||
+        !cleanHiringLocs ||
+        !cleanOverview ||
         !cleanDesig ||
         !cleanLinkedin ||
         !cleanRoles ||
         !cleanComp
       ) {
         setAuthError(
-          "Please complete all mandatory Recruiter & Organization fields (Name, Official Work Email, Password, Mobile, Company Name, Website, HQ Location, Designation, LinkedIn URL, Target Roles, and Compensation Band)."
+          "Please complete all mandatory Company, Location, and Recruiter fields (Company Name, Size, Website, HQ Location, Hiring Locations, Company Overview, Designation, Mobile, LinkedIn URL, Target Roles, and Compensation Band)."
         );
         return;
       }
@@ -1653,14 +1669,24 @@ export default function App() {
         BOTH: "Internship + PPO + FTE",
       };
 
-      cleanOrg = `${cleanCompany} (${companyTypeLabels[recruiterDraft.companyType]}) • ${cleanDesig} • ${cleanHq} • ${hiringModeLabels[recruiterDraft.hiringMode]} (${recruiterDraft.expectedHeadcount})`;
+      const workModeLabels: Record<RecruiterOnboardingDetails["workMode"], string> = {
+        HYBRID: "Hybrid",
+        ONSITE: "On-Site",
+        REMOTE: "Remote",
+        FLEXIBLE: "Flexible",
+      };
+      cleanOrg = `${cleanCompany} (${companyTypeLabels[recruiterDraft.companyType]} • ${recruiterDraft.companySize}) • HQ: ${cleanHq} • Hiring: ${cleanHiringLocs} (${workModeLabels[recruiterDraft.workMode]}) • ${cleanDesig}`;
       var recruiterDetailsPayload: RecruiterOnboardingDetails | undefined = {
         ...recruiterDraft,
         mobileNumber: cleanMobile,
         companyName: cleanCompany,
+        foundedYear: (recruiterDraft.foundedYear || "").trim() || undefined,
         companyWebsite: cleanWebsite,
+        companyLinkedinUrl: (recruiterDraft.companyLinkedinUrl || "").trim() || undefined,
         cinOrGstNumber: (recruiterDraft.cinOrGstNumber || "").trim() || undefined,
         headquartersLocation: cleanHq,
+        hiringLocations: cleanHiringLocs,
+        companyOverview: cleanOverview,
         designation: cleanDesig,
         linkedinUrl: cleanLinkedin,
         targetRoles: cleanRoles,
@@ -4143,6 +4169,103 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Company Size *
+                      </label>
+                      <select
+                        value={recruiterDraft.companySize}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, companySize: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="1–50 employees">1–50 employees</option>
+                        <option value="51–250 employees">51–250 employees</option>
+                        <option value="251–1,000 employees">251–1,000 employees</option>
+                        <option value="1,001–10,000 employees">1,001–10,000 employees</option>
+                        <option value="10,000+ Enterprise">10,000+ Enterprise</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Year Founded (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={recruiterDraft.foundedYear || ""}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, foundedYear: e.target.value }))
+                        }
+                        placeholder="e.g., 1998"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Work Mode Policy *
+                      </label>
+                      <select
+                        value={recruiterDraft.workMode}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            workMode: e.target.value as RecruiterOnboardingDetails["workMode"],
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="HYBRID">Hybrid (Office + WFH)</option>
+                        <option value="ONSITE">On-Site / In-Office</option>
+                        <option value="REMOTE">Remote (India-wide)</option>
+                        <option value="FLEXIBLE">Flexible / Role-Dependent</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Headquarters City &amp; Country *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.headquartersLocation}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            headquartersLocation: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g., Kolkata / Bengaluru, India"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Hiring / Job Location(s) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.hiringLocations}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            hiringLocations: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g., Bengaluru, Chennai, Hyderabad, Pune"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <label className="block text-[11px] font-medium text-slate-300 mb-1">
@@ -4162,22 +4285,37 @@ export default function App() {
 
                     <div>
                       <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                        HQ / Primary Hiring City *
+                        Company LinkedIn Page (Optional)
                       </label>
                       <input
-                        type="text"
-                        required
-                        value={recruiterDraft.headquartersLocation}
+                        type="url"
+                        value={recruiterDraft.companyLinkedinUrl || ""}
                         onChange={(e) =>
                           setRecruiterDraft((prev) => ({
                             ...prev,
-                            headquartersLocation: e.target.value,
+                            companyLinkedinUrl: e.target.value,
                           }))
                         }
-                        placeholder="e.g., Bengaluru / Chennai / Remote"
+                        placeholder="https://www.linkedin.com/company/..."
                         className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      About the Company, Products &amp; Engineering Teams *
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      value={recruiterDraft.companyOverview}
+                      onChange={(e) =>
+                        setRecruiterDraft((prev) => ({ ...prev, companyOverview: e.target.value }))
+                      }
+                      placeholder="Describe your company's core business, technology stack, and teams hiring IITM BS students..."
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -7553,7 +7691,11 @@ export default function App() {
                                   {reg.recruiterProfileDetails.companyName} • {reg.recruiterProfileDetails.designation}
                                 </span>
                                 <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
-                                  {reg.recruiterProfileDetails.headquartersLocation}
+                                  {reg.recruiterProfileDetails.companySize}
+                                  {reg.recruiterProfileDetails.foundedYear ? ` • Est. ${reg.recruiterProfileDetails.foundedYear}` : ""}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-200 border border-cyan-500/30">
+                                  HQ: {reg.recruiterProfileDetails.headquartersLocation} • Hiring: {reg.recruiterProfileDetails.hiringLocations} ({reg.recruiterProfileDetails.workMode})
                                 </span>
                                 <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
                                   {reg.recruiterProfileDetails.hiringMode} ({reg.recruiterProfileDetails.expectedHeadcount})
@@ -7566,6 +7708,11 @@ export default function App() {
                                 <span className="text-slate-400">Target Roles:</span>{" "}
                                 {reg.recruiterProfileDetails.targetRoles}
                               </p>
+                              {reg.recruiterProfileDetails.companyOverview && (
+                                <p className="text-[11px] text-slate-300 italic">
+                                  &ldquo;{reg.recruiterProfileDetails.companyOverview}&rdquo;
+                                </p>
+                              )}
                               <p className="text-[11px] text-slate-400">
                                 Mobile: <span className="text-slate-200">{reg.recruiterProfileDetails.mobileNumber}</span>
                                 {reg.recruiterProfileDetails.cinOrGstNumber && (
