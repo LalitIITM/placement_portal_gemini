@@ -965,16 +965,18 @@ export default function App() {
         const rows = await res.json();
         if (cancelled || !Array.isArray(rows) || rows.length === 0) return;
         setRegistrations(
-          rows.map((r: Record<string, string>) => ({
-            id: r.user_id,
-            fullName: r.full_name,
-            email: r.email,
-            role: fromBackendRole(r.role),
-            orgOrDept: r.organization_or_dept || "IITM BS Portal",
-            password: "••••••••",
-            status: (r.approval_status as RegistrationApprovalStatus) || "PENDING",
-            submittedAt: r.created_at ? new Date(r.created_at).toLocaleString("en-IN") : "PostgreSQL",
-          }))
+          rows
+            .filter((r: Record<string, string>) => fromBackendRole(r.role) !== "ADMIN")
+            .map((r: Record<string, string>) => ({
+              id: r.user_id,
+              fullName: r.full_name,
+              email: r.email,
+              role: fromBackendRole(r.role) as Exclude<Role, "ADMIN">,
+              orgOrDept: r.organization_or_dept || "IITM BS Portal",
+              password: "••••••••",
+              status: (r.approval_status as RegistrationApprovalStatus) || "PENDING",
+              submittedAt: r.created_at ? new Date(r.created_at).toLocaleString("en-IN") : "PostgreSQL",
+            }))
         );
       } catch {
         // Retain snapshot fallback if offline
