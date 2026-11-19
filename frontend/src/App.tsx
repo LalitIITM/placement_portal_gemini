@@ -117,7 +117,7 @@ interface RegistrationRequestRecord {
   examinerProfileDetails?: ExaminerOnboardingDetails;
   recruiterProfileDetails?: RecruiterOnboardingDetails;
 }
-type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
+type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE" | "RECRUITER_COMPANY" | "RECRUITER_DRIVES";
 type CategoryOption = "GENERAL" | "GENERAL_EWS" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
@@ -849,6 +849,9 @@ export default function App() {
     },
   ]);
   const [activeTab, setActiveTab] = useState<ActiveTab>("RECRUITMENT");
+  const [editingRecruiterProfile, setEditingRecruiterProfile] = useState(false);
+  const [recruiterEditDraft, setRecruiterEditDraft] = useState<RecruiterOnboardingDetails | null>(null);
+
 
   // Increment 1: Complete Student Registration Dossier
   const [fullName, setFullName] = useState("Aarav Sharma");
@@ -1015,6 +1018,8 @@ export default function App() {
         setActiveTab(
           mappedRole === "ADMIN"
             ? "GOVERNANCE"
+            : mappedRole === "RECRUITER"
+            ? "RECRUITER_COMPANY"
             : mappedRole === "TRAINING_COORDINATOR" || mappedRole === "EXAMINER"
             ? "TRAINING"
             : "IDENTITY"
@@ -1445,6 +1450,8 @@ export default function App() {
         setActiveTab(
           resolvedRole === "ADMIN"
             ? "GOVERNANCE"
+            : resolvedRole === "RECRUITER"
+            ? "RECRUITER_COMPANY"
             : resolvedRole === "TRAINING_COORDINATOR" || resolvedRole === "EXAMINER"
             ? "TRAINING"
             : "IDENTITY"
@@ -1487,7 +1494,7 @@ export default function App() {
         return;
       }
       setAuthError(null);
-      setActiveTab(selectedRole === "TRAINING_COORDINATOR" || selectedRole === "EXAMINER" ? "TRAINING" : "IDENTITY");
+      setActiveTab(selectedRole === "RECRUITER" ? "RECRUITER_COMPANY" : selectedRole === "TRAINING_COORDINATOR" || selectedRole === "EXAMINER" ? "TRAINING" : "IDENTITY");
       setUser({ email: normalized, role: selectedRole, name: matchedReg.fullName });
       appendAudit(normalized, selectedRole, "USER_LOGIN_LOCAL", "Offline Fallback Session", "SUCCESS");
       return;
@@ -4714,6 +4721,44 @@ export default function App() {
                 1-on-1 Viva &amp; Student Readiness Evaluation
               </button>
             </>
+          ) : user.role === "RECRUITER" ? (
+            <>
+              <button
+                onClick={() => setActiveTab("RECRUITER_COMPANY")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "RECRUITER_COMPANY"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Company Profile &amp; Hiring Charter
+              </button>
+
+              <button
+                onClick={() => setActiveTab("RECRUITER_DRIVES")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "RECRUITER_DRIVES"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5" />
+                Job Drives &amp; Candidate Shortlisting ({jobs.length} Drives • {applications.length} Applicants)
+              </button>
+
+              <button
+                onClick={() => setActiveTab("PLACEMENT")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  activeTab === "PLACEMENT"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Interviews &amp; Offer Rollout ({interviews.length + offers.length})
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -4787,9 +4832,303 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {activeTab === "RECRUITMENT" && (
+        {activeTab === "RECRUITER_COMPANY" && user.role === "RECRUITER" && (() => {
+          const matchedRecReg = registrations.find(
+            (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+          );
+          const companyInfo: RecruiterOnboardingDetails = matchedRecReg?.recruiterProfileDetails || {
+            mobileNumber: "+91 98765 43210",
+            companyName: matchedRecReg?.orgOrDept?.split("(")[0]?.trim() || user.name,
+            companyType: "PRODUCT",
+            companySize: "251–1,000 employees",
+            foundedYear: "2015",
+            companyWebsite: "https://company.com",
+            companyLinkedinUrl: "https://www.linkedin.com",
+            cinOrGstNumber: "",
+            headquartersLocation: "Bengaluru, India",
+            hiringLocations: "Bengaluru, Chennai, Hyderabad, Pune",
+            workMode: "HYBRID",
+            companyOverview: "Partner employer hiring IITM BS Data Science & Electronic Systems graduates for software, ML, and analytics roles.",
+            designation: "University Talent Partner",
+            linkedinUrl: "https://www.linkedin.com",
+            hiringMode: "BOTH",
+            targetRoles: "Data Scientist, SDE-1, ML Engineer",
+            expectedHeadcount: "5–15 hires",
+            compensationRange: "₹12–18 LPA / ₹45,000/mo Stipend",
+            policyAccepted: true,
+          };
+
+          const activeDraft = recruiterEditDraft || companyInfo;
+
+          return (
+            <div className="space-y-6">
+              <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+                        Verified Employer Dossier • IITM BS Placement Cell
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                        {matchedRecReg?.status === "APPROVED" ? "Approved Employer" : "Active Recruiter"}
+                      </span>
+                    </div>
+                    <h2 className="text-xl font-bold text-white mt-1">
+                      {companyInfo.companyName}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {companyInfo.designation} • {user.name} ({user.email}) • {companyInfo.mobileNumber}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingRecruiterProfile) {
+                          setRecruiterEditDraft({ ...companyInfo });
+                          setEditingRecruiterProfile(true);
+                        } else {
+                          setEditingRecruiterProfile(false);
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200"
+                    >
+                      {editingRecruiterProfile ? "Cancel Editing" : "Edit Company & Location Profile"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("RECRUITER_DRIVES")}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white"
+                    >
+                      Manage Job Drives &amp; Shortlists →
+                    </button>
+                  </div>
+                </div>
+
+                {!editingRecruiterProfile ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">Headquarters</span>
+                        <span className="font-semibold text-slate-100 mt-0.5 block">
+                          {companyInfo.headquartersLocation}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">Hiring / Job Locations</span>
+                        <span className="font-semibold text-cyan-300 mt-0.5 block">
+                          {companyInfo.hiringLocations}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">Work Mode &amp; Company Size</span>
+                        <span className="font-semibold text-slate-100 mt-0.5 block">
+                          {companyInfo.workMode} • {companyInfo.companySize}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">Compensation &amp; Headcount</span>
+                        <span className="font-semibold text-emerald-300 mt-0.5 block">
+                          {companyInfo.compensationRange} ({companyInfo.expectedHeadcount})
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        About {companyInfo.companyName}
+                      </div>
+                      <p className="text-slate-200 leading-relaxed">
+                        {companyInfo.companyOverview}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px]">
+                        <span className="text-slate-400">
+                          Target Roles: <strong className="text-slate-200">{companyInfo.targetRoles}</strong>
+                        </span>
+                        {companyInfo.foundedYear && (
+                          <span className="text-slate-400">
+                            Founded: <strong className="text-slate-200">{companyInfo.foundedYear}</strong>
+                          </span>
+                        )}
+                        {companyInfo.cinOrGstNumber && (
+                          <span className="font-mono text-slate-400">
+                            CIN/GST: <strong className="text-slate-200">{companyInfo.cinOrGstNumber}</strong>
+                          </span>
+                        )}
+                        <a
+                          href={companyInfo.companyWebsite}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-400 hover:text-indigo-300 underline"
+                        >
+                          Company Website ↗
+                        </a>
+                        {companyInfo.companyLinkedinUrl && (
+                          <a
+                            href={companyInfo.companyLinkedinUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sky-400 hover:text-sky-300 underline"
+                          >
+                            Company LinkedIn ↗
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!recruiterEditDraft) return;
+                      setRegistrations((prev) =>
+                        prev.map((reg) =>
+                          reg.email.toLowerCase() === user.email.toLowerCase() && reg.role === "RECRUITER"
+                            ? {
+                                ...reg,
+                                orgOrDept: `${recruiterEditDraft.companyName} • HQ: ${recruiterEditDraft.headquartersLocation} • Hiring: ${recruiterEditDraft.hiringLocations} (${recruiterEditDraft.workMode}) • ${recruiterEditDraft.designation}`,
+                                recruiterProfileDetails: { ...recruiterEditDraft },
+                              }
+                            : reg
+                        )
+                      );
+                      appendAudit(
+                        user.email,
+                        "RECRUITER",
+                        "RECRUITER_COMPANY_PROFILE_UPDATED",
+                        `${recruiterEditDraft.companyName} (${recruiterEditDraft.hiringLocations})`,
+                        "SUCCESS"
+                      );
+                      setEditingRecruiterProfile(false);
+                    }}
+                    className="space-y-3 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Company Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={activeDraft.companyName}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({ ...activeDraft, companyName: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Headquarters City</label>
+                        <input
+                          type="text"
+                          required
+                          value={activeDraft.headquartersLocation}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({
+                              ...activeDraft,
+                              headquartersLocation: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Hiring / Job Locations</label>
+                        <input
+                          type="text"
+                          required
+                          value={activeDraft.hiringLocations}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({
+                              ...activeDraft,
+                              hiringLocations: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Work Mode</label>
+                        <select
+                          value={activeDraft.workMode}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({
+                              ...activeDraft,
+                              workMode: e.target.value as RecruiterOnboardingDetails["workMode"],
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        >
+                          <option value="HYBRID">Hybrid</option>
+                          <option value="ONSITE">On-Site</option>
+                          <option value="REMOTE">Remote</option>
+                          <option value="FLEXIBLE">Flexible</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Target Roles</label>
+                        <input
+                          type="text"
+                          required
+                          value={activeDraft.targetRoles}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({ ...activeDraft, targetRoles: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Compensation / Stipend Band</label>
+                        <input
+                          type="text"
+                          required
+                          value={activeDraft.compensationRange}
+                          onChange={(e) =>
+                            setRecruiterEditDraft({
+                              ...activeDraft,
+                              compensationRange: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">About the Company</label>
+                      <textarea
+                        rows={2}
+                        required
+                        value={activeDraft.companyOverview}
+                        onChange={(e) =>
+                          setRecruiterEditDraft({ ...activeDraft, companyOverview: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                      >
+                        Save Company Profile
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {(activeTab === "RECRUITMENT" || activeTab === "RECRUITER_DRIVES") && (
           <div className="space-y-8">
-            {/* Live Student Eligibility Context Strip */}
+            {/* Live Student Eligibility Context Strip (Student View Only) */}
+            {user.role === "STUDENT" && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-4 text-xs">
                 <div>
@@ -4845,6 +5184,7 @@ export default function App() {
                 </div>
               )}
             </div>
+            )}
 
             {jobAlert && (
               <div
