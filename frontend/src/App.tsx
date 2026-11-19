@@ -81,6 +81,22 @@ interface ExaminerOnboardingDetails {
   coiAccepted: boolean;
 }
 
+interface RecruiterOnboardingDetails {
+  mobileNumber: string;
+  companyName: string;
+  companyType: "PRODUCT" | "MNC_ENTERPRISE" | "STARTUP" | "CONSULTING_ANALYTICS" | "RESEARCH_PSU";
+  companyWebsite: string;
+  cinOrGstNumber?: string;
+  headquartersLocation: string;
+  designation: string;
+  linkedinUrl: string;
+  hiringMode: "INTERNSHIP" | "FULL_TIME" | "BOTH";
+  targetRoles: string;
+  expectedHeadcount: string;
+  compensationRange: string;
+  policyAccepted: boolean;
+}
+
 interface RegistrationRequestRecord {
   id: string;
   fullName: string;
@@ -93,6 +109,7 @@ interface RegistrationRequestRecord {
   reviewedBy?: string;
   paymentStatus?: "PAID" | "NOT_REQUIRED";
   examinerProfileDetails?: ExaminerOnboardingDetails;
+  recruiterProfileDetails?: RecruiterOnboardingDetails;
 }
 type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "GENERAL_EWS" | "OBC" | "OBC_NCL" | "SC_ST";
@@ -733,6 +750,21 @@ export default function App() {
   const [password, setPassword] = useState("123456");
   const [regFullName, setRegFullName] = useState("");
   const [regOrgOrDept, setRegOrgOrDept] = useState("");
+  const [recruiterDraft, setRecruiterDraft] = useState<RecruiterOnboardingDetails>({
+    mobileNumber: "",
+    companyName: "",
+    companyType: "PRODUCT",
+    companyWebsite: "",
+    cinOrGstNumber: "",
+    headquartersLocation: "",
+    designation: "",
+    linkedinUrl: "",
+    hiringMode: "BOTH",
+    targetRoles: "",
+    expectedHeadcount: "1–5 hires",
+    compensationRange: "",
+    policyAccepted: false,
+  });
   const [examinerDraft, setExaminerDraft] = useState<ExaminerOnboardingDetails>({
     mobileNumber: "",
     category: "INDUSTRY_MENTOR",
@@ -1553,6 +1585,87 @@ export default function App() {
         specializations: cleanSpecs,
         cvDriveUrl: normalizedCvUrl,
       };
+    } else if (selectedRole === "RECRUITER") {
+      const cleanMobile = recruiterDraft.mobileNumber.trim();
+      const cleanCompany = recruiterDraft.companyName.trim();
+      const cleanWebsite = recruiterDraft.companyWebsite.trim();
+      const cleanHq = recruiterDraft.headquartersLocation.trim();
+      const cleanDesig = recruiterDraft.designation.trim();
+      const cleanLinkedin = recruiterDraft.linkedinUrl.trim();
+      const cleanRoles = recruiterDraft.targetRoles.trim();
+      const cleanComp = recruiterDraft.compensationRange.trim();
+
+      if (
+        !cleanName ||
+        !normalized ||
+        !password.trim() ||
+        !cleanMobile ||
+        !cleanCompany ||
+        !cleanWebsite ||
+        !cleanHq ||
+        !cleanDesig ||
+        !cleanLinkedin ||
+        !cleanRoles ||
+        !cleanComp
+      ) {
+        setAuthError(
+          "Please complete all mandatory Recruiter & Organization fields (Name, Official Work Email, Password, Mobile, Company Name, Website, HQ Location, Designation, LinkedIn URL, Target Roles, and Compensation Band)."
+        );
+        return;
+      }
+
+      const personalDomains = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "rediffmail.com"];
+      const emailDomain = normalized.split("@")[1] || "";
+      if (personalDomains.includes(emailDomain)) {
+        setAuthError(
+          "Corporate Domain Required: Please register using your official company work email (not @gmail.com / @yahoo.com / @outlook.com)."
+        );
+        return;
+      }
+
+      if (!cleanLinkedin.toLowerCase().includes("linkedin.com")) {
+        setAuthError("Please enter a valid LinkedIn profile URL (https://www.linkedin.com/in/...).");
+        return;
+      }
+
+      if (!/^https?:\/\//i.test(cleanWebsite)) {
+        setAuthError("Please enter a valid Company Website URL starting with https:// or http://.");
+        return;
+      }
+
+      if (!recruiterDraft.policyAccepted) {
+        setAuthError(
+          "Please accept the IITM BS Placement Cell Employer Charter & Offer Policy before submitting."
+        );
+        return;
+      }
+
+      const companyTypeLabels: Record<RecruiterOnboardingDetails["companyType"], string> = {
+        PRODUCT: "Product Engineering",
+        MNC_ENTERPRISE: "MNC / Enterprise",
+        STARTUP: "High-Growth Startup",
+        CONSULTING_ANALYTICS: "Consulting & Analytics",
+        RESEARCH_PSU: "R&D Lab / PSU",
+      };
+      const hiringModeLabels: Record<RecruiterOnboardingDetails["hiringMode"], string> = {
+        INTERNSHIP: "Internships",
+        FULL_TIME: "Full-Time (FTE)",
+        BOTH: "Internship + PPO + FTE",
+      };
+
+      cleanOrg = `${cleanCompany} (${companyTypeLabels[recruiterDraft.companyType]}) • ${cleanDesig} • ${cleanHq} • ${hiringModeLabels[recruiterDraft.hiringMode]} (${recruiterDraft.expectedHeadcount})`;
+      var recruiterDetailsPayload: RecruiterOnboardingDetails | undefined = {
+        ...recruiterDraft,
+        mobileNumber: cleanMobile,
+        companyName: cleanCompany,
+        companyWebsite: cleanWebsite,
+        cinOrGstNumber: (recruiterDraft.cinOrGstNumber || "").trim() || undefined,
+        headquartersLocation: cleanHq,
+        designation: cleanDesig,
+        linkedinUrl: cleanLinkedin,
+        targetRoles: cleanRoles,
+        compensationRange: cleanComp,
+      };
     } else if (!cleanName || !normalized || !cleanOrg) {
       setAuthError("Please complete Full Name, Email, and Department / Organization details.");
       return;
@@ -1625,6 +1738,7 @@ export default function App() {
       status: "PENDING",
       submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
       examinerProfileDetails: examinerDetailsPayload,
+      recruiterProfileDetails: typeof recruiterDetailsPayload !== "undefined" ? recruiterDetailsPayload : undefined,
     };
 
     setRegistrations((prev) => [newRecord, ...prev.filter((r) => r.email.toLowerCase() !== normalized)]);
@@ -3978,7 +4092,260 @@ export default function App() {
                 </div>
               )}
 
-              {authMode === "SIGN_UP" && selectedRole !== "ADMIN" && selectedRole !== "EXAMINER" && (
+              {authMode === "SIGN_UP" && selectedRole === "RECRUITER" && (
+                <div className="space-y-3 p-3.5 rounded-xl bg-slate-950/80 border border-indigo-500/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-indigo-300">
+                      Corporate Organization &amp; Recruiter Verification
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      Employer Onboarding
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Company / Organization Legal Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.companyName}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, companyName: e.target.value }))
+                        }
+                        placeholder="e.g., Razorpay Software Pvt Ltd"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Organization Category *
+                      </label>
+                      <select
+                        value={recruiterDraft.companyType}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            companyType: e.target.value as RecruiterOnboardingDetails["companyType"],
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="PRODUCT">Product Engineering Company</option>
+                        <option value="MNC_ENTERPRISE">MNC / Global Enterprise</option>
+                        <option value="STARTUP">High-Growth Startup</option>
+                        <option value="CONSULTING_ANALYTICS">Consulting &amp; Data Analytics</option>
+                        <option value="RESEARCH_PSU">R&amp;D Lab / Public Sector</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Corporate Website URL *
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={recruiterDraft.companyWebsite}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, companyWebsite: e.target.value }))
+                        }
+                        placeholder="https://company.com"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        HQ / Primary Hiring City *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.headquartersLocation}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            headquartersLocation: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g., Bengaluru / Chennai / Remote"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Your Designation / Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.designation}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, designation: e.target.value }))
+                        }
+                        placeholder="e.g., University Talent Partner / EM"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Direct Mobile Number *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={recruiterDraft.mobileNumber}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, mobileNumber: e.target.value }))
+                        }
+                        placeholder="+91 98765 43210"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Recruiter LinkedIn Profile URL *
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={recruiterDraft.linkedinUrl}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, linkedinUrl: e.target.value }))
+                        }
+                        placeholder="https://www.linkedin.com/in/your-profile"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        CIN / GSTIN / Reg ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={recruiterDraft.cinOrGstNumber || ""}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, cinOrGstNumber: e.target.value }))
+                        }
+                        placeholder="e.g., 29AABCR1234F1Z5"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Hiring Engagement Track *
+                      </label>
+                      <select
+                        value={recruiterDraft.hiringMode}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            hiringMode: e.target.value as RecruiterOnboardingDetails["hiringMode"],
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="BOTH">Internship + PPO + Full-Time</option>
+                        <option value="FULL_TIME">Full-Time Roles Only (FTE)</option>
+                        <option value="INTERNSHIP">Summer / Term Internships Only</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Expected Hiring Volume *
+                      </label>
+                      <select
+                        value={recruiterDraft.expectedHeadcount}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            expectedHeadcount: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="1–5 hires">1–5 hires</option>
+                        <option value="5–15 hires">5–15 hires</option>
+                        <option value="15–30 hires">15–30 hires</option>
+                        <option value="30+ hires">30+ hires</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Target Roles *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.targetRoles}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({ ...prev, targetRoles: e.target.value }))
+                        }
+                        placeholder="e.g., Data Scientist, SDE-1, ML Intern"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        CTC / Monthly Stipend Band *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={recruiterDraft.compensationRange}
+                        onChange={(e) =>
+                          setRecruiterDraft((prev) => ({
+                            ...prev,
+                            compensationRange: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g., ₹14–18 LPA / ₹45k/mo Stipend"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer text-[11px] text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={recruiterDraft.policyAccepted}
+                      onChange={(e) =>
+                        setRecruiterDraft((prev) => ({ ...prev, policyAccepted: e.target.checked }))
+                      }
+                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                    />
+                    <span>
+                      I confirm I am an authorized hiring representative of this organization and
+                      agree to abide by IITM BS Placement Cell offer-letter, compensation, and
+                      interview schedule policies. *
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {authMode === "SIGN_UP" && selectedRole === "STUDENT" && (
                 <div>
                   <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
                     {selectedRole === "STUDENT"
@@ -7176,6 +7543,57 @@ export default function App() {
                                     Inline Preview CV / ID
                                   </button>
                                 )}
+                              </div>
+                            </div>
+                          )}
+                          {reg.role === "RECRUITER" && reg.recruiterProfileDetails && (
+                            <div className="mt-2 p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 font-semibold">
+                                  {reg.recruiterProfileDetails.companyName} • {reg.recruiterProfileDetails.designation}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
+                                  {reg.recruiterProfileDetails.headquartersLocation}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
+                                  {reg.recruiterProfileDetails.hiringMode} ({reg.recruiterProfileDetails.expectedHeadcount})
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30">
+                                  {reg.recruiterProfileDetails.compensationRange}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                <span className="text-slate-400">Target Roles:</span>{" "}
+                                {reg.recruiterProfileDetails.targetRoles}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                Mobile: <span className="text-slate-200">{reg.recruiterProfileDetails.mobileNumber}</span>
+                                {reg.recruiterProfileDetails.cinOrGstNumber && (
+                                  <span className="ml-2">
+                                    • Reg ID: <span className="font-mono text-slate-200">{reg.recruiterProfileDetails.cinOrGstNumber}</span>
+                                  </span>
+                                )}
+                                {reg.recruiterProfileDetails.policyAccepted && (
+                                  <span className="ml-2 text-emerald-400">✓ Employer Charter Signed</span>
+                                )}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                <a
+                                  href={reg.recruiterProfileDetails.linkedinUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-semibold"
+                                >
+                                  Verify Recruiter LinkedIn ↗
+                                </a>
+                                <a
+                                  href={reg.recruiterProfileDetails.companyWebsite}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold"
+                                >
+                                  Verify Company Website ↗
+                                </a>
                               </div>
                             </div>
                           )}
