@@ -6405,7 +6405,7 @@ export default function App() {
                   <ClipboardCheck className="w-5 h-5 text-indigo-400" />
                   <div>
                     <h2 className="font-semibold text-white">
-                      {user.role === "EXAMINER" ? "1-on-1 Viva & Placement Readiness Evaluation" : "3. Final Stage: Examiner Interview & Placement Readiness Evaluation"}"}
+                      {user.role === "EXAMINER" ? "1-on-1 Viva & Placement Readiness Evaluation" : "3. Final Stage: Examiner Interview & Placement Readiness Evaluation"}
                     </h2>
                     <p className="text-xs text-slate-400">
                       Examiner panel evaluates observed skillsets, 1–5 competency ratings, readiness,
