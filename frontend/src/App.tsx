@@ -65,6 +65,22 @@ interface StudentOnboardingDraft {
   currentCtc: string;
 }
 
+interface ExaminerOnboardingDetails {
+  mobileNumber: string;
+  category: "IITM_FACULTY" | "IITM_RESEARCH_TA" | "INDUSTRY_MENTOR" | "IITM_ALUMNI";
+  organization: string;
+  designation: string;
+  yearsExperience: string;
+  linkedinUrl: string;
+  portfolioOrScholarUrl?: string;
+  evaluationDomain: "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "BOTH";
+  specializations: string;
+  weeklyVivaCapacity: number;
+  preferredTimeWindow: string;
+  cvDriveUrl?: string;
+  coiAccepted: boolean;
+}
+
 interface RegistrationRequestRecord {
   id: string;
   fullName: string;
@@ -76,6 +92,7 @@ interface RegistrationRequestRecord {
   submittedAt: string;
   reviewedBy?: string;
   paymentStatus?: "PAID" | "NOT_REQUIRED";
+  examinerProfileDetails?: ExaminerOnboardingDetails;
 }
 type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE";
 type CategoryOption = "GENERAL" | "GENERAL_EWS" | "OBC" | "OBC_NCL" | "SC_ST";
@@ -716,6 +733,21 @@ export default function App() {
   const [password, setPassword] = useState("123456");
   const [regFullName, setRegFullName] = useState("");
   const [regOrgOrDept, setRegOrgOrDept] = useState("");
+  const [examinerDraft, setExaminerDraft] = useState<ExaminerOnboardingDetails>({
+    mobileNumber: "",
+    category: "INDUSTRY_MENTOR",
+    organization: "",
+    designation: "",
+    yearsExperience: "",
+    linkedinUrl: "",
+    portfolioOrScholarUrl: "",
+    evaluationDomain: "BOTH",
+    specializations: "",
+    weeklyVivaCapacity: 5,
+    preferredTimeWindow: "Weekday Evenings (6 PM – 9 PM IST)",
+    cvDriveUrl: "",
+    coiAccepted: false,
+  });
   const [registrations, setRegistrations] = useState<RegistrationRequestRecord[]>([
     {
       id: "REG-101",
@@ -1442,9 +1474,86 @@ export default function App() {
 
     const normalized = email.trim().toLowerCase();
     const cleanName = regFullName.trim();
-    const cleanOrg = regOrgOrDept.trim();
+    let cleanOrg = regOrgOrDept.trim();
+    let examinerDetailsPayload: ExaminerOnboardingDetails | undefined = undefined;
 
-    if (!cleanName || !normalized || !cleanOrg) {
+    if (selectedRole === "EXAMINER") {
+      const cleanMobile = examinerDraft.mobileNumber.trim();
+      const cleanExOrg = examinerDraft.organization.trim();
+      const cleanDesig = examinerDraft.designation.trim();
+      const expNum = Number(examinerDraft.yearsExperience);
+      const cleanLinkedin = examinerDraft.linkedinUrl.trim();
+      const cleanSpecs = examinerDraft.specializations.trim();
+      const cleanCvDrive = (examinerDraft.cvDriveUrl || "").trim();
+
+      if (
+        !cleanName ||
+        !normalized ||
+        !password.trim() ||
+        !cleanMobile ||
+        !cleanExOrg ||
+        !cleanDesig ||
+        !examinerDraft.yearsExperience.trim() ||
+        Number.isNaN(expNum) ||
+        expNum < 0 ||
+        !cleanLinkedin ||
+        !cleanSpecs
+      ) {
+        setAuthError(
+          "Please complete all mandatory Examiner fields (Name, Email, Password, Mobile, Organization, Designation, Experience, LinkedIn URL, and Technical Specializations)."
+        );
+        return;
+      }
+
+      if (!cleanLinkedin.toLowerCase().includes("linkedin.com")) {
+        setAuthError("Please enter a valid LinkedIn profile URL (https://www.linkedin.com/in/...).");
+        return;
+      }
+
+      let normalizedCvUrl: string | undefined = undefined;
+      if (cleanCvDrive) {
+        const parsedCv = parseGoogleDriveLink(cleanCvDrive);
+        if (!parsedCv.isValid) {
+          setAuthError(
+            "Invalid CV / Faculty ID Google Drive Link: Please paste a valid drive.google.com share link ('Anyone with the link can view') or leave it blank."
+          );
+          return;
+        }
+        normalizedCvUrl = parsedCv.viewUrl;
+      }
+
+      if (!examinerDraft.coiAccepted) {
+        setAuthError(
+          "Please accept the Conflict-of-Interest & Student Confidentiality Declaration before submitting."
+        );
+        return;
+      }
+
+      const categoryLabels: Record<ExaminerOnboardingDetails["category"], string> = {
+        IITM_FACULTY: "IITM Faculty / Instructor",
+        IITM_RESEARCH_TA: "IITM PhD / MS Scholar / TA",
+        INDUSTRY_MENTOR: "Industry Mentor / Senior Engineer",
+        IITM_ALUMNI: "IITM BS Alumni",
+      };
+      const domainLabels: Record<ExaminerOnboardingDetails["evaluationDomain"], string> = {
+        DATA_SCIENCE: "Data Science & ML",
+        SOFTWARE_DEVELOPMENT: "Software Development & Systems",
+        BOTH: "DS + Software Engineering",
+      };
+
+      cleanOrg = `${categoryLabels[examinerDraft.category]} • ${cleanExOrg} (${cleanDesig}, ${expNum} yrs) • Domain: ${domainLabels[examinerDraft.evaluationDomain]} • Cap: ${examinerDraft.weeklyVivaCapacity}/wk`;
+      examinerDetailsPayload = {
+        ...examinerDraft,
+        mobileNumber: cleanMobile,
+        organization: cleanExOrg,
+        designation: cleanDesig,
+        yearsExperience: String(expNum),
+        linkedinUrl: cleanLinkedin,
+        portfolioOrScholarUrl: (examinerDraft.portfolioOrScholarUrl || "").trim() || undefined,
+        specializations: cleanSpecs,
+        cvDriveUrl: normalizedCvUrl,
+      };
+    } else if (!cleanName || !normalized || !cleanOrg) {
       setAuthError("Please complete Full Name, Email, and Department / Organization details.");
       return;
     }
@@ -1515,6 +1624,7 @@ export default function App() {
       password: password || "123456",
       status: "PENDING",
       submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
+      examinerProfileDetails: examinerDetailsPayload,
     };
 
     setRegistrations((prev) => [newRecord, ...prev.filter((r) => r.email.toLowerCase() !== normalized)]);
@@ -3609,7 +3719,266 @@ export default function App() {
                 </p>
               </div>
 
-              {authMode === "SIGN_UP" && selectedRole !== "ADMIN" && (
+              {authMode === "SIGN_UP" && selectedRole === "EXAMINER" && (
+                <div className="space-y-3 p-3.5 rounded-xl bg-slate-950/80 border border-indigo-500/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-indigo-300">
+                      Examiner Credentials &amp; Viva Calibration
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                      Level 3 Stage 3 Panel
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Examiner Category *
+                      </label>
+                      <select
+                        value={examinerDraft.category}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({
+                            ...prev,
+                            category: e.target.value as ExaminerOnboardingDetails["category"],
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="INDUSTRY_MENTOR">Industry Mentor / Senior Engineer</option>
+                        <option value="IITM_FACULTY">IITM Faculty / Instructor</option>
+                        <option value="IITM_RESEARCH_TA">IITM PhD / MS Scholar / TA</option>
+                        <option value="IITM_ALUMNI">IITM BS Alumni (Placed)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Mobile / WhatsApp Number *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={examinerDraft.mobileNumber}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({ ...prev, mobileNumber: e.target.value }))
+                        }
+                        placeholder="+91 98765 43210"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Current Organization / Institution *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={examinerDraft.organization}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({ ...prev, organization: e.target.value }))
+                        }
+                        placeholder="e.g., IIT Madras / Google / Ricoh"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Current Designation / Role *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={examinerDraft.designation}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({ ...prev, designation: e.target.value }))
+                        }
+                        placeholder="e.g., Senior ML Engineer / Instructor"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Total Experience (Years) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="50"
+                        required
+                        value={examinerDraft.yearsExperience}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({ ...prev, yearsExperience: e.target.value }))
+                        }
+                        placeholder="e.g., 4.5"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Primary Evaluation Domain *
+                      </label>
+                      <select
+                        value={examinerDraft.evaluationDomain}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({
+                            ...prev,
+                            evaluationDomain: e.target.value as ExaminerOnboardingDetails["evaluationDomain"],
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="BOTH">Both (Data Science + Software Eng)</option>
+                        <option value="DATA_SCIENCE">Data Science &amp; Machine Learning</option>
+                        <option value="SOFTWARE_DEVELOPMENT">Software Development &amp; Systems</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Core Technical Specializations *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={examinerDraft.specializations}
+                      onChange={(e) =>
+                        setExaminerDraft((prev) => ({ ...prev, specializations: e.target.value }))
+                      }
+                      placeholder="e.g., Python, SQL, FastAPI, NLP, Deep Learning, System Design"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        LinkedIn Profile URL *
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={examinerDraft.linkedinUrl}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({ ...prev, linkedinUrl: e.target.value }))
+                        }
+                        placeholder="https://www.linkedin.com/in/your-profile"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        GitHub / Google Scholar (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={examinerDraft.portfolioOrScholarUrl || ""}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({
+                            ...prev,
+                            portfolioOrScholarUrl: e.target.value,
+                          }))
+                        }
+                        placeholder="https://github.com/username"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Weekly 1-on-1 Viva Capacity *
+                      </label>
+                      <select
+                        value={examinerDraft.weeklyVivaCapacity}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({
+                            ...prev,
+                            weeklyVivaCapacity: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value={3}>3 sessions / week</option>
+                        <option value={5}>5 sessions / week</option>
+                        <option value={8}>8 sessions / week</option>
+                        <option value={10}>10+ sessions / week</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                        Preferred Viva Window *
+                      </label>
+                      <select
+                        value={examinerDraft.preferredTimeWindow}
+                        onChange={(e) =>
+                          setExaminerDraft((prev) => ({
+                            ...prev,
+                            preferredTimeWindow: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="Weekday Evenings (6 PM – 9 PM IST)">
+                          Weekday Evenings (6 PM – 9 PM IST)
+                        </option>
+                        <option value="Weekends (10 AM – 6 PM IST)">
+                          Weekends (10 AM – 6 PM IST)
+                        </option>
+                        <option value="Flexible (Weekdays & Weekends)">
+                          Flexible (Weekdays &amp; Weekends)
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      CV / Faculty ID Proof — Google Drive Link (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={examinerDraft.cvDriveUrl || ""}
+                      onChange={(e) =>
+                        setExaminerDraft((prev) => ({ ...prev, cvDriveUrl: e.target.value }))
+                      }
+                      placeholder="https://drive.google.com/file/d/.../view (Anyone with link can view)"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer text-[11px] text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={examinerDraft.coiAccepted}
+                      onChange={(e) =>
+                        setExaminerDraft((prev) => ({ ...prev, coiAccepted: e.target.checked }))
+                      }
+                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                    />
+                    <span>
+                      I confirm objectivity in 1-on-1 viva evaluations, agree to maintain strict
+                      confidentiality of student resumes/scorecards, and will disclose any conflict
+                      of interest. *
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {authMode === "SIGN_UP" && selectedRole !== "ADMIN" && selectedRole !== "EXAMINER" && (
                 <div>
                   <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
                     {selectedRole === "STUDENT"
@@ -6646,7 +7015,73 @@ export default function App() {
                             {reg.role}
                           </span>
                         </td>
-                        <td className="py-3 pr-3 text-slate-300">{reg.orgOrDept}</td>
+                        <td className="py-3 pr-3 text-slate-300">
+                          <div>{reg.orgOrDept}</div>
+                          {reg.role === "EXAMINER" && reg.examinerProfileDetails && (
+                            <div className="mt-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 font-semibold">
+                                  {reg.examinerProfileDetails.organization} • {reg.examinerProfileDetails.designation}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
+                                  {reg.examinerProfileDetails.yearsExperience} yrs exp
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                  {reg.examinerProfileDetails.evaluationDomain}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                                  {reg.examinerProfileDetails.weeklyVivaCapacity} vivas/wk •{" "}
+                                  {reg.examinerProfileDetails.preferredTimeWindow}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                <span className="text-slate-400">Specializations:</span>{" "}
+                                {reg.examinerProfileDetails.specializations}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                Mobile: <span className="text-slate-200">{reg.examinerProfileDetails.mobileNumber}</span>
+                                {reg.examinerProfileDetails.coiAccepted && (
+                                  <span className="ml-2 text-emerald-400">✓ COI &amp; NDA Signed</span>
+                                )}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                <a
+                                  href={reg.examinerProfileDetails.linkedinUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-semibold"
+                                >
+                                  Verify LinkedIn ↗
+                                </a>
+                                {reg.examinerProfileDetails.portfolioOrScholarUrl && (
+                                  <a
+                                    href={reg.examinerProfileDetails.portfolioOrScholarUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold"
+                                  >
+                                    GitHub / Scholar ↗
+                                  </a>
+                                )}
+                                {reg.examinerProfileDetails.cvDriveUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDriveDocPreview({
+                                        title: `${reg.fullName} — Examiner CV / ID`,
+                                        subtitle: `${reg.examinerProfileDetails?.organization} • ${reg.examinerProfileDetails?.designation}`,
+                                        url: reg.examinerProfileDetails!.cvDriveUrl!,
+                                      })
+                                    }
+                                    className="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/40 text-[11px] font-semibold"
+                                  >
+                                    Inline Preview CV / ID
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3 pr-3">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
