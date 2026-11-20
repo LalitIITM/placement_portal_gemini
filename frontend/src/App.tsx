@@ -5206,11 +5206,35 @@ export default function App() {
             {/* Recruiter / Admin Job Drive Publisher */}
             {user.role !== "STUDENT" && (
               <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Building2 className="w-5 h-5 text-indigo-400" />
-                  <h2 className="font-semibold text-white">
-                    Recruiter Portal — Publish New Placement / Internship Drive
-                  </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-indigo-400" />
+                    <h2 className="font-semibold text-white">
+                      Recruiter Portal — Publish New Placement / Internship Drive
+                    </h2>
+                  </div>
+                  {user.role === "RECRUITER" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const matched = registrations.find(
+                          (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                        );
+                        if (matched?.recruiterProfileDetails) {
+                          setNewCompany(matched.recruiterProfileDetails.companyName);
+                          setNewLocation(
+                            `${matched.recruiterProfileDetails.hiringLocations} (${matched.recruiterProfileDetails.workMode})`
+                          );
+                          setNewCompensation(matched.recruiterProfileDetails.compensationRange);
+                        } else if (matched?.orgOrDept) {
+                          setNewCompany(matched.orgOrDept.split("(")[0].trim());
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-[11px] font-semibold text-indigo-200"
+                    >
+                      Auto-Fill My Company &amp; Locations
+                    </button>
+                  )}
                 </div>
                 <form onSubmit={handleCreateNewDrive} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
                   <div>
@@ -5398,58 +5422,73 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* Real-Time Rule Evaluation Box */}
-                      <div
-                        className={`p-3 rounded-xl border text-xs ${
-                          elig.eligible
-                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                            : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                        }`}
-                      >
-                        {elig.eligible ? (
-                          <div className="flex items-center gap-2 font-semibold">
-                            <CheckCircle2 className="w-4 h-4 shrink-0" />
-                            <span>Eligible (All BRULE-21 to BRULE-25 Checks Passed)</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 font-semibold">
-                              <XCircle className="w-4 h-4 shrink-0" />
-                              <span>Not Eligible — Rule Guard Triggered:</span>
-                            </div>
-                            <ul className="list-disc list-inside text-[11px] space-y-0.5 text-rose-200/90">
-                              {elig.reasons.map((r, i) => (
-                                <li key={i}>{r}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
-                      {existingApp ? (
-                        <div className="w-full py-2.5 px-4 rounded-xl bg-slate-950 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-between">
-                          <span>Applied ({existingApp.id})</span>
-                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200">
-                            {existingApp.status}
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyToDrive(job)}
-                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                      {user.role === "STUDENT" ? (
+                        /* Real-Time Rule Evaluation Box (Student View Only) */
+                        <div
+                          className={`p-3 rounded-xl border text-xs ${
                             elig.eligible
-                              ? "bg-indigo-600 hover:bg-indigo-500 text-white"
-                              : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-300"
                           }`}
                         >
-                          <Send className="w-3.5 h-3.5" />
-                          {elig.eligible ? "1-Click Apply with Selected Resume" : "Attempt Apply (Test Rule Guard)"}
-                        </button>
+                          {elig.eligible ? (
+                            <div className="flex items-center gap-2 font-semibold">
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span>Eligible (All BRULE-21 to BRULE-25 Checks Passed)</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 font-semibold">
+                                <XCircle className="w-4 h-4 shrink-0" />
+                                <span>Not Eligible — Rule Guard Triggered:</span>
+                              </div>
+                              <ul className="list-disc list-inside text-[11px] space-y-0.5 text-rose-200/90">
+                                {elig.reasons.map((r, i) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Employer / Admin Drive Pipeline Summary */
+                        <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 text-xs flex items-center justify-between gap-2">
+                          <span className="text-slate-400">
+                            Drive Status:{" "}
+                            <strong className="text-emerald-300">Active &amp; Open to Verified IITM BS Talent</strong>
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 font-semibold">
+                            {applications.filter((a) => a.jobId === job.id).length} Applicants
+                          </span>
+                        </div>
                       )}
                     </div>
+
+                    {user.role === "STUDENT" && (
+                      <div className="pt-2">
+                        {existingApp ? (
+                          <div className="w-full py-2.5 px-4 rounded-xl bg-slate-950 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-between">
+                            <span>Applied ({existingApp.id})</span>
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200">
+                              {existingApp.status}
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyToDrive(job)}
+                            className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                              elig.eligible
+                                ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                            }`}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            {elig.eligible ? "1-Click Apply with Selected Resume" : "Attempt Apply (Test Rule Guard)"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
