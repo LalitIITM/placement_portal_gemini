@@ -29,8 +29,128 @@ import {
 
 export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
   const {
-    email,
+    activePoolSize,
+    activeTrack,
+    activityAlert,
+    activityCompletedDate,
+    activityProofUrl,
+    activitySubmissions,
+    badges,
+    bulkImporting,
+    bulkQDomain,
+    bulkQMode,
+    bulkQStatus,
+    bulkQTrack,
+    bulkSheetUrl,
+    commRating,
+    computeTrainingAndActivityProgress,
+    coordCsvInputRef,
+    coordFeedback,
+    coordTargetRoll,
+    drawnQuestions,
+    dsRating,
+    evalBanner,
+    evalSkillsets,
+    evaluations,
+    examinerNotes,
+    examinerSlotScope,
+    formatTimer,
+    handleAddQuestionToBank,
+    handleAddSingleSlot,
+    handleAttemptTrainingStage,
+    handleBatchTrainingCsvUpload,
+    handleCoordinatorReviewActivity,
+    handleCoordinatorUpdateStageScore,
+    handleDownloadSampleQuestionCsv,
+    handleDownloadSampleSlotsCsv,
+    handleDownloadSampleTrainingCsv,
+    handleLogActivityPoint,
+    handlePasteSlotRowsSubmit,
+    handleQuestionBankFileUpload,
+    handleQuestionBankSheetUrlImport,
+    handleSaveExaminerEvaluation,
+    handleSimulateOneOnOneSignoff,
+    handleSpreadsheetSlotFileUpload,
+    handleStartRandomQuiz,
+    handleSubmitQuiz,
+    isPlacementReady,
+    isQuizActive,
+    manualSlotDate,
+    manualSlotEmail,
+    manualSlotInstructor,
+    manualSlotName,
+    manualSlotTime,
+    marksheet,
     oneOnOneSlots,
+    performingExceptionallyGood,
+    progRating,
+    qbBanner,
+    qbCorrectIdx,
+    qbDomain,
+    qbOpt0,
+    qbOpt1,
+    qbOpt2,
+    qbOpt3,
+    qbPrompt,
+    qbTrack,
+    questionBank,
+    quizAnswers,
+    quizBanner,
+    remedialTasksText,
+    resolveActiveStudentRoll,
+    resumes,
+    secondsLeft,
+    selectedActivityToLog,
+    selectedSlotIdForEval,
+    setActiveTrackId,
+    setActivityCompletedDate,
+    setActivityProofUrl,
+    setBulkQDomain,
+    setBulkQMode,
+    setBulkQStatus,
+    setBulkQTrack,
+    setBulkSheetUrl,
+    setCommRating,
+    setCoordTargetRoll,
+    setDrawnQuestions,
+    setDriveDocPreview,
+    setDsRating,
+    setEvalSkillsets,
+    setExaminerNotes,
+    setExaminerSlotScope,
+    setIsPlacementReady,
+    setManualSlotDate,
+    setManualSlotEmail,
+    setManualSlotInstructor,
+    setManualSlotName,
+    setManualSlotTime,
+    setPerformingExceptionallyGood,
+    setPreviewSubmission,
+    setProgRating,
+    setQbCorrectIdx,
+    setQbDomain,
+    setQbOpt0,
+    setQbOpt1,
+    setQbOpt2,
+    setQbOpt3,
+    setQbPrompt,
+    setQbTrack,
+    setQuizAnswers,
+    setQuizBanner,
+    setRemedialTasksText,
+    setSelectedActivityToLog,
+    setSelectedSlotIdForEval,
+    setSlotPasteText,
+    setSlotProgressFilter,
+    setSlotUploadAlert,
+    slotPasteText,
+    slotProgressFilter,
+    slotUploadAlert,
+    studentApplyingTrack,
+    studentTargetDomain,
+    toggleModuleComplete,
+    tracks,
+    trainingStages,
     user,
   } = ctx;
 
@@ -148,7 +268,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200">
                               <span className="font-semibold block mb-1">Recommended Next Steps from Instructor:</span>
                               <ul className="list-disc list-inside space-y-0.5">
-                                {latestSlot.remedialTasks.map((task, idx) => (
+                                {latestSlot.remedialTasks.map((task: any, idx: any) => (
                                   <li key={idx}>{task}</li>
                                 ))}
                               </ul>
@@ -278,7 +398,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                             </div>
 
                             <div className="space-y-2">
-                              {stages.map((st) => {
+                              {stages.map((st: any) => {
                                 const stageOk =
                                   st.evaluationType === "MARKS"
                                     ? st.obtainedMarks >= st.minRequired
@@ -692,7 +812,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         Entire 1-on-1 Progress &amp; Instructor Feedback Ledger ({filteredSlots.length})
                       </h3>
                       <div className="flex gap-1.5 text-[11px]">
-                        {(["ALL", "SCHEDULED", "COMPLETED"] as const).map((st) => (
+                        {(["ALL", "SCHEDULED", "COMPLETED"] as const).map((st: any) => (
                           <button
                             key={st}
                             type="button"
@@ -982,7 +1102,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/70">
-                        {trainingStages.map((st) => {
+                        {trainingStages.map((st: any) => {
                           const stageCleared =
                             st.evaluationType === "MARKS"
                               ? st.obtainedMarks >= st.minRequired
@@ -1157,7 +1277,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                       </span>
                     )}
                     {resumes.length > 0 ? (
-                      resumes.map((resItem, rIdx) => (
+                      resumes.map((resItem: any, rIdx: any) => (
                         <button
                           key={resItem.id}
                           type="button"
@@ -1484,7 +1604,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                   </div>
 
                   <div className="space-y-3">
-                    {tracks.map((t) => {
+                    {tracks.map((t: any) => {
                       const poolCount = questionBank.filter(
                         (q: any) => q.domain === t.domain && q.track === t.track
                       ).length;
@@ -1581,7 +1701,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         1. Learning Modules (Click to mark complete)
                       </h3>
                       <div className="space-y-2">
-                        {activeTrack.modules.map((m) => (
+                        {activeTrack.modules.map((m: any) => (
                           <div
                             key={m.id}
                             onClick={() => toggleModuleComplete(activeTrack.id, m.id)}
@@ -1715,7 +1835,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                                   name={`session-${q.id}`}
                                   checked={quizAnswers[q.id] === optIdx}
                                   onChange={() =>
-                                    setQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
+                                    setQuizAnswers((prev: any) => ({ ...prev, [q.id]: optIdx }))
                                   }
                                   className="accent-indigo-500"
                                 />
@@ -2101,7 +2221,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                               Assigned Tasks Before Placement Readiness:
                             </p>
                             <ul className="list-disc list-inside text-amber-100/90 space-y-0.5">
-                              {ev.remedialTasks.map((t, i) => (
+                              {ev.remedialTasks.map((t: any, i: any) => (
                                 <li key={i}>{t}</li>
                               ))}
                             </ul>

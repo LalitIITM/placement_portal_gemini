@@ -16,7 +16,6 @@ import {
   Clock,
   GraduationCap,
   Briefcase,
-  Database,
   Building2,
   Send,
   XCircle,
@@ -7972,7 +7971,7 @@ export default function App() {
 
         {activeTab === "TRAINING" && (
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading Training & Vetting Workspace...</div>}>
-            <TrainingAndVettingPortal ctx={{ email, oneOnOneSlots, user }} />
+            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
           </Suspense>
         )}
 
