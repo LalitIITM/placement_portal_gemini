@@ -8681,7 +8681,6 @@ export default function App() {
               </div>
             )}
 
-            {user.role !== "EXAMINER" && (
             {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
               const bankBuckets: {
                 code: string;
@@ -8967,6 +8966,7 @@ export default function App() {
               );
             })()}
 
+            {user.role !== "EXAMINER" && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
