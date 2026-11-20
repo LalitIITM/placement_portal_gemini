@@ -64,6 +64,18 @@ async def ensure_base_seed(db: AsyncSession) -> None:
             "org_or_dept": "Ricoh India • Talent Acquisition",
         },
         {
+            "email": "lalit@iit.in",
+            "full_name": "Lalit (Swiggy Talent Partner)",
+            "role": RoleName.RECRUITER,
+            "org_or_dept": "Swiggy • Campus & Lateral Hiring",
+        },
+        {
+            "email": "coordinator@study.iitm.ac.in",
+            "full_name": "Dr. Meera Nair (Training Coordinator)",
+            "role": RoleName.PROGRAM_COORDINATOR,
+            "org_or_dept": "IITM BS Career Readiness & Training Cell",
+        },
+        {
             "email": "placement.admin@iitm.ac.in",
             "full_name": "IITM Placement Admin",
             "role": RoleName.ADMIN,

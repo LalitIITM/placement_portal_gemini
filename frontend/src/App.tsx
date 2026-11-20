@@ -860,6 +860,28 @@ export default function App() {
       reviewedBy: "placement.admin@iitm.ac.in",
     },
     {
+      id: "REG-103B",
+      fullName: "Lalit (Swiggy Talent Partner)",
+      email: "lalit@iit.in",
+      role: "RECRUITER",
+      orgOrDept: "Swiggy • Campus & Lateral Hiring",
+      password: "123456",
+      status: "APPROVED",
+      submittedAt: "2026-11-11 15:10 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
+      id: "REG-106",
+      fullName: "Dr. Meera Nair (Training Coordinator)",
+      email: "coordinator@study.iitm.ac.in",
+      role: "TRAINING_COORDINATOR",
+      orgOrDept: "IITM BS Career Readiness & Training Cell",
+      password: "123456",
+      status: "APPROVED",
+      submittedAt: "2026-11-11 16:00 IST",
+      reviewedBy: "placement.admin@iitm.ac.in",
+    },
+    {
       id: "REG-104",
       fullName: "Aarav Sharma",
       email: "22f3001234@ds.study.iitm.ac.in",
@@ -4237,6 +4259,8 @@ export default function App() {
                       ? "hr@ricoh.in"
                       : selectedRole === "EXAMINER"
                       ? "shyam@ds.iitm.ac.in"
+                      : selectedRole === "TRAINING_COORDINATOR"
+                      ? "coordinator@study.iitm.ac.in"
                       : "placement.admin@iitm.ac.in"
                   }
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
