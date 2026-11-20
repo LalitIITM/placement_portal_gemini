@@ -6590,8 +6590,7 @@ export default function App() {
                   )}
                 </div>
               );
-            })() : (
-            {(user.role !== "RECRUITER" || recruiterWorkspaceView === "ATS_PIPELINE") && (() => {
+            })() : user.role === "RECRUITER" && recruiterWorkspaceView !== "ATS_PIPELINE" ? null : (() => {
               const matchedReg =
                 user.role === "RECRUITER"
                   ? registrations.find(
@@ -6698,7 +6697,6 @@ export default function App() {
             </div>
               );
             })()}
-            )}
           </div>
         )}
 
