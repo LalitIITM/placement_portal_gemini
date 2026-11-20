@@ -942,7 +942,9 @@ export default function App() {
     });
   };
 
-  const handleAdminCreateUser = (e: React.FormEvent) => {
+  const isPersistedUuid = (val: string) => val.includes("-") && val.length >= 32;
+
+  const handleAdminCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adminNewFullName.trim() || !adminNewEmail.trim() || !adminNewOrgOrDept.trim()) {
       setAdminCommandAlert({
@@ -951,14 +953,49 @@ export default function App() {
       });
       return;
     }
-    const newId = `REG-${Math.floor(200 + Math.random() * 800)}`;
+    const cleanName = adminNewFullName.trim();
+    const cleanEmail = adminNewEmail.trim().toLowerCase();
+    const cleanOrg = adminNewOrgOrDept.trim();
+    let finalId = `REG-${Math.floor(200 + Math.random() * 800)}`;
+
+    if (authToken) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            full_name: cleanName,
+            role: toBackendRole(adminNewRole),
+            organization_or_dept: cleanOrg,
+            approval_status: adminNewStatus,
+            password: "123456",
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Failed to persist stakeholder record." }));
+          setAdminCommandAlert({ type: "ERR", text: err.detail || "PostgreSQL create failed." });
+          return;
+        }
+        const saved = await res.json();
+        if (saved?.user_id) {
+          finalId = saved.user_id;
+        }
+      } catch {
+        // Fallback to local state if backend unreachable
+      }
+    }
+
     const created: RegistrationRequestRecord = {
-      id: newId,
-      fullName: adminNewFullName.trim(),
-      email: adminNewEmail.trim().toLowerCase(),
+      id: finalId,
+      fullName: cleanName,
+      email: cleanEmail,
       password: "123456",
       role: adminNewRole,
-      orgOrDept: adminNewOrgOrDept.trim(),
+      orgOrDept: cleanOrg,
       status: adminNewStatus,
       paymentStatus: adminNewRole === "STUDENT" ? "PAID" : "NOT_REQUIRED",
       submittedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }),
@@ -969,7 +1006,7 @@ export default function App() {
       user?.email || "placement.admin@iitm.ac.in",
       "ADMIN",
       "ADMIN_USER_CREATED",
-      `${newId} • ${created.fullName} (${created.role}) • Status: ${created.status}`,
+      `${finalId} • ${created.fullName} (${created.role}) • Status: ${created.status}`,
       "SUCCESS"
     );
     setAdminNewFullName("");
@@ -977,7 +1014,7 @@ export default function App() {
     setAdminNewOrgOrDept("");
     setAdminCommandAlert({
       type: "OK",
-      text: `Created ${created.role} account ${created.fullName} (${newId}).`,
+      text: `Created ${created.role} account ${created.fullName} (${finalId}).`,
     });
   };
 
@@ -992,20 +1029,50 @@ export default function App() {
     });
   };
 
-  const handleAdminSaveEditUser = (regId: string) => {
+  const handleAdminSaveEditUser = async (regId: string) => {
     if (!editRegDraft.fullName.trim() || !editRegDraft.email.trim()) {
       setAdminCommandAlert({ type: "ERR", text: "Name and Email cannot be empty." });
       return;
     }
+    const cleanName = editRegDraft.fullName.trim();
+    const cleanEmail = editRegDraft.email.trim().toLowerCase();
+    const cleanOrg = editRegDraft.orgOrDept.trim();
+
+    if (authToken && isPersistedUuid(regId)) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${encodeURIComponent(regId)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            full_name: cleanName,
+            email: cleanEmail,
+            role: toBackendRole(editRegDraft.role),
+            organization_or_dept: cleanOrg,
+            approval_status: editRegDraft.status,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Failed to update stakeholder record." }));
+          setAdminCommandAlert({ type: "ERR", text: err.detail || "PostgreSQL update failed." });
+          return;
+        }
+      } catch {
+        // Fallback to local state if backend unreachable
+      }
+    }
+
     setRegistrations((prev) =>
       prev.map((r) =>
         r.id === regId
           ? {
               ...r,
-              fullName: editRegDraft.fullName.trim(),
-              email: editRegDraft.email.trim().toLowerCase(),
+              fullName: cleanName,
+              email: cleanEmail,
               role: editRegDraft.role,
-              orgOrDept: editRegDraft.orgOrDept.trim(),
+              orgOrDept: cleanOrg,
               status: editRegDraft.status,
               reviewedBy: user?.email || "placement.admin@iitm.ac.in",
             }
@@ -1016,14 +1083,30 @@ export default function App() {
       user?.email || "placement.admin@iitm.ac.in",
       "ADMIN",
       "ADMIN_USER_UPDATED",
-      `${regId} -> ${editRegDraft.fullName} (${editRegDraft.role} • ${editRegDraft.status})`,
+      `${regId} -> ${cleanName} (${editRegDraft.role} • ${editRegDraft.status})`,
       "SUCCESS"
     );
     setEditingRegId(null);
     setAdminCommandAlert({ type: "OK", text: `Updated stakeholder record ${regId}.` });
   };
 
-  const handleAdminDeleteUser = (reg: RegistrationRequestRecord) => {
+  const handleAdminDeleteUser = async (reg: RegistrationRequestRecord) => {
+    if (authToken && isPersistedUuid(reg.id)) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${encodeURIComponent(reg.id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Failed to delete stakeholder record." }));
+          setAdminCommandAlert({ type: "ERR", text: err.detail || "PostgreSQL delete failed." });
+          return;
+        }
+      } catch {
+        // Fallback to local state if backend unreachable
+      }
+    }
+
     setRegistrations((prev) => prev.filter((r) => r.id !== reg.id));
     appendAudit(
       user?.email || "placement.admin@iitm.ac.in",
@@ -1050,18 +1133,50 @@ export default function App() {
     });
   };
 
-  const handleAdminSaveEditJob = (jobId: string) => {
+  const handleAdminSaveEditJob = async (jobId: string) => {
+    const cleanCompany = editJobDraft.companyName.trim();
+    const cleanTitle = editJobDraft.title.trim();
+    const cleanComp = editJobDraft.compensation.trim();
+    const parsedCgpa = parseFloat(editJobDraft.minCgpa);
+
+    if (authToken && isPersistedUuid(jobId)) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/recruitment/jobs/${encodeURIComponent(jobId)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            company_name: cleanCompany || undefined,
+            title: cleanTitle || undefined,
+            domain: editJobDraft.domain,
+            role_type: editJobDraft.roleType,
+            compensation_label: cleanComp || undefined,
+            min_cgpa: Number.isFinite(parsedCgpa) ? parsedCgpa : undefined,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Failed to update job drive." }));
+          setAdminCommandAlert({ type: "ERR", text: err.detail || "PostgreSQL drive update failed." });
+          return;
+        }
+      } catch {
+        // Fallback to local state if backend unreachable
+      }
+    }
+
     setJobs((prev) =>
       prev.map((j) =>
         j.id === jobId
           ? {
               ...j,
-              companyName: editJobDraft.companyName.trim() || j.companyName,
-              title: editJobDraft.title.trim() || j.title,
+              companyName: cleanCompany || j.companyName,
+              title: cleanTitle || j.title,
               domain: editJobDraft.domain,
               roleType: editJobDraft.roleType,
-              compensation: editJobDraft.compensation.trim() || j.compensation,
-              minCgpa: parseFloat(editJobDraft.minCgpa) || j.minCgpa,
+              compensation: cleanComp || j.compensation,
+              minCgpa: Number.isFinite(parsedCgpa) ? parsedCgpa : j.minCgpa,
             }
           : j
       )
@@ -1070,14 +1185,30 @@ export default function App() {
       user?.email || "placement.admin@iitm.ac.in",
       "ADMIN",
       "ADMIN_DRIVE_UPDATED",
-      `Updated drive ${jobId} (${editJobDraft.companyName} — ${editJobDraft.title})`,
+      `Updated drive ${jobId} (${cleanCompany} — ${cleanTitle})`,
       "SUCCESS"
     );
     setEditingJobId(null);
     setAdminCommandAlert({ type: "OK", text: `Updated job drive ${jobId}.` });
   };
 
-  const handleAdminDeleteJob = (job: JobDriveItem) => {
+  const handleAdminDeleteJob = async (job: JobDriveItem) => {
+    if (authToken && isPersistedUuid(job.id)) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/recruitment/jobs/${encodeURIComponent(job.id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Failed to delete job drive." }));
+          setAdminCommandAlert({ type: "ERR", text: err.detail || "PostgreSQL drive delete failed." });
+          return;
+        }
+      } catch {
+        // Fallback to local state if backend unreachable
+      }
+    }
+
     setJobs((prev) => prev.filter((j) => j.id !== job.id));
     appendAudit(
       user?.email || "placement.admin@iitm.ac.in",
@@ -1685,6 +1816,28 @@ export default function App() {
               submittedAt: r.created_at ? new Date(r.created_at).toLocaleString("en-IN") : "PostgreSQL",
             }))
         );
+
+        const auditRes = await fetch(`${API_BASE_URL}/api/v1/audit-logs?limit=150`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (auditRes.ok) {
+          const auditRows = await auditRes.json();
+          if (!cancelled && Array.isArray(auditRows) && auditRows.length > 0) {
+            setAuditLogs(
+              auditRows.map((a: Record<string, unknown>) => ({
+                id: String(a.id || `AUD-${Math.random()}`),
+                timestamp: a.created_at
+                  ? new Date(String(a.created_at)).toLocaleTimeString("en-IN", { hour12: false })
+                  : "PostgreSQL",
+                actor: String(a.actor_id || "system@iitm.ac.in"),
+                role: fromBackendRole(String(a.actor_role || "ADMIN")),
+                action: String(a.action || "AUDIT_EVENT"),
+                resource: `${String(a.entity_type || "Entity")} • ${String(a.entity_id || "")}`,
+                status: "SUCCESS" as const,
+              }))
+            );
+          }
+        }
       } catch {
         // Retain snapshot fallback if offline
       }

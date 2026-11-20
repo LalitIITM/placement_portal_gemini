@@ -43,6 +43,19 @@ class JobCreateIn(BaseModel):
     required_skill_tags: list[str] = Field(default_factory=list)
 
 
+class JobUpdateIn(BaseModel):
+    company_name: Optional[str] = Field(default=None, min_length=2, max_length=160)
+    title: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    role_type: Optional[JobRoleType] = None
+    domain: Optional[JobDomain] = None
+    location: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    compensation_label: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    description: Optional[str] = None
+    min_cgpa: Optional[Decimal] = Field(default=None, ge=Decimal("0.00"), le=Decimal("10.00"))
+    max_active_backlogs: Optional[int] = Field(default=None, ge=0, le=10)
+    status: Optional[JobStatus] = None
+
+
 class EligibilityCheckOut(BaseModel):
     eligible: bool
     reasons: list[str]
@@ -298,6 +311,125 @@ async def create_job_posting(
         required_skill_tags=job.required_skill_tags,
         status=job.status,
     )
+
+
+@router.patch("/jobs/{job_id}", response_model=JobOut)
+async def update_job_posting(
+    job_id: uuid.UUID,
+    payload: JobUpdateIn,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.RECRUITER, RoleName.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> JobOut:
+    job = (await db.execute(select(JobPosting).where(JobPosting.id == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+
+    before = {
+        "company_name": job.company_name,
+        "title": job.title,
+        "role_type": job.role_type.value,
+        "domain": job.domain.value,
+        "compensation_label": job.compensation_label,
+        "min_cgpa": str(job.min_cgpa),
+        "status": job.status.value,
+    }
+
+    if payload.company_name is not None:
+        job.company_name = payload.company_name.strip()
+    if payload.title is not None:
+        job.title = payload.title.strip()
+    if payload.role_type is not None:
+        job.role_type = payload.role_type
+    if payload.domain is not None:
+        job.domain = payload.domain
+    if payload.location is not None:
+        job.location = payload.location.strip()
+    if payload.compensation_label is not None:
+        job.compensation_label = payload.compensation_label.strip()
+    if payload.description is not None:
+        job.description = payload.description.strip()
+    if payload.min_cgpa is not None:
+        job.min_cgpa = payload.min_cgpa
+    if payload.max_active_backlogs is not None:
+        job.max_active_backlogs = payload.max_active_backlogs
+    if payload.status is not None:
+        job.status = payload.status
+
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ADMIN_DRIVE_UPDATED",
+        entity_type="JobPosting",
+        entity_id=str(job.id),
+        before_state=before,
+        after_state={
+            "company_name": job.company_name,
+            "title": job.title,
+            "role_type": job.role_type.value,
+            "domain": job.domain.value,
+            "compensation_label": job.compensation_label,
+            "min_cgpa": str(job.min_cgpa),
+            "status": job.status.value,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return JobOut(
+        id=str(job.id),
+        job_code=job.job_code,
+        company_name=job.company_name,
+        title=job.title,
+        role_type=job.role_type,
+        domain=job.domain,
+        location=job.location,
+        compensation_label=job.compensation_label,
+        description=job.description,
+        min_cgpa=job.min_cgpa,
+        max_active_backlogs=job.max_active_backlogs,
+        allowed_levels=job.allowed_levels,
+        require_placement_readiness=job.require_placement_readiness,
+        required_skill_tags=job.required_skill_tags,
+        status=job.status,
+        eligibility=None,
+        already_applied=False,
+        application_status=None,
+    )
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_200_OK)
+async def delete_job_posting(
+    job_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.SUPER_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    job = (await db.execute(select(JobPosting).where(JobPosting.id == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+
+    snapshot = {
+        "job_code": job.job_code,
+        "company_name": job.company_name,
+        "title": job.title,
+    }
+    await db.delete(job)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ADMIN_DRIVE_DELETED",
+        entity_type="JobPosting",
+        entity_id=str(job_id),
+        before_state=snapshot,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"status": "deleted", "job_id": str(job_id)}
 
 
 @router.post(

@@ -46,6 +46,23 @@ class RegistrationDecisionRequest(BaseModel):
     remarks: Optional[str] = None
 
 
+class AdminCreateUserRequest(BaseModel):
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=255)
+    role: RoleName
+    organization_or_dept: Optional[str] = Field(default=None, max_length=255)
+    approval_status: Literal["APPROVED", "PENDING", "REJECTED", "WITHDRAWN"] = "APPROVED"
+    password: str = Field(default="123456", min_length=4, max_length=128)
+
+
+class AdminUpdateUserRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    role: Optional[RoleName] = None
+    organization_or_dept: Optional[str] = Field(default=None, max_length=255)
+    approval_status: Optional[Literal["APPROVED", "PENDING", "REJECTED", "WITHDRAWN"]] = None
+
+
 class PendingRegistrationOut(BaseModel):
     user_id: str
     email: str
@@ -234,6 +251,213 @@ async def decide_registration(
         is_active=user.is_active,
         created_at=user.created_at,
     )
+
+
+@router.post("/admin/users", response_model=PendingRegistrationOut, status_code=status.HTTP_201_CREATED)
+async def admin_create_user(
+    payload: AdminCreateUserRequest,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.SUPER_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> PendingRegistrationOut:
+    normalized_email = payload.email.strip().lower()
+    existing = (await db.execute(select(User).where(User.email == normalized_email))).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=f"User with email '{normalized_email}' already exists.")
+
+    role_row = (await db.execute(select(Role).where(Role.name == payload.role))).scalar_one_or_none()
+    if role_row is None:
+        role_row = Role(name=payload.role, description=f"{payload.role.value} portal role")
+        db.add(role_row)
+        await db.flush()
+
+    user = User(
+        email=normalized_email,
+        full_name=payload.full_name.strip(),
+        organization_or_dept=(payload.organization_or_dept or "IITM BS Portal").strip(),
+        approval_status=payload.approval_status,
+        is_active=payload.approval_status == "APPROVED",
+        password_hash=hash_password(payload.password),
+    )
+    db.add(user)
+    await db.flush()
+
+    db.add(
+        UserRole(
+            user_id=user.id,
+            role_id=role_row.id,
+            assigned_by=principal.user.id,
+            is_primary=True,
+        )
+    )
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ADMIN_USER_CREATED",
+        entity_type="User",
+        entity_id=str(user.id),
+        after_state={
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": payload.role.value,
+            "approval_status": user.approval_status,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return PendingRegistrationOut(
+        user_id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        role=payload.role,
+        organization_or_dept=user.organization_or_dept,
+        approval_status=user.approval_status,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
+
+
+@router.patch("/admin/users/{user_id}", response_model=PendingRegistrationOut)
+async def admin_update_user(
+    user_id: uuid.UUID,
+    payload: AdminUpdateUserRequest,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.SUPER_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> PendingRegistrationOut:
+    stmt = (
+        select(User)
+        .options(selectinload(User.user_roles).selectinload(UserRole.role))
+        .where(User.id == user_id)
+    )
+    user = (await db.execute(stmt)).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User record not found")
+
+    prev_role = user.user_roles[0].role.name if user.user_roles else RoleName.STUDENT
+    before = {
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": prev_role.value,
+        "organization_or_dept": user.organization_or_dept,
+        "approval_status": user.approval_status,
+    }
+
+    if payload.email is not None:
+        normalized_email = payload.email.strip().lower()
+        if normalized_email != user.email:
+            dup = (await db.execute(select(User).where(User.email == normalized_email))).scalar_one_or_none()
+            if dup is not None:
+                raise HTTPException(status_code=409, detail=f"Email '{normalized_email}' is already registered.")
+            user.email = normalized_email
+
+    if payload.full_name is not None:
+        user.full_name = payload.full_name.strip()
+
+    if payload.organization_or_dept is not None:
+        user.organization_or_dept = payload.organization_or_dept.strip()
+
+    if payload.approval_status is not None:
+        user.approval_status = payload.approval_status
+        user.is_active = payload.approval_status == "APPROVED"
+
+    active_role = prev_role
+    if payload.role is not None and payload.role != prev_role:
+        role_row = (await db.execute(select(Role).where(Role.name == payload.role))).scalar_one_or_none()
+        if role_row is None:
+            role_row = Role(name=payload.role, description=f"{payload.role.value} portal role")
+            db.add(role_row)
+            await db.flush()
+        for existing_ur in list(user.user_roles):
+            await db.delete(existing_ur)
+        await db.flush()
+        db.add(
+            UserRole(
+                user_id=user.id,
+                role_id=role_row.id,
+                assigned_by=principal.user.id,
+                is_primary=True,
+            )
+        )
+        active_role = payload.role
+
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ADMIN_USER_UPDATED",
+        entity_type="User",
+        entity_id=str(user.id),
+        before_state=before,
+        after_state={
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": active_role.value,
+            "organization_or_dept": user.organization_or_dept,
+            "approval_status": user.approval_status,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return PendingRegistrationOut(
+        user_id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        role=active_role,
+        organization_or_dept=user.organization_or_dept,
+        approval_status=user.approval_status,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
+
+
+@router.delete("/admin/users/{user_id}", status_code=status.HTTP_200_OK)
+async def admin_delete_user(
+    user_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.SUPER_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    if user_id == principal.user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own active Admin account.")
+
+    stmt = (
+        select(User)
+        .options(selectinload(User.user_roles).selectinload(UserRole.role))
+        .where(User.id == user_id)
+    )
+    user = (await db.execute(stmt)).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User record not found")
+
+    role_names = {ur.role.name for ur in user.user_roles}
+    if RoleName.ADMIN in role_names or RoleName.SUPER_ADMIN in role_names:
+        raise HTTPException(status_code=403, detail="Protected Admin accounts cannot be deleted.")
+
+    snapshot = {
+        "email": user.email,
+        "full_name": user.full_name,
+        "roles": [r.value for r in role_names],
+    }
+    await db.delete(user)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        actor_id=principal.user.id,
+        actor_role=principal.active_role.value,
+        action="ADMIN_USER_DELETED",
+        entity_type="User",
+        entity_id=str(user_id),
+        before_state=snapshot,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"status": "deleted", "user_id": str(user_id)}
 
 
 @router.post("/auth/sso-login", response_model=AuthResponse)
