@@ -2626,6 +2626,237 @@ export default function App() {
       options: opts,
       correctIndex: qbCorrectIdx,
     };
+
+  const [bulkQDomain, setBulkQDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [bulkQTrack, setBulkQTrack] = useState<QuizTrackOption>("INTERNSHIP");
+  const [bulkQMode, setBulkQMode] = useState<"APPEND" | "REPLACE">("APPEND");
+  const [bulkSheetUrl, setBulkSheetUrl] = useState<string>("");
+  const [bulkQStatus, setBulkQStatus] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const [bulkImporting, setBulkImporting] = useState<boolean>(false);
+
+  const parseQuestionRows = (
+    rows: string[][],
+    defaultDomain: QuizDomainOption,
+    defaultTrack: QuizTrackOption
+  ) => {
+    const parsed: typeof questionBank = [];
+    const errors: string[] = [];
+    if (!rows.length) return { parsed, errors: ["Spreadsheet is empty."] };
+
+    const firstRowLower = rows[0].map((c) => String(c || "").trim().toLowerCase());
+    const hasHeader =
+      firstRowLower.some((c) => c.includes("question") || c.includes("prompt")) &&
+      firstRowLower.some((c) => c.includes("option") || c.includes("answer") || c.includes("correct"));
+
+    const colIdx = {
+      prompt: -1,
+      optA: -1,
+      optB: -1,
+      optC: -1,
+      optD: -1,
+      correct: -1,
+      domain: -1,
+      track: -1,
+    };
+
+    if (hasHeader) {
+      firstRowLower.forEach((h, idx) => {
+        if (colIdx.prompt === -1 && (h.includes("question") || h.includes("prompt"))) colIdx.prompt = idx;
+        else if (colIdx.optA === -1 && (h === "a" || h.includes("option a") || h.includes("option_a") || h.includes("opt1") || h.includes("option 1"))) colIdx.optA = idx;
+        else if (colIdx.optB === -1 && (h === "b" || h.includes("option b") || h.includes("option_b") || h.includes("opt2") || h.includes("option 2"))) colIdx.optB = idx;
+        else if (colIdx.optC === -1 && (h === "c" || h.includes("option c") || h.includes("option_c") || h.includes("opt3") || h.includes("option 3"))) colIdx.optC = idx;
+        else if (colIdx.optD === -1 && (h === "d" || h.includes("option d") || h.includes("option_d") || h.includes("opt4") || h.includes("option 4"))) colIdx.optD = idx;
+        else if (colIdx.correct === -1 && (h.includes("correct") || h.includes("answer") || h === "ans")) colIdx.correct = idx;
+        else if (colIdx.domain === -1 && h.includes("domain")) colIdx.domain = idx;
+        else if (colIdx.track === -1 && h.includes("track")) colIdx.track = idx;
+      });
+    }
+
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+    dataRows.forEach((rawRow, rIdx) => {
+      const cells = rawRow.map((c) => String(c ?? "").trim());
+      if (cells.every((c) => !c)) return;
+
+      const pIdx = colIdx.prompt >= 0 ? colIdx.prompt : 0;
+      const aIdx = colIdx.optA >= 0 ? colIdx.optA : 1;
+      const bIdx = colIdx.optB >= 0 ? colIdx.optB : 2;
+      const cIdx = colIdx.optC >= 0 ? colIdx.optC : 3;
+      const dIdx = colIdx.optD >= 0 ? colIdx.optD : 4;
+      const ansIdx = colIdx.correct >= 0 ? colIdx.correct : 5;
+
+      const prompt = cells[pIdx] || "";
+      const opts: [string, string, string, string] = [
+        cells[aIdx] || "",
+        cells[bIdx] || "",
+        cells[cIdx] || "",
+        cells[dIdx] || "",
+      ];
+      const rawAns = (cells[ansIdx] || "").trim();
+
+      if (!prompt || opts.some((o) => !o) || !rawAns) {
+        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Missing question, one of the 4 options, or correct answer.`);
+        return;
+      }
+
+      let correctIndex = -1;
+      const ansUpper = rawAns.toUpperCase();
+      if (ansUpper === "A" || ansUpper === "OPTION A" || ansUpper === "1") correctIndex = 0;
+      else if (ansUpper === "B" || ansUpper === "OPTION B" || ansUpper === "2") correctIndex = 1;
+      else if (ansUpper === "C" || ansUpper === "OPTION C" || ansUpper === "3") correctIndex = 2;
+      else if (ansUpper === "D" || ansUpper === "OPTION D" || ansUpper === "4") correctIndex = 3;
+      else {
+        const matchedOptIdx = opts.findIndex((o) => o.toLowerCase() === rawAns.toLowerCase());
+        if (matchedOptIdx >= 0) correctIndex = matchedOptIdx;
+      }
+
+      if (correctIndex < 0 || correctIndex > 3) {
+        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Invalid correct answer "${rawAns}" (use A/B/C/D, 1-4, or exact option text).`);
+        return;
+      }
+
+      let rowDomain: QuizDomainOption = defaultDomain;
+      if (colIdx.domain >= 0 && cells[colIdx.domain]) {
+        const dVal = cells[colIdx.domain].toUpperCase();
+        if (dVal.includes("SOFTWARE") || dVal === "SD" || dVal === "SDE") rowDomain = "SOFTWARE_DEVELOPMENT";
+        else if (dVal.includes("DATA") || dVal === "DS") rowDomain = "DATA_SCIENCE";
+      }
+
+      let rowTrack: QuizTrackOption = defaultTrack;
+      if (colIdx.track >= 0 && cells[colIdx.track]) {
+        const tVal = cells[colIdx.track].toUpperCase();
+        if (tVal.includes("FULL") || tVal.includes("SOFTWARE") || tVal === "FT" || tVal === "FTE" || tVal === "PLACEMENT" || tVal === "SDE") {
+          rowTrack = "SOFTWARE_DEVELOPMENT";
+        } else if (tVal.includes("INTERN")) {
+          rowTrack = "INTERNSHIP";
+        }
+      }
+
+      parsed.push({
+        id: `QB-IMP-${Date.now()}-${rIdx}-${Math.random().toString(36).slice(2, 6)}`,
+        domain: rowDomain,
+        track: rowTrack,
+        prompt,
+        options: opts,
+        correctIndex,
+      });
+    });
+
+    return { parsed, errors };
+  };
+
+  const applyImportedQuestions = (parsed: typeof questionBank, errors: string[], sourceLabel: string) => {
+    if (!parsed.length) {
+      setBulkQStatus({
+        type: "ERR",
+        text: errors[0] || "No valid questions found. Verify columns: Question, Option A, Option B, Option C, Option D, Correct Answer.",
+      });
+      return;
+    }
+    setQuestionBank((prev) => {
+      if (bulkQMode === "REPLACE") {
+        const affectedCombos = new Set(parsed.map((q) => `${q.domain}::${q.track}`));
+        const kept = prev.filter((q) => !affectedCombos.has(`${q.domain}::${q.track}`));
+        return [...kept, ...parsed];
+      }
+      return [...prev, ...parsed];
+    });
+    const bankName = `${bulkQDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} — ${
+      bulkQTrack === "INTERNSHIP" ? "Internship" : "Full-Time Placement"
+    }`;
+    setBulkQStatus({
+      type: "OK",
+      text: `${bulkQMode === "REPLACE" ? "Replaced" : "Imported"} ${parsed.length} question(s) into ${bankName} from ${sourceLabel}${
+        errors.length ? ` (${errors.length} row(s) skipped)` : ""
+      }.`,
+    });
+    appendAudit(
+      user?.email || "coordinator@study.iitm.ac.in",
+      user?.role || "TRAINING_COORDINATOR",
+      "QUIZ_BANK_BULK_IMPORT",
+      `${parsed.length} Qs loaded (${bulkQMode}) from ${sourceLabel}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleQuestionBankFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkImporting(true);
+    setBulkQStatus(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
+      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
+      applyImportedQuestions(parsed, errors, file.name);
+    } catch {
+      setBulkQStatus({
+        type: "ERR",
+        text: `Failed to parse "${file.name}". Upload a valid .csv, .xlsx, or .xls spreadsheet.`,
+      });
+    } finally {
+      setBulkImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleQuestionBankSheetUrlImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawUrl = bulkSheetUrl.trim();
+    if (!rawUrl) {
+      setBulkQStatus({ type: "ERR", text: "Paste a Google Sheets share link or direct CSV/XLSX spreadsheet URL." });
+      return;
+    }
+    setBulkImporting(true);
+    setBulkQStatus(null);
+    try {
+      let fetchUrl = rawUrl;
+      const gsheetMatch = rawUrl.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (gsheetMatch) {
+        const sheetId = gsheetMatch[1];
+        const gidMatch = rawUrl.match(/[?#&]gid=(\d+)/);
+        const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : "";
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+      }
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) throw new Error("PRIVATE_SHEET");
+
+      const buffer = await res.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
+      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
+      applyImportedQuestions(parsed, errors, gsheetMatch ? "Google Spreadsheet Link" : "Spreadsheet URL");
+      if (parsed.length) setBulkSheetUrl("");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error && err.message === "PRIVATE_SHEET"
+          ? "Spreadsheet is private or requires sign-in. Set sharing to 'Anyone with the link can view' (or File -> Share -> Publish to web as CSV) and retry."
+          : "Could not fetch spreadsheet from link (ensure link is publicly accessible or upload the .csv/.xlsx file directly).";
+      setBulkQStatus({ type: "ERR", text: msg });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
+  const handleDownloadSampleQuestionCsv = () => {
+    const sampleCsv = [
+      "Question,Option A,Option B,Option C,Option D,Correct Answer,Domain,Track",
+      '"Which SQL window function assigns consecutive ranks without gaps for ties?","RANK()","DENSE_RANK()","ROW_NUMBER()","NTILE(4)","B","DATA_SCIENCE","INTERNSHIP"',
+      '"What is the worst-case time complexity of quicksort?","O(n log n)","O(n)","O(n^2)","O(log n)","C","SOFTWARE_DEVELOPMENT","FULL_TIME"',
+    ].join("
+");
+    const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "iitm_quiz_question_bank_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
     setQuestionBank((prev) => [newItem, ...prev]);
     setQbPrompt("");
     setQbOpt0("");
@@ -8452,7 +8683,292 @@ export default function App() {
             )}
 
             {user.role !== "EXAMINER" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
+              const bankBuckets: {
+                code: string;
+                title: string;
+                domain: QuizDomainOption;
+                track: QuizTrackOption;
+              }[] = [
+                { code: "DS-INT-101", title: "Data Science — Internship", domain: "DATA_SCIENCE", track: "INTERNSHIP" },
+                { code: "DS-SDE-201", title: "Data Science — Full-Time Placement", domain: "DATA_SCIENCE", track: "SOFTWARE_DEVELOPMENT" },
+                { code: "SD-INT-102", title: "Software Development — Internship", domain: "SOFTWARE_DEVELOPMENT", track: "INTERNSHIP" },
+                { code: "SD-SDE-202", title: "Software Development — Full-Time Placement", domain: "SOFTWARE_DEVELOPMENT", track: "SOFTWARE_DEVELOPMENT" },
+              ];
+
+              return (
+                <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Database className="w-5 h-5 text-indigo-400" />
+                        Quiz Question Bank Database (4 Domain & Track Pools)
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Training Coordinator repository — upload CSV/Excel spreadsheets, sync a Google Sheet link, or add questions manually across all 4 assessment pools.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadSampleQuestionCsv}
+                        className="px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-indigo-300 transition"
+                      >
+                        Download Sample CSV Template
+                      </button>
+                      <span className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 font-semibold">
+                        {questionBank.length} Total Qs
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4 Data Bank Pool Counters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {bankBuckets.map((b) => {
+                      const count = questionBank.filter((q) => q.domain === b.domain && q.track === b.track).length;
+                      const isSelected = bulkQDomain === b.domain && bulkQTrack === b.track;
+                      return (
+                        <button
+                          key={b.code}
+                          type="button"
+                          onClick={() => {
+                            setBulkQDomain(b.domain);
+                            setBulkQTrack(b.track);
+                            setQbDomain(b.domain);
+                            setQbTrack(b.track);
+                          }}
+                          className={`text-left p-3.5 rounded-xl border transition ${
+                            isSelected
+                              ? "bg-indigo-950/50 border-indigo-500 text-white"
+                              : "bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono text-indigo-300">{b.code}</span>
+                            <span className="px-2 py-0.5 rounded bg-slate-900 text-emerald-300 font-bold">
+                              {count} Qs
+                            </span>
+                          </div>
+                          <div className="text-xs font-semibold mt-1.5">{b.title}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {bulkQStatus && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                        bulkQStatus.type === "OK"
+                          ? "bg-emerald-950/50 border-emerald-500/40 text-emerald-200"
+                          : "bg-rose-950/60 border-rose-500/40 text-rose-200"
+                      }`}
+                    >
+                      <span>{bulkQStatus.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => setBulkQStatus(null)}
+                        className="text-[11px] underline text-slate-400 hover:text-white shrink-0"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {qbBanner && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                        qbBanner.type === "OK"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{qbBanner.text}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left 7 Cols: Bulk Spreadsheet / CSV / Google Sheet Link Importer */}
+                    <div className="lg:col-span-7 bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-4 text-xs">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-white">Bulk Import via CSV / Excel / Spreadsheet Link</h3>
+                        <span className="text-[11px] text-slate-400">Cols: Question, Option A–D, Correct Answer</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="block text-slate-400 mb-1">Target Domain</label>
+                          <select
+                            value={bulkQDomain}
+                            onChange={(e) => setBulkQDomain(e.target.value as QuizDomainOption)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-slate-200"
+                          >
+                            <option value="DATA_SCIENCE">Data Science</option>
+                            <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Target Track</label>
+                          <select
+                            value={bulkQTrack}
+                            onChange={(e) => setBulkQTrack(e.target.value as QuizTrackOption)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-slate-200"
+                          >
+                            <option value="INTERNSHIP">Internship</option>
+                            <option value="SOFTWARE_DEVELOPMENT">Full-Time Placement</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">Import Mode</label>
+                          <select
+                            value={bulkQMode}
+                            onChange={(e) => setBulkQMode(e.target.value as "APPEND" | "REPLACE")}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-slate-200"
+                          >
+                            <option value="APPEND">Append to Selected Bank</option>
+                            <option value="REPLACE">Replace Selected Bank</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-slate-300 font-medium">
+                          1. Upload CSV or Excel Spreadsheet (.csv, .xlsx, .xls)
+                        </label>
+                        <input
+                          type="file"
+                          accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                          disabled={bulkImporting}
+                          onChange={handleQuestionBankFileUpload}
+                          className="w-full bg-slate-900 border border-dashed border-indigo-500/40 rounded-lg px-3 py-2 text-slate-300 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                        />
+                      </div>
+
+                      <form onSubmit={handleQuestionBankSheetUrlImport} className="space-y-1.5">
+                        <label className="block text-slate-300 font-medium">
+                          2. Or Paste Google Sheets / Spreadsheet Share Link
+                        </label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="url"
+                            value={bulkSheetUrl}
+                            onChange={(e) => setBulkSheetUrl(e.target.value)}
+                            placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200"
+                          />
+                          <button
+                            type="submit"
+                            disabled={bulkImporting}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold transition shrink-0"
+                          >
+                            {bulkImporting ? "Importing..." : "Sync Sheet Link"}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Supports Google Sheets share links (&ldquo;Anyone with the link can view&rdquo;) and direct .csv / .xlsx URLs. Optional Domain &amp; Track columns override target dropdowns per row.
+                        </p>
+                      </form>
+                    </div>
+
+                    {/* Right 5 Cols: Single Question Manual Entry */}
+                    <div className="lg:col-span-5 bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3 text-xs">
+                      <h3 className="font-bold text-white">Add Single Question Manually</h3>
+                      <form onSubmit={handleAddQuestionToBank} className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-slate-400 mb-1">Domain</label>
+                            <select
+                              value={qbDomain}
+                              onChange={(e) => setQbDomain(e.target.value as QuizDomainOption)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-slate-200"
+                            >
+                              <option value="DATA_SCIENCE">Data Science</option>
+                              <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 mb-1">Track</label>
+                            <select
+                              value={qbTrack}
+                              onChange={(e) => setQbTrack(e.target.value as QuizTrackOption)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-slate-200"
+                            >
+                              <option value="INTERNSHIP">Internship</option>
+                              <option value="SOFTWARE_DEVELOPMENT">Full-Time Placement</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={qbPrompt}
+                          onChange={(e) => setQbPrompt(e.target.value)}
+                          placeholder="Question prompt..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200"
+                        />
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={qbOpt0}
+                            onChange={(e) => setQbOpt0(e.target.value)}
+                            placeholder="Option A"
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200"
+                          />
+                          <input
+                            type="text"
+                            value={qbOpt1}
+                            onChange={(e) => setQbOpt1(e.target.value)}
+                            placeholder="Option B"
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200"
+                          />
+                          <input
+                            type="text"
+                            value={qbOpt2}
+                            onChange={(e) => setQbOpt2(e.target.value)}
+                            placeholder="Option C"
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200"
+                          />
+                          <input
+                            type="text"
+                            value={qbOpt3}
+                            onChange={(e) => setQbOpt3(e.target.value)}
+                            placeholder="Option D"
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">Correct Answer:</span>
+                            <select
+                              value={qbCorrectIdx}
+                              onChange={(e) => setQbCorrectIdx(Number(e.target.value))}
+                              className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200"
+                            >
+                              <option value={0}>Option A</option>
+                              <option value={1}>Option B</option>
+                              <option value={2}>Option C</option>
+                              <option value={3}>Option D</option>
+                            </select>
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1 transition"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Question
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+<div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -8509,119 +9025,6 @@ export default function App() {
                       );
                     })}
                   </div>
-                </div>
-
-                {/* Question Bank Builder */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Database className="w-5 h-5 text-indigo-400" />
-                      <h2 className="font-semibold text-white">Quiz Question Bank Database</h2>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
-                      {questionBank.length} Total Qs
-                    </span>
-                  </div>
-
-                  {qbBanner && (
-                    <div
-                      className={`mb-3 p-3 rounded-lg border text-xs flex items-center gap-2 ${
-                        qbBanner.type === "OK"
-                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                          : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>{qbBanner.text}</span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleAddQuestionToBank} className="space-y-2.5 text-xs">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-slate-400 mb-1">Domain</label>
-                        <select
-                          value={qbDomain}
-                          onChange={(e) => setQbDomain(e.target.value as QuizDomainOption)}
-                          className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                        >
-                          <option value="DATA_SCIENCE">Data Science</option>
-                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-400 mb-1">Track</label>
-                        <select
-                          value={qbTrack}
-                          onChange={(e) => setQbTrack(e.target.value as QuizTrackOption)}
-                          className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                        >
-                          <option value="INTERNSHIP">Internship</option>
-                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <input
-                      type="text"
-                      value={qbPrompt}
-                      onChange={(e) => setQbPrompt(e.target.value)}
-                      placeholder="Question prompt..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                    />
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={qbOpt0}
-                        onChange={(e) => setQbOpt0(e.target.value)}
-                        placeholder="Option A"
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                      />
-                      <input
-                        type="text"
-                        value={qbOpt1}
-                        onChange={(e) => setQbOpt1(e.target.value)}
-                        placeholder="Option B"
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                      />
-                      <input
-                        type="text"
-                        value={qbOpt2}
-                        onChange={(e) => setQbOpt2(e.target.value)}
-                        placeholder="Option C"
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                      />
-                      <input
-                        type="text"
-                        value={qbOpt3}
-                        onChange={(e) => setQbOpt3(e.target.value)}
-                        placeholder="Option D"
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400">Correct Answer:</span>
-                      <select
-                        value={qbCorrectIdx}
-                        onChange={(e) => setQbCorrectIdx(Number(e.target.value))}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-                      >
-                        <option value={0}>Option A</option>
-                        <option value={1}>Option B</option>
-                        <option value={2}>Option C</option>
-                        <option value={3}>Option D</option>
-                      </select>
-                      <button
-                        type="submit"
-                        className="ml-auto px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add Question
-                      </button>
-                    </div>
-                  </form>
                 </div>
 
                 {/* Earned Skill Verification Badges */}
