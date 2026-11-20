@@ -1061,7 +1061,7 @@ export default function App() {
   const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
   const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
   const [recruiterWorkspaceView, setRecruiterWorkspaceView] = useState<"MY_DRIVES" | "POST_DRIVE" | "ATS_PIPELINE">("MY_DRIVES");
-  const [recruiterShowAllDrives, setRecruiterShowAllDrives] = useState<boolean>(false);
+  const recruiterShowAllDrives = false;
 
   useEffect(() => {
     try {
