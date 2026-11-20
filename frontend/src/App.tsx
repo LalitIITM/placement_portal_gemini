@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ShieldCheck,
@@ -355,6 +356,24 @@ interface TrainingTrack {
   maxAttempts: number;
   bestScorePct: number | null;
   modules: CourseModuleItem[];
+}
+
+
+interface OneOnOneSlotRecord {
+  id: string;
+  studentEmail: string;
+  studentName: string;
+  date: string;
+  slotTime: string;
+  instructor: string;
+  status: "SCHEDULED" | "COMPLETED";
+  instructorFeedback?: string;
+  isPlacementReady?: boolean;
+  programmingRating?: number;
+  dataScienceRating?: number;
+  communicationRating?: number;
+  remedialTasks?: string[];
+  completedAt?: string;
 }
 
 interface ExaminerEvaluationRecord {
@@ -946,6 +965,43 @@ export default function App() {
   const [examinerNotes, setExaminerNotes] = useState("");
   const [evalBanner, setEvalBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
   const [evaluations, setEvaluations] = useState<ExaminerEvaluationRecord[]>([]);
+  const [oneOnOneSlots, setOneOnOneSlots] = useState<OneOnOneSlotRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_one_on_one_slots_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        id: "SLOT-1001",
+        studentEmail: "22f3001842@ds.study.iitm.ac.in",
+        studentName: "Aarav Sharma",
+        date: "2026-11-22",
+        slotTime: "10:30 AM - 11:00 AM IST",
+        instructor: "Dr. R. Subramanian",
+        status: "SCHEDULED",
+      },
+    ];
+  });
+  const [selectedSlotIdForEval, setSelectedSlotIdForEval] = useState<string>("");
+  const [slotUploadAlert, setSlotUploadAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const [slotPasteText, setSlotPasteText] = useState("");
+  const [slotProgressFilter, setSlotProgressFilter] = useState<"ALL" | "SCHEDULED" | "COMPLETED">("ALL");
+  const [examinerSlotScope, setExaminerSlotScope] = useState<"MINE" | "ALL">("MINE");
+  const [manualSlotEmail, setManualSlotEmail] = useState("");
+  const [manualSlotName, setManualSlotName] = useState("");
+  const [manualSlotDate, setManualSlotDate] = useState("");
+  const [manualSlotTime, setManualSlotTime] = useState("");
+  const [manualSlotInstructor, setManualSlotInstructor] = useState("");
+
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("iitm_os_one_on_one_slots_v1", JSON.stringify(oneOnOneSlots));
+    } catch {}
+  }, [oneOnOneSlots]);
 
   // Increment 3: Recruitment, Job Postings & Application Eligibility Engine
   const [jobs, setJobs] = useState<JobDriveItem[]>(INITIAL_JOBS);
@@ -1115,6 +1171,9 @@ export default function App() {
         if (Array.isArray(snap.evaluations)) {
           setEvaluations(snap.evaluations);
         }
+        if (Array.isArray(snap.oneOnOneSlots) && snap.oneOnOneSlots.length > 0) {
+          setOneOnOneSlots(snap.oneOnOneSlots);
+        }
         if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
           setAuditLogs(snap.auditLogs);
         }
@@ -1158,6 +1217,7 @@ export default function App() {
               jobs,
               applications,
               evaluations,
+              oneOnOneSlots,
               auditLogs,
               resumes,
               marksheet,
@@ -1183,6 +1243,7 @@ export default function App() {
     jobs,
     applications,
     evaluations,
+    oneOnOneSlots,
     auditLogs,
     resumes,
     marksheet,
@@ -2530,9 +2591,21 @@ export default function App() {
       return;
     }
 
+    const activeSlot =
+      oneOnOneSlots.find((s) => s.id === selectedSlotIdForEval) ||
+      oneOnOneSlots.find((s) => s.status === "SCHEDULED");
+    const evaluatedStudentLabel = activeSlot
+      ? `${activeSlot.studentName} (${activeSlot.studentEmail})`
+      : user.name;
+    const completedStamp =
+      new Date().toLocaleDateString("en-IN") +
+      " " +
+      new Date().toLocaleTimeString("en-IN", { hour12: false }) +
+      " IST";
+
     const record: ExaminerEvaluationRecord = {
       id: `EVAL-${Date.now()}`,
-      studentRoll: user.name,
+      studentRoll: evaluatedStudentLabel,
       examinerEmail: user.email,
       skillsets: skills,
       programmingRating: progRating,
@@ -2542,13 +2615,45 @@ export default function App() {
       performingExceptionallyGood,
       remedialTasks: tasks,
       notes: examinerNotes.trim(),
-      evaluatedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }) + " IST",
+      evaluatedAt: completedStamp,
     };
 
     setEvaluations((prev) => [record, ...prev]);
+
+    if (activeSlot) {
+      setOneOnOneSlots((prev) =>
+        prev.map((slot) =>
+          slot.id === activeSlot.id
+            ? {
+                ...slot,
+                status: "COMPLETED",
+                instructorFeedback:
+                  examinerNotes.trim() ||
+                  (isPlacementReady
+                    ? "Cleared 1-on-1 Viva with strong technical & communication readiness."
+                    : "Completed 1-on-1 Viva — please complete the assigned remedial tasks before re-evaluation."),
+                isPlacementReady,
+                programmingRating: progRating,
+                dataScienceRating: dsRating,
+                communicationRating: commRating,
+                remedialTasks: tasks,
+                completedAt: completedStamp,
+              }
+            : slot
+        )
+      );
+      setSelectedSlotIdForEval("");
+    }
+
+    if (isPlacementReady) {
+      setTrainingStages((prev) =>
+        prev.map((s) => (s.id === "L3-S3" ? { ...s, statusText: "Yes" } : s))
+      );
+    }
+
     setEvalBanner({
       type: "OK",
-      text: `Final Stage Examiner Evaluation recorded for ${user.name} (${
+      text: `1-on-1 Viva Completed & Feedback Published for ${evaluatedStudentLabel} (${
         isPlacementReady ? "Placement Ready" : "Not Ready — Remedial Tasks Assigned"
       }).`,
     });
@@ -2561,6 +2666,150 @@ export default function App() {
       } | Exceptional: ${performingExceptionallyGood ? "Yes" : "No"}`,
       "SUCCESS"
     );
+  };
+
+  const ingestParsedSlotRows = (rawRows: Record<string, unknown>[], sourceLabel: string) => {
+    const normalizeKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const imported: OneOnOneSlotRecord[] = [];
+
+    rawRows.forEach((row, idx) => {
+      const mapped: Record<string, string> = {};
+      Object.entries(row).forEach(([k, v]) => {
+        mapped[normalizeKey(k)] = String(v ?? "").trim();
+      });
+
+      const email = mapped["email"] || mapped["studentemail"] || mapped["mail"] || "";
+      const studentName = mapped["studentname"] || mapped["name"] || mapped["student"] || "";
+      const date = mapped["date"] || mapped["slotdate"] || mapped["vivadate"] || "";
+      const slotTime = mapped["slottime"] || mapped["time"] || mapped["slot"] || "";
+      const instructor = mapped["instructor"] || mapped["examiner"] || mapped["mentor"] || mapped["panelist"] || "";
+
+      if (!email && !studentName) return;
+      if (!date || !slotTime || !instructor) return;
+
+      imported.push({
+        id: `SLOT-${Date.now()}-${idx + 1}`,
+        studentEmail: email || `${studentName.toLowerCase().replace(/\s+/g, ".")}@ds.study.iitm.ac.in`,
+        studentName: studentName || email.split("@")[0],
+        date,
+        slotTime,
+        instructor,
+        status: "SCHEDULED",
+      });
+    });
+
+    if (imported.length === 0) {
+      setSlotUploadAlert({
+        type: "ERR",
+        text: "No valid rows found. Ensure columns include: Email, Student Name, Date, Slot Time, Instructor.",
+      });
+      return;
+    }
+
+    setOneOnOneSlots((prev) => {
+      const updated = [...prev];
+      imported.forEach((item) => {
+        const existingIdx = updated.findIndex(
+          (s) =>
+            s.studentEmail.toLowerCase() === item.studentEmail.toLowerCase() &&
+            s.status === "SCHEDULED"
+        );
+        if (existingIdx >= 0) {
+          updated[existingIdx] = { ...updated[existingIdx], ...item, id: updated[existingIdx].id };
+        } else {
+          updated.unshift(item);
+        }
+      });
+      return updated;
+    });
+
+    setSlotUploadAlert({
+      type: "OK",
+      text: `Synced ${imported.length} 1-on-1 slot(s) from ${sourceLabel} to Examiner & Student dashboards.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "ONE_ON_ONE_SLOTS_BULK_UPLOADED",
+      `${imported.length} slot(s) imported via ${sourceLabel}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleSpreadsheetSlotFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+      ingestParsedSlotRows(rows, file.name);
+    } catch {
+      setSlotUploadAlert({
+        type: "ERR",
+        text: "Could not parse spreadsheet. Please upload a valid .csv, .xlsx, or .xls file.",
+      });
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handlePasteSlotRowsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slotPasteText.trim()) return;
+    try {
+      const wb = XLSX.read(slotPasteText.trim(), { type: "string" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      ingestParsedSlotRows(rows, "Pasted Spreadsheet Table");
+      setSlotPasteText("");
+    } catch {
+      setSlotUploadAlert({
+        type: "ERR",
+        text: "Failed to parse pasted rows. Include header row: Email, Student Name, Date, Slot Time, Instructor.",
+      });
+    }
+  };
+
+  const handleAddSingleSlot = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualSlotEmail.trim() || !manualSlotName.trim() || !manualSlotDate.trim() || !manualSlotTime.trim() || !manualSlotInstructor.trim()) {
+      setSlotUploadAlert({ type: "ERR", text: "Fill in all 5 fields (Email, Student Name, Date, Slot Time, Instructor)." });
+      return;
+    }
+    ingestParsedSlotRows(
+      [
+        {
+          Email: manualSlotEmail.trim(),
+          "Student Name": manualSlotName.trim(),
+          Date: manualSlotDate.trim(),
+          "Slot Time": manualSlotTime.trim(),
+          Instructor: manualSlotInstructor.trim(),
+        },
+      ],
+      "Manual Slot Entry"
+    );
+    setManualSlotEmail("");
+    setManualSlotName("");
+    setManualSlotDate("");
+    setManualSlotTime("");
+  };
+
+  const handleDownloadSampleSlotsCsv = () => {
+    const csvContent = [
+      "Email,Student Name,Date,Slot Time,Instructor",
+      "22f3001842@ds.study.iitm.ac.in,Aarav Sharma,2026-11-24,10:00 AM - 10:30 AM IST,Dr. R. Subramanian",
+      "22f3002190@ds.study.iitm.ac.in,Diya Nair,2026-11-24,10:30 AM - 11:00 AM IST,Dr. R. Subramanian",
+      "23f1000814@ds.study.iitm.ac.in,Rohan Kulkarni,2026-11-24,11:00 AM - 11:30 AM IST,Prof. Meera Krishnan",
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "iitm_1on1_viva_slots_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Increment 3: Live Eligibility Engine Evaluation (BRULE-21 to BRULE-25)
@@ -6114,6 +6363,132 @@ export default function App() {
           <div className="space-y-8">
             {user.role === "STUDENT" && (() => {
               const prog = computeTrainingAndActivityProgress();
+              const mySlots = oneOnOneSlots.filter(
+                (s) =>
+                  s.studentEmail.toLowerCase() === user.email.toLowerCase() ||
+                  s.studentName.toLowerCase() === user.name.toLowerCase()
+              );
+              const latestSlot = mySlots[0] || null;
+              return (
+                <div className="bg-slate-900 border border-indigo-500/35 rounded-2xl p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Calendar className="w-5 h-5 text-indigo-400" />
+                      <div>
+                        <h3 className="text-sm font-bold text-white">
+                          1-on-1 Viva &amp; Mentoring Slot — Schedule &amp; Instructor Feedback
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Assigned by the Training Coordinator and evaluated live by your IITM Examiner
+                        </p>
+                      </div>
+                    </div>
+                    {latestSlot && (
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                          latestSlot.status === "COMPLETED"
+                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                            : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        }`}
+                      >
+                        {latestSlot.status === "COMPLETED" ? "1-on-1 Completed" : "Scheduled"}
+                      </span>
+                    )}
+                  </div>
+
+                  {!latestSlot ? (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                      No 1-on-1 Viva slot has been uploaded for <span className="text-slate-200 font-mono">{user.email}</span> yet. Once the Training Coordinator publishes the slot sheet, your Date, Slot Time, and Instructor will appear here.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                          <span className="text-[11px] text-slate-400 block">Scheduled Date</span>
+                          <span className="font-semibold text-white mt-0.5 block">{latestSlot.date}</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                          <span className="text-[11px] text-slate-400 block">Slot Time</span>
+                          <span className="font-semibold text-cyan-300 mt-0.5 block">{latestSlot.slotTime}</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                          <span className="text-[11px] text-slate-400 block">Assigned Instructor</span>
+                          <span className="font-semibold text-indigo-300 mt-0.5 block">{latestSlot.instructor}</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                          <span className="text-[11px] text-slate-400 block">Readiness Sign-Off</span>
+                          <span
+                            className={`font-semibold mt-0.5 block ${
+                              latestSlot.status === "COMPLETED"
+                                ? latestSlot.isPlacementReady
+                                  ? "text-emerald-300"
+                                  : "text-amber-300"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {latestSlot.status === "COMPLETED"
+                              ? latestSlot.isPlacementReady
+                                ? "Placement Ready ✓"
+                                : "Action Required (Remedial Tasks)"
+                              : "Awaiting 1-on-1 Completion"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {latestSlot.status === "COMPLETED" && (
+                        <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-2.5 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-semibold text-emerald-300">
+                              Instructor Feedback ({latestSlot.instructor})
+                            </span>
+                            {latestSlot.completedAt && (
+                              <span className="text-[11px] text-slate-400">
+                                Completed: {latestSlot.completedAt}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-200 leading-relaxed">
+                            {latestSlot.instructorFeedback}
+                          </p>
+                          {(latestSlot.programmingRating || latestSlot.dataScienceRating || latestSlot.communicationRating) && (
+                            <div className="flex flex-wrap gap-2 pt-1 text-[11px]">
+                              {latestSlot.programmingRating && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200">
+                                  Programming: <strong>{latestSlot.programmingRating}/5</strong>
+                                </span>
+                              )}
+                              {latestSlot.dataScienceRating && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200">
+                                  Data Science: <strong>{latestSlot.dataScienceRating}/5</strong>
+                                </span>
+                              )}
+                              {latestSlot.communicationRating && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200">
+                                  Communication: <strong>{latestSlot.communicationRating}/5</strong>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {latestSlot.remedialTasks && latestSlot.remedialTasks.length > 0 && !latestSlot.isPlacementReady && (
+                            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200">
+                              <span className="font-semibold block mb-1">Recommended Next Steps from Instructor:</span>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {latestSlot.remedialTasks.map((task, idx) => (
+                                  <li key={idx}>{task}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {user.role === "STUDENT" && (() => {
+              const prog = computeTrainingAndActivityProgress();
               const relevantActivities = ACTIVITY_CATALOG.filter((a) => {
                 if (a.table === "TABLE_1") return true;
                 if (a.table === "TABLE_2") return a.domain === studentTargetDomain;
@@ -6483,6 +6858,242 @@ export default function App() {
                 </div>
               );
             })()}
+            {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
+              const totalSlots = oneOnOneSlots.length;
+              const completedSlots = oneOnOneSlots.filter((s) => s.status === "COMPLETED").length;
+              const pendingSlots = totalSlots - completedSlots;
+              const readySlots = oneOnOneSlots.filter((s) => s.status === "COMPLETED" && s.isPlacementReady).length;
+              const filteredSlots = oneOnOneSlots.filter((s) =>
+                slotProgressFilter === "ALL" ? true : s.status === slotProgressFilter
+              );
+
+              return (
+                <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+                        Training Coordinator • 1-on-1 Viva &amp; Mentoring Operations
+                      </span>
+                      <h2 className="text-lg font-bold text-white mt-0.5">
+                        1-on-1 Slot Bulk Scheduler (CSV / Excel) &amp; Master Progress Tracker
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Upload a spreadsheet with columns <code className="text-indigo-300">Email, Student Name, Date, Slot Time, Instructor</code> to sync slots across Examiner &amp; Student dashboards.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadSampleSlotsCsv}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200"
+                      >
+                        Download Sample CSV Template
+                      </button>
+                      <label className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer">
+                        Upload CSV / Excel (.xlsx, .xls, .csv)
+                        <input
+                          type="file"
+                          accept=".csv,.xlsx,.xls,.tsv"
+                          onChange={handleSpreadsheetSlotFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {slotUploadAlert && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                        slotUploadAlert.type === "OK"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                      }`}
+                    >
+                      <span>{slotUploadAlert.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSlotUploadAlert(null)}
+                        className="text-[11px] underline opacity-80 hover:opacity-100"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Live 1-on-1 Progress Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[11px] text-slate-400 block">Total 1-on-1 Slots</span>
+                      <span className="text-xl font-bold text-white mt-0.5 block">{totalSlots}</span>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[11px] text-slate-400 block">Scheduled / Upcoming</span>
+                      <span className="text-xl font-bold text-amber-300 mt-0.5 block">{pendingSlots}</span>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[11px] text-slate-400 block">Completed 1-on-1s</span>
+                      <span className="text-xl font-bold text-emerald-300 mt-0.5 block">{completedSlots}</span>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[11px] text-slate-400 block">Placement Ready Sign-offs</span>
+                      <span className="text-xl font-bold text-cyan-300 mt-0.5 block">{readySlots}</span>
+                    </div>
+                  </div>
+
+                  {/* Quick Paste or Single Slot Add */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+                    <form onSubmit={handlePasteSlotRowsSubmit} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                      <div className="font-semibold text-slate-200">
+                        Paste Rows Directly from Excel / Google Sheets
+                      </div>
+                      <textarea
+                        rows={3}
+                        value={slotPasteText}
+                        onChange={(e) => setSlotPasteText(e.target.value)}
+                        placeholder={"Email,Student Name,Date,Slot Time,Instructor\n22f3001842@ds.study.iitm.ac.in,Aarav Sharma,2026-11-25,02:00 PM - 02:30 PM IST,Dr. R. Subramanian"}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 font-mono text-[11px]"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                      >
+                        Import Pasted Rows
+                      </button>
+                    </form>
+
+                    <form onSubmit={handleAddSingleSlot} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                      <div className="font-semibold text-slate-200">Quick Single-Slot Assignment</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="email"
+                          placeholder="Student Email"
+                          value={manualSlotEmail}
+                          onChange={(e) => setManualSlotEmail(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Student Name"
+                          value={manualSlotName}
+                          onChange={(e) => setManualSlotName(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <input
+                          type="date"
+                          value={manualSlotDate}
+                          onChange={(e) => setManualSlotDate(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Slot Time (e.g. 11:00 AM - 11:30 AM)"
+                          value={manualSlotTime}
+                          onChange={(e) => setManualSlotTime(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Instructor / Examiner Name"
+                          value={manualSlotInstructor}
+                          onChange={(e) => setManualSlotInstructor(e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <button
+                          type="submit"
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                        >
+                          Add Slot
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Entire 1-on-1 Progress Table */}
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                        Entire 1-on-1 Progress &amp; Instructor Feedback Ledger ({filteredSlots.length})
+                      </h3>
+                      <div className="flex gap-1.5 text-[11px]">
+                        {(["ALL", "SCHEDULED", "COMPLETED"] as const).map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => setSlotProgressFilter(st)}
+                            className={`px-2.5 py-1 rounded-lg font-semibold ${
+                              slotProgressFilter === st
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-950 border border-slate-800 text-slate-400"
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-950 border-b border-slate-800 text-[11px] uppercase text-slate-400">
+                            <th className="py-2.5 px-3">Student</th>
+                            <th className="py-2.5 px-3">Date &amp; Slot Time</th>
+                            <th className="py-2.5 px-3">Instructor</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3">Instructor Feedback &amp; Verdict</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/70 bg-slate-950/50">
+                          {filteredSlots.map((slot) => (
+                            <tr key={slot.id}>
+                              <td className="py-2.5 px-3">
+                                <span className="font-semibold text-white block">{slot.studentName}</span>
+                                <span className="text-[11px] font-mono text-slate-400">{slot.studentEmail}</span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="text-slate-200 block">{slot.date}</span>
+                                <span className="text-[11px] text-cyan-300">{slot.slotTime}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-indigo-300 font-medium">{slot.instructor}</td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                    slot.status === "COMPLETED"
+                                      ? "bg-emerald-500/20 text-emerald-300"
+                                      : "bg-amber-500/20 text-amber-300"
+                                  }`}
+                                >
+                                  {slot.status}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 max-w-xs">
+                                {slot.status === "COMPLETED" ? (
+                                  <div className="space-y-0.5">
+                                    <span
+                                      className={`text-[11px] font-semibold block ${
+                                        slot.isPlacementReady ? "text-emerald-300" : "text-amber-300"
+                                      }`}
+                                    >
+                                      {slot.isPlacementReady ? "Placement Ready ✓" : "Not Ready (Remedial)"}
+                                    </span>
+                                    <p className="text-[11px] text-slate-300">{slot.instructorFeedback}</p>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-500">Awaiting 1-on-1 session</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (
               <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -7318,6 +7929,106 @@ export default function App() {
                       </p>
                     </div>
                   ) : (
+                    <div className="mb-4 p-4 rounded-xl bg-slate-950 border border-indigo-500/30 space-y-3 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <span className="font-semibold text-indigo-300 block">
+                            Scheduled 1-on-1 Viva Slots (Synced from Training Coordinator)
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            Select a scheduled student slot below to conduct &amp; publish feedback directly to their dashboard
+                          </span>
+                        </div>
+                        <div className="flex gap-1 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => setExaminerSlotScope("MINE")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold ${
+                              examinerSlotScope === "MINE"
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-900 text-slate-400"
+                            }`}
+                          >
+                            My Slots
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setExaminerSlotScope("ALL")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold ${
+                              examinerSlotScope === "ALL"
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-900 text-slate-400"
+                            }`}
+                          >
+                            All Slots ({oneOnOneSlots.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const visibleSlots = oneOnOneSlots.filter((s) => {
+                          if (examinerSlotScope === "ALL") return true;
+                          const inst = s.instructor.toLowerCase();
+                          const uName = user.name.toLowerCase();
+                          const uPrefix = user.email.split("@")[0].toLowerCase();
+                          return inst.includes(uName) || uName.includes(inst) || inst.includes(uPrefix);
+                        });
+                        const listToRender = visibleSlots.length > 0 ? visibleSlots : oneOnOneSlots;
+                        return listToRender.length === 0 ? (
+                          <p className="text-slate-400 text-[11px]">No 1-on-1 slots scheduled yet.</p>
+                        ) : (
+                          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                            {listToRender.map((slot) => {
+                              const isSelected = selectedSlotIdForEval === slot.id;
+                              return (
+                                <div
+                                  key={slot.id}
+                                  className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 ${
+                                    isSelected
+                                      ? "bg-indigo-600/15 border-indigo-500/60"
+                                      : "bg-slate-900/90 border-slate-800"
+                                  }`}
+                                >
+                                  <div>
+                                    <span className="font-semibold text-white">
+                                      {slot.studentName}
+                                    </span>{" "}
+                                    <span className="text-[11px] font-mono text-slate-400">
+                                      ({slot.studentEmail})
+                                    </span>
+                                    <div className="text-[11px] text-slate-300 mt-0.5">
+                                      {slot.date} • <span className="text-cyan-300">{slot.slotTime}</span> • Instructor: <span className="text-indigo-300">{slot.instructor}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                        slot.status === "COMPLETED"
+                                          ? "bg-emerald-500/20 text-emerald-300"
+                                          : "bg-amber-500/20 text-amber-300"
+                                      }`}
+                                    >
+                                      {slot.status}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedSlotIdForEval(slot.id);
+                                        if (slot.instructorFeedback) setExaminerNotes(slot.instructorFeedback);
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
+                                    >
+                                      {isSelected ? "Evaluating ✓" : slot.status === "COMPLETED" ? "Re-Evaluate" : "Conduct 1-on-1"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     <form onSubmit={handleSaveExaminerEvaluation} className="space-y-3.5 text-xs">
                       {evalBanner && (
                         <div
