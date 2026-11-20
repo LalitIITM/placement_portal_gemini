@@ -986,6 +986,236 @@ export default function App() {
   const [qbOpt2, setQbOpt2] = useState("");
   const [qbOpt3, setQbOpt3] = useState("");
   const [qbCorrectIdx, setQbCorrectIdx] = useState<number>(0);
+
+  const [bulkQDomain, setBulkQDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [bulkQTrack, setBulkQTrack] = useState<QuizTrackOption>("INTERNSHIP");
+  const [bulkQMode, setBulkQMode] = useState<"APPEND" | "REPLACE">("APPEND");
+  const [bulkSheetUrl, setBulkSheetUrl] = useState<string>("");
+  const [bulkQStatus, setBulkQStatus] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const [bulkImporting, setBulkImporting] = useState<boolean>(false);
+
+  const parseQuestionRows = (
+    rows: string[][],
+    defaultDomain: QuizDomainOption,
+    defaultTrack: QuizTrackOption
+  ) => {
+    const parsed: typeof questionBank = [];
+    const errors: string[] = [];
+    if (!rows.length) return { parsed, errors: ["Spreadsheet is empty."] };
+
+    const firstRowLower = rows[0].map((c) => String(c || "").trim().toLowerCase());
+    const hasHeader =
+      firstRowLower.some((c) => c.includes("question") || c.includes("prompt")) &&
+      firstRowLower.some((c) => c.includes("option") || c.includes("answer") || c.includes("correct"));
+
+    const colIdx = {
+      prompt: -1,
+      optA: -1,
+      optB: -1,
+      optC: -1,
+      optD: -1,
+      correct: -1,
+      domain: -1,
+      track: -1,
+    };
+
+    if (hasHeader) {
+      firstRowLower.forEach((h, idx) => {
+        if (colIdx.prompt === -1 && (h.includes("question") || h.includes("prompt"))) colIdx.prompt = idx;
+        else if (colIdx.optA === -1 && (h === "a" || h.includes("option a") || h.includes("option_a") || h.includes("opt1") || h.includes("option 1"))) colIdx.optA = idx;
+        else if (colIdx.optB === -1 && (h === "b" || h.includes("option b") || h.includes("option_b") || h.includes("opt2") || h.includes("option 2"))) colIdx.optB = idx;
+        else if (colIdx.optC === -1 && (h === "c" || h.includes("option c") || h.includes("option_c") || h.includes("opt3") || h.includes("option 3"))) colIdx.optC = idx;
+        else if (colIdx.optD === -1 && (h === "d" || h.includes("option d") || h.includes("option_d") || h.includes("opt4") || h.includes("option 4"))) colIdx.optD = idx;
+        else if (colIdx.correct === -1 && (h.includes("correct") || h.includes("answer") || h === "ans")) colIdx.correct = idx;
+        else if (colIdx.domain === -1 && h.includes("domain")) colIdx.domain = idx;
+        else if (colIdx.track === -1 && h.includes("track")) colIdx.track = idx;
+      });
+    }
+
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+    dataRows.forEach((rawRow, rIdx) => {
+      const cells = rawRow.map((c) => String(c ?? "").trim());
+      if (cells.every((c) => !c)) return;
+
+      const pIdx = colIdx.prompt >= 0 ? colIdx.prompt : 0;
+      const aIdx = colIdx.optA >= 0 ? colIdx.optA : 1;
+      const bIdx = colIdx.optB >= 0 ? colIdx.optB : 2;
+      const cIdx = colIdx.optC >= 0 ? colIdx.optC : 3;
+      const dIdx = colIdx.optD >= 0 ? colIdx.optD : 4;
+      const ansIdx = colIdx.correct >= 0 ? colIdx.correct : 5;
+
+      const prompt = cells[pIdx] || "";
+      const opts: [string, string, string, string] = [
+        cells[aIdx] || "",
+        cells[bIdx] || "",
+        cells[cIdx] || "",
+        cells[dIdx] || "",
+      ];
+      const rawAns = (cells[ansIdx] || "").trim();
+
+      if (!prompt || opts.some((o) => !o) || !rawAns) {
+        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Missing question, one of the 4 options, or correct answer.`);
+        return;
+      }
+
+      let correctIndex = -1;
+      const ansUpper = rawAns.toUpperCase();
+      if (ansUpper === "A" || ansUpper === "OPTION A" || ansUpper === "1") correctIndex = 0;
+      else if (ansUpper === "B" || ansUpper === "OPTION B" || ansUpper === "2") correctIndex = 1;
+      else if (ansUpper === "C" || ansUpper === "OPTION C" || ansUpper === "3") correctIndex = 2;
+      else if (ansUpper === "D" || ansUpper === "OPTION D" || ansUpper === "4") correctIndex = 3;
+      else {
+        const matchedOptIdx = opts.findIndex((o) => o.toLowerCase() === rawAns.toLowerCase());
+        if (matchedOptIdx >= 0) correctIndex = matchedOptIdx;
+      }
+
+      if (correctIndex < 0 || correctIndex > 3) {
+        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Invalid correct answer "${rawAns}" (use A/B/C/D, 1-4, or exact option text).`);
+        return;
+      }
+
+      let rowDomain: QuizDomainOption = defaultDomain;
+      if (colIdx.domain >= 0 && cells[colIdx.domain]) {
+        const dVal = cells[colIdx.domain].toUpperCase();
+        if (dVal.includes("SOFTWARE") || dVal === "SD" || dVal === "SDE") rowDomain = "SOFTWARE_DEVELOPMENT";
+        else if (dVal.includes("DATA") || dVal === "DS") rowDomain = "DATA_SCIENCE";
+      }
+
+      let rowTrack: QuizTrackOption = defaultTrack;
+      if (colIdx.track >= 0 && cells[colIdx.track]) {
+        const tVal = cells[colIdx.track].toUpperCase();
+        if (tVal.includes("FULL") || tVal.includes("SOFTWARE") || tVal === "FT" || tVal === "FTE" || tVal === "PLACEMENT" || tVal === "SDE") {
+          rowTrack = "SOFTWARE_DEVELOPMENT";
+        } else if (tVal.includes("INTERN")) {
+          rowTrack = "INTERNSHIP";
+        }
+      }
+
+      parsed.push({
+        id: `QB-IMP-${Date.now()}-${rIdx}-${Math.random().toString(36).slice(2, 6)}`,
+        domain: rowDomain,
+        track: rowTrack,
+        prompt,
+        options: opts,
+        correctIndex,
+      });
+    });
+
+    return { parsed, errors };
+  };
+
+  const applyImportedQuestions = (parsed: typeof questionBank, errors: string[], sourceLabel: string) => {
+    if (!parsed.length) {
+      setBulkQStatus({
+        type: "ERR",
+        text: errors[0] || "No valid questions found. Verify columns: Question, Option A, Option B, Option C, Option D, Correct Answer.",
+      });
+      return;
+    }
+    setQuestionBank((prev) => {
+      if (bulkQMode === "REPLACE") {
+        const affectedCombos = new Set(parsed.map((q) => `${q.domain}::${q.track}`));
+        const kept = prev.filter((q) => !affectedCombos.has(`${q.domain}::${q.track}`));
+        return [...kept, ...parsed];
+      }
+      return [...prev, ...parsed];
+    });
+    const bankName = `${bulkQDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} — ${
+      bulkQTrack === "INTERNSHIP" ? "Internship" : "Full-Time Placement"
+    }`;
+    setBulkQStatus({
+      type: "OK",
+      text: `${bulkQMode === "REPLACE" ? "Replaced" : "Imported"} ${parsed.length} question(s) into ${bankName} from ${sourceLabel}${
+        errors.length ? ` (${errors.length} row(s) skipped)` : ""
+      }.`,
+    });
+    appendAudit(
+      user?.email || "coordinator@study.iitm.ac.in",
+      user?.role || "TRAINING_COORDINATOR",
+      "QUIZ_BANK_BULK_IMPORT",
+      `${parsed.length} Qs loaded (${bulkQMode}) from ${sourceLabel}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleQuestionBankFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkImporting(true);
+    setBulkQStatus(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
+      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
+      applyImportedQuestions(parsed, errors, file.name);
+    } catch {
+      setBulkQStatus({
+        type: "ERR",
+        text: `Failed to parse "${file.name}". Upload a valid .csv, .xlsx, or .xls spreadsheet.`,
+      });
+    } finally {
+      setBulkImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleQuestionBankSheetUrlImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawUrl = bulkSheetUrl.trim();
+    if (!rawUrl) {
+      setBulkQStatus({ type: "ERR", text: "Paste a Google Sheets share link or direct CSV/XLSX spreadsheet URL." });
+      return;
+    }
+    setBulkImporting(true);
+    setBulkQStatus(null);
+    try {
+      let fetchUrl = rawUrl;
+      const gsheetMatch = rawUrl.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (gsheetMatch) {
+        const sheetId = gsheetMatch[1];
+        const gidMatch = rawUrl.match(/[?#&]gid=(\d+)/);
+        const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : "";
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+      }
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) throw new Error("PRIVATE_SHEET");
+
+      const buffer = await res.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
+      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
+      applyImportedQuestions(parsed, errors, gsheetMatch ? "Google Spreadsheet Link" : "Spreadsheet URL");
+      if (parsed.length) setBulkSheetUrl("");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error && err.message === "PRIVATE_SHEET"
+          ? "Spreadsheet is private or requires sign-in. Set sharing to 'Anyone with the link can view' (or File -> Share -> Publish to web as CSV) and retry."
+          : "Could not fetch spreadsheet from link (ensure link is publicly accessible or upload the .csv/.xlsx file directly).";
+      setBulkQStatus({ type: "ERR", text: msg });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
+  const handleDownloadSampleQuestionCsv = () => {
+    const sampleCsv = [
+      "Question,Option A,Option B,Option C,Option D,Correct Answer,Domain,Track",
+      '"Which SQL window function assigns consecutive ranks without gaps for ties?","RANK()","DENSE_RANK()","ROW_NUMBER()","NTILE(4)","B","DATA_SCIENCE","INTERNSHIP"',
+      '"What is the worst-case time complexity of quicksort?","O(n log n)","O(n)","O(n^2)","O(log n)","C","SOFTWARE_DEVELOPMENT","FULL_TIME"',
+    ].join("\n");
+    const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "iitm_quiz_question_bank_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const [qbBanner, setQbBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
   // Increment 2: Final Stage Examiner Interview Evaluation State
@@ -2626,236 +2856,6 @@ export default function App() {
       options: opts,
       correctIndex: qbCorrectIdx,
     };
-
-  const [bulkQDomain, setBulkQDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
-  const [bulkQTrack, setBulkQTrack] = useState<QuizTrackOption>("INTERNSHIP");
-  const [bulkQMode, setBulkQMode] = useState<"APPEND" | "REPLACE">("APPEND");
-  const [bulkSheetUrl, setBulkSheetUrl] = useState<string>("");
-  const [bulkQStatus, setBulkQStatus] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
-  const [bulkImporting, setBulkImporting] = useState<boolean>(false);
-
-  const parseQuestionRows = (
-    rows: string[][],
-    defaultDomain: QuizDomainOption,
-    defaultTrack: QuizTrackOption
-  ) => {
-    const parsed: typeof questionBank = [];
-    const errors: string[] = [];
-    if (!rows.length) return { parsed, errors: ["Spreadsheet is empty."] };
-
-    const firstRowLower = rows[0].map((c) => String(c || "").trim().toLowerCase());
-    const hasHeader =
-      firstRowLower.some((c) => c.includes("question") || c.includes("prompt")) &&
-      firstRowLower.some((c) => c.includes("option") || c.includes("answer") || c.includes("correct"));
-
-    const colIdx = {
-      prompt: -1,
-      optA: -1,
-      optB: -1,
-      optC: -1,
-      optD: -1,
-      correct: -1,
-      domain: -1,
-      track: -1,
-    };
-
-    if (hasHeader) {
-      firstRowLower.forEach((h, idx) => {
-        if (colIdx.prompt === -1 && (h.includes("question") || h.includes("prompt"))) colIdx.prompt = idx;
-        else if (colIdx.optA === -1 && (h === "a" || h.includes("option a") || h.includes("option_a") || h.includes("opt1") || h.includes("option 1"))) colIdx.optA = idx;
-        else if (colIdx.optB === -1 && (h === "b" || h.includes("option b") || h.includes("option_b") || h.includes("opt2") || h.includes("option 2"))) colIdx.optB = idx;
-        else if (colIdx.optC === -1 && (h === "c" || h.includes("option c") || h.includes("option_c") || h.includes("opt3") || h.includes("option 3"))) colIdx.optC = idx;
-        else if (colIdx.optD === -1 && (h === "d" || h.includes("option d") || h.includes("option_d") || h.includes("opt4") || h.includes("option 4"))) colIdx.optD = idx;
-        else if (colIdx.correct === -1 && (h.includes("correct") || h.includes("answer") || h === "ans")) colIdx.correct = idx;
-        else if (colIdx.domain === -1 && h.includes("domain")) colIdx.domain = idx;
-        else if (colIdx.track === -1 && h.includes("track")) colIdx.track = idx;
-      });
-    }
-
-    const dataRows = hasHeader ? rows.slice(1) : rows;
-    dataRows.forEach((rawRow, rIdx) => {
-      const cells = rawRow.map((c) => String(c ?? "").trim());
-      if (cells.every((c) => !c)) return;
-
-      const pIdx = colIdx.prompt >= 0 ? colIdx.prompt : 0;
-      const aIdx = colIdx.optA >= 0 ? colIdx.optA : 1;
-      const bIdx = colIdx.optB >= 0 ? colIdx.optB : 2;
-      const cIdx = colIdx.optC >= 0 ? colIdx.optC : 3;
-      const dIdx = colIdx.optD >= 0 ? colIdx.optD : 4;
-      const ansIdx = colIdx.correct >= 0 ? colIdx.correct : 5;
-
-      const prompt = cells[pIdx] || "";
-      const opts: [string, string, string, string] = [
-        cells[aIdx] || "",
-        cells[bIdx] || "",
-        cells[cIdx] || "",
-        cells[dIdx] || "",
-      ];
-      const rawAns = (cells[ansIdx] || "").trim();
-
-      if (!prompt || opts.some((o) => !o) || !rawAns) {
-        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Missing question, one of the 4 options, or correct answer.`);
-        return;
-      }
-
-      let correctIndex = -1;
-      const ansUpper = rawAns.toUpperCase();
-      if (ansUpper === "A" || ansUpper === "OPTION A" || ansUpper === "1") correctIndex = 0;
-      else if (ansUpper === "B" || ansUpper === "OPTION B" || ansUpper === "2") correctIndex = 1;
-      else if (ansUpper === "C" || ansUpper === "OPTION C" || ansUpper === "3") correctIndex = 2;
-      else if (ansUpper === "D" || ansUpper === "OPTION D" || ansUpper === "4") correctIndex = 3;
-      else {
-        const matchedOptIdx = opts.findIndex((o) => o.toLowerCase() === rawAns.toLowerCase());
-        if (matchedOptIdx >= 0) correctIndex = matchedOptIdx;
-      }
-
-      if (correctIndex < 0 || correctIndex > 3) {
-        errors.push(`Row ${rIdx + (hasHeader ? 2 : 1)}: Invalid correct answer "${rawAns}" (use A/B/C/D, 1-4, or exact option text).`);
-        return;
-      }
-
-      let rowDomain: QuizDomainOption = defaultDomain;
-      if (colIdx.domain >= 0 && cells[colIdx.domain]) {
-        const dVal = cells[colIdx.domain].toUpperCase();
-        if (dVal.includes("SOFTWARE") || dVal === "SD" || dVal === "SDE") rowDomain = "SOFTWARE_DEVELOPMENT";
-        else if (dVal.includes("DATA") || dVal === "DS") rowDomain = "DATA_SCIENCE";
-      }
-
-      let rowTrack: QuizTrackOption = defaultTrack;
-      if (colIdx.track >= 0 && cells[colIdx.track]) {
-        const tVal = cells[colIdx.track].toUpperCase();
-        if (tVal.includes("FULL") || tVal.includes("SOFTWARE") || tVal === "FT" || tVal === "FTE" || tVal === "PLACEMENT" || tVal === "SDE") {
-          rowTrack = "SOFTWARE_DEVELOPMENT";
-        } else if (tVal.includes("INTERN")) {
-          rowTrack = "INTERNSHIP";
-        }
-      }
-
-      parsed.push({
-        id: `QB-IMP-${Date.now()}-${rIdx}-${Math.random().toString(36).slice(2, 6)}`,
-        domain: rowDomain,
-        track: rowTrack,
-        prompt,
-        options: opts,
-        correctIndex,
-      });
-    });
-
-    return { parsed, errors };
-  };
-
-  const applyImportedQuestions = (parsed: typeof questionBank, errors: string[], sourceLabel: string) => {
-    if (!parsed.length) {
-      setBulkQStatus({
-        type: "ERR",
-        text: errors[0] || "No valid questions found. Verify columns: Question, Option A, Option B, Option C, Option D, Correct Answer.",
-      });
-      return;
-    }
-    setQuestionBank((prev) => {
-      if (bulkQMode === "REPLACE") {
-        const affectedCombos = new Set(parsed.map((q) => `${q.domain}::${q.track}`));
-        const kept = prev.filter((q) => !affectedCombos.has(`${q.domain}::${q.track}`));
-        return [...kept, ...parsed];
-      }
-      return [...prev, ...parsed];
-    });
-    const bankName = `${bulkQDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} — ${
-      bulkQTrack === "INTERNSHIP" ? "Internship" : "Full-Time Placement"
-    }`;
-    setBulkQStatus({
-      type: "OK",
-      text: `${bulkQMode === "REPLACE" ? "Replaced" : "Imported"} ${parsed.length} question(s) into ${bankName} from ${sourceLabel}${
-        errors.length ? ` (${errors.length} row(s) skipped)` : ""
-      }.`,
-    });
-    appendAudit(
-      user?.email || "coordinator@study.iitm.ac.in",
-      user?.role || "TRAINING_COORDINATOR",
-      "QUIZ_BANK_BULK_IMPORT",
-      `${parsed.length} Qs loaded (${bulkQMode}) from ${sourceLabel}`,
-      "SUCCESS"
-    );
-  };
-
-  const handleQuestionBankFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBulkImporting(true);
-    setBulkQStatus(null);
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
-      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
-      applyImportedQuestions(parsed, errors, file.name);
-    } catch {
-      setBulkQStatus({
-        type: "ERR",
-        text: `Failed to parse "${file.name}". Upload a valid .csv, .xlsx, or .xls spreadsheet.`,
-      });
-    } finally {
-      setBulkImporting(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleQuestionBankSheetUrlImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawUrl = bulkSheetUrl.trim();
-    if (!rawUrl) {
-      setBulkQStatus({ type: "ERR", text: "Paste a Google Sheets share link or direct CSV/XLSX spreadsheet URL." });
-      return;
-    }
-    setBulkImporting(true);
-    setBulkQStatus(null);
-    try {
-      let fetchUrl = rawUrl;
-      const gsheetMatch = rawUrl.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-      if (gsheetMatch) {
-        const sheetId = gsheetMatch[1];
-        const gidMatch = rawUrl.match(/[?#&]gid=(\d+)/);
-        const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : "";
-        fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
-      }
-      const res = await fetch(fetchUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const contentType = res.headers.get("content-type") || "";
-      if (contentType.includes("text/html")) throw new Error("PRIVATE_SHEET");
-
-      const buffer = await res.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" });
-      const { parsed, errors } = parseQuestionRows(rows, bulkQDomain, bulkQTrack);
-      applyImportedQuestions(parsed, errors, gsheetMatch ? "Google Spreadsheet Link" : "Spreadsheet URL");
-      if (parsed.length) setBulkSheetUrl("");
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error && err.message === "PRIVATE_SHEET"
-          ? "Spreadsheet is private or requires sign-in. Set sharing to 'Anyone with the link can view' (or File -> Share -> Publish to web as CSV) and retry."
-          : "Could not fetch spreadsheet from link (ensure link is publicly accessible or upload the .csv/.xlsx file directly).";
-      setBulkQStatus({ type: "ERR", text: msg });
-    } finally {
-      setBulkImporting(false);
-    }
-  };
-
-  const handleDownloadSampleQuestionCsv = () => {
-    const sampleCsv = [
-      "Question,Option A,Option B,Option C,Option D,Correct Answer,Domain,Track",
-      '"Which SQL window function assigns consecutive ranks without gaps for ties?","RANK()","DENSE_RANK()","ROW_NUMBER()","NTILE(4)","B","DATA_SCIENCE","INTERNSHIP"',
-      '"What is the worst-case time complexity of quicksort?","O(n log n)","O(n)","O(n^2)","O(log n)","C","SOFTWARE_DEVELOPMENT","FULL_TIME"',
-    ].join("\n");
-    const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "iitm_quiz_question_bank_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
     setQuestionBank((prev) => [newItem, ...prev]);
     setQbPrompt("");
     setQbOpt0("");
