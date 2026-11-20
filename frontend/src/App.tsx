@@ -399,8 +399,17 @@ interface JobDriveItem {
   roleType: JobRoleTypeOption;
   domain: QuizDomainOption;
   location: string;
+  workMode?: "HYBRID" | "ONSITE" | "REMOTE";
   compensation: string;
+  openingsCount?: number;
+  applicationDeadline?: string;
+  selectionRounds?: string;
   description: string;
+  jdText?: string;
+  jdPdfName?: string;
+  jdPdfDataUrl?: string;
+  postedByEmail?: string;
+  postedAt?: string;
   minCgpa: number;
   maxBacklogs: number;
   allowedLevels: ProgramLevelOption[];
@@ -669,7 +678,12 @@ const INITIAL_JOBS: JobDriveItem[] = [
     domain: "DATA_SCIENCE",
     location: "Bengaluru",
     compensation: "₹75,000 / month",
+    workMode: "HYBRID",
+    openingsCount: 6,
+    applicationDeadline: "2026-12-10",
+    selectionRounds: "Resume Shortlist → Online Python/ML Assessment → Technical Interview",
     description: "Supply-chain demand forecasting, anomaly detection, and A/B experimentation.",
+    jdText: "Role Overview:\nJoin Flipkart Supply Chain Analytics as a Data Science & Analytics Intern (6 Months) to build demand forecasting and anomaly detection pipelines.\n\nKey Responsibilities:\n• Build time-series forecasting & inventory optimization models in Python & SQL.\n• Design A/B experimentation metrics for fulfillment centers.\n• Present weekly insights to product and operations leads.\n\nEligibility & Perks:\n• Open to IITM BS Diploma, BSc, and BS students with CGPA >= 7.5.\n• PPO conversion opportunity based on 6-month performance review.",
     minCgpa: 7.5,
     maxBacklogs: 0,
     allowedLevels: ["DIPLOMA", "BSC", "BS"],
@@ -1000,11 +1014,36 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem("iitm_os_one_on_one_slots_v1", JSON.stringify(oneOnOneSlots));
+      localStorage.setItem("iitm_os_jobs_v1", JSON.stringify(jobs));
     } catch {}
-  }, [oneOnOneSlots]);
+  }, [oneOnOneSlots, jobs]);
 
   // Increment 3: Recruitment, Job Postings & Application Eligibility Engine
-  const [jobs, setJobs] = useState<JobDriveItem[]>(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<JobDriveItem[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_jobs_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_JOBS;
+  });
+  const [newWorkMode, setNewWorkMode] = useState<"HYBRID" | "ONSITE" | "REMOTE">("HYBRID");
+  const [newOpeningsCount, setNewOpeningsCount] = useState("4");
+  const [newApplicationDeadline, setNewApplicationDeadline] = useState("2026-12-15");
+  const [newSelectionRounds, setNewSelectionRounds] = useState(
+    "Resume Shortlist → Online Coding/Aptitude Test → 2 Technical Rounds → HR"
+  );
+  const [newRequiredSkillsInput, setNewRequiredSkillsInput] = useState("Python, SQL, Problem Solving");
+  const [newMaxBacklogs, setNewMaxBacklogs] = useState("0");
+  const [newJdText, setNewJdText] = useState("");
+  const [newJdPdfName, setNewJdPdfName] = useState("");
+  const [newJdPdfDataUrl, setNewJdPdfDataUrl] = useState("");
+  const [activeJdModalJob, setActiveJdModalJob] = useState<JobDriveItem | null>(null);
+  const [opportunityTrackFilter, setOpportunityTrackFilter] = useState<"ALL" | "INTERNSHIP" | "FULL_TIME">("ALL");
+  const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
+  const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
   const [applications, setApplications] = useState<JobApplicationRecord[]>([]);
   const [selectedResumeIdForApply, setSelectedResumeIdForApply] = useState<string>("res-1");
   const [jobAlert, setJobAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
@@ -3316,6 +3355,34 @@ export default function App() {
     );
   };
 
+  const handleJdPdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setJobAlert({ type: "ERR", text: "Only PDF files (.pdf) are supported for JD upload." });
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 2.5 * 1024 * 1024) {
+      setJobAlert({
+        type: "ERR",
+        text: "JD PDF must be 2.5 MB or smaller. Compress the PDF or paste the plain-text JD.",
+      });
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setNewJdPdfName(file.name);
+        setNewJdPdfDataUrl(reader.result);
+        setJobAlert({ type: "OK", text: `Attached JD PDF: ${file.name}` });
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const handleCreateNewDrive = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -3330,6 +3397,24 @@ export default function App() {
       return;
     }
 
+    if (!newJdText.trim() && !newJdPdfDataUrl) {
+      setJobAlert({
+        type: "ERR",
+        text: "Please either paste the Job Description (JD) text or upload a JD PDF before publishing.",
+      });
+      return;
+    }
+
+    const parsedSkills = newRequiredSkillsInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedOpenings = Math.max(1, parseInt(newOpeningsCount, 10) || 1);
+    const parsedBacklogs = Math.max(0, parseInt(newMaxBacklogs, 10) || 0);
+    const summaryExcerpt = newJdText.trim()
+      ? newJdText.trim().slice(0, 170) + (newJdText.trim().length > 170 ? "..." : "")
+      : `Official PDF Job Description attached (${newJdPdfName || "JD.pdf"}). Click View Full JD for complete role details.`;
+
     const created: JobDriveItem = {
       id: `job-${Date.now()}`,
       jobCode: code,
@@ -3338,20 +3423,32 @@ export default function App() {
       roleType: newRoleType,
       domain: newJobDomain,
       location: newLocation.trim() || "Remote / India",
+      workMode: newWorkMode,
       compensation: newCompensation.trim() || "Competitive",
-      description: "Published via Recruiter Drive Portal with automated eligibility filtering.",
+      openingsCount: parsedOpenings,
+      applicationDeadline: newApplicationDeadline || "2026-12-31",
+      selectionRounds: newSelectionRounds.trim() || "Resume Shortlist → Technical Interview → HR",
+      description: summaryExcerpt,
+      jdText: newJdText.trim() || undefined,
+      jdPdfName: newJdPdfName || undefined,
+      jdPdfDataUrl: newJdPdfDataUrl || undefined,
+      postedByEmail: user.email,
+      postedAt: new Date().toLocaleDateString("en-IN"),
       minCgpa: minCg,
-      maxBacklogs: 0,
+      maxBacklogs: parsedBacklogs,
       allowedLevels: newRoleType === "INTERNSHIP" ? ["DIPLOMA", "BSC", "BS"] : ["BSC", "BS"],
       requireExaminerReady: newRequireReady,
-      requiredSkillTags: [],
+      requiredSkillTags: parsedSkills,
     };
 
     setJobs((prev) => [created, ...prev]);
     setNewJobCode(`DRV-2026-${Math.floor(100 + Math.random() * 899)}`);
+    setNewJdText("");
+    setNewJdPdfName("");
+    setNewJdPdfDataUrl("");
     setJobAlert({
       type: "OK",
-      text: `Published Drive ${created.jobCode}: ${created.companyName} — ${created.title}.`,
+      text: `Published ${created.roleType === "INTERNSHIP" ? "Internship" : "Full-Time (FTE)"} Opportunity ${created.jobCode}: ${created.companyName} — ${created.title}. Live now on Student & Admin Opportunities tabs.`,
     });
     appendAudit(
       user.email,
@@ -4939,8 +5036,8 @@ export default function App() {
                     : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
                 }`}
               >
-                <Building2 className="w-3.5 h-3.5" />
-                Opportunities & Application Status ({applications.length} Applied)
+                <Briefcase className="w-3.5 h-3.5" />
+                Opportunities ({jobs.length} Open • {applications.length} Applied)
               </button>
             </>
           ) : user.role === "TRAINING_COORDINATOR" ? (
@@ -5046,8 +5143,8 @@ export default function App() {
                     : "text-slate-400 hover:text-slate-200 disabled:opacity-40"
                 }`}
               >
-                <Building2 className="w-3.5 h-3.5" />
-                Drives & ATS Pipeline ({jobs.length} Drives • {applications.length} Applied)
+                <Briefcase className="w-3.5 h-3.5" />
+                Opportunities ({jobs.length} Open • {applications.length} Applied)
               </button>
 
               <button
@@ -5558,16 +5655,132 @@ export default function App() {
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-400 mb-1">Location</label>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Work Mode</label>
+                    <select
+                      value={newWorkMode}
+                      onChange={(e) => setNewWorkMode(e.target.value as "HYBRID" | "ONSITE" | "REMOTE")}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    >
+                      <option value="HYBRID">Hybrid</option>
+                      <option value="ONSITE">On-Site</option>
+                      <option value="REMOTE">Remote</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Location(s)</label>
                     <input
                       type="text"
                       value={newLocation}
                       onChange={(e) => setNewLocation(e.target.value)}
+                      placeholder="Bengaluru / Chennai / Remote"
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                     />
                   </div>
-                  <div className="flex items-center gap-2 pt-5">
+                  <div>
+                    <label className="block text-slate-400 mb-1">No. of Openings</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newOpeningsCount}
+                      onChange={(e) => setNewOpeningsCount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Application Deadline</label>
+                    <input
+                      type="date"
+                      value={newApplicationDeadline}
+                      onChange={(e) => setNewApplicationDeadline(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Max Active Backlogs</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={newMaxBacklogs}
+                      onChange={(e) => setNewMaxBacklogs(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 mb-1">Required Skillsets (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={newRequiredSkillsInput}
+                      onChange={(e) => setNewRequiredSkillsInput(e.target.value)}
+                      placeholder="Python, SQL, Machine Learning, React"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Selection Rounds</label>
+                    <input
+                      type="text"
+                      value={newSelectionRounds}
+                      onChange={(e) => setNewSelectionRounds(e.target.value)}
+                      placeholder="OA → Tech Round → HR"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
+                    />
+                  </div>
+
+                  {/* Dual-Mode Job Description: Plain Text OR PDF Upload */}
+                  <div className="sm:col-span-4 grid grid-cols-1 lg:grid-cols-12 gap-3 pt-2 border-t border-slate-800/80">
+                    <div className="lg:col-span-8">
+                      <label className="block text-slate-300 font-semibold mb-1">
+                        Job Description (JD) — Paste Plain Text
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={newJdText}
+                        onChange={(e) => setNewJdText(e.target.value)}
+                        placeholder="Paste complete role responsibilities, required qualifications, stipend/CTC breakdown, and bond/duration details..."
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 leading-relaxed"
+                      />
+                    </div>
+                    <div className="lg:col-span-4 flex flex-col justify-between p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="space-y-1.5">
+                        <span className="block text-slate-300 font-semibold">
+                          Or Upload Official JD PDF
+                        </span>
+                        <p className="text-[11px] text-slate-400">
+                          Attach a PDF brochure/JD (max 2.5 MB). Students and Admins can view &amp; download it directly inside Opportunities.
+                        </p>
+                      </div>
+                      <div className="space-y-2 pt-3">
+                        <label className="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-indigo-500/40 text-indigo-300 font-semibold text-center cursor-pointer block">
+                          {newJdPdfName ? "Replace JD PDF" : "Upload JD PDF (.pdf)"}
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={handleJdPdfUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {newJdPdfName && (
+                          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300">
+                            <span className="truncate">{newJdPdfName}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewJdPdfName("");
+                                setNewJdPdfDataUrl("");
+                              }}
+                              className="text-rose-300 hover:text-rose-200 font-semibold shrink-0"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-3 flex items-center gap-2 pt-2">
                     <input
                       type="checkbox"
                       id="req-examiner-ready"
@@ -5576,58 +5789,41 @@ export default function App() {
                       className="accent-indigo-500 w-4 h-4"
                     />
                     <label htmlFor="req-examiner-ready" className="text-slate-300">
-                      Require Examiner Ready Sign-off
+                      Require Examiner Ready Sign-off (Recommended for IITM BS Placement Drives)
                     </label>
                   </div>
-                  <div className="pt-3">
+                  <div className="pt-2">
                     <button
                       type="submit"
-                      className="w-full py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
                     >
-                      Publish Drive
+                      Publish Opportunity &amp; JD
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Student Training Readiness Gate & Field-Specific Filter */}
-            {user.role === "STUDENT" && !computeTrainingAndActivityProgress().overallPlacementReady ? (
-              <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-300">
-                  <Shield className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-bold text-white">
-                  Complete Training to Unlock{" "}
-                  {studentTargetDomain === "DATA_SCIENCE"
-                    ? "Data Science"
-                    : "Software Development"}{" "}
-                  Opportunities
-                </h3>
-                <p className="text-xs text-slate-400 max-w-xl mx-auto">
-                  Opportunities in your field ({studentTargetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} •{" "}
-                  {studentApplyingTrack}) become accessible once you pass the 15-Question Domain
-                  Assessment and receive Examiner Viva placement readiness sign-off.
-                </p>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("TRAINING")}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
-                  >
-                    Go to Training & Readiness Progress →
-                  </button>
-                </div>
-              </div>
-            ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {jobs
-                .filter((job) =>
-                  user.role === "STUDENT"
-                    ? job.domain === studentTargetDomain && job.roleType === studentApplyingTrack
-                    : true
-                )
-                .map((job) => {
+            {/* Opportunities Segregated by Internship & Full-Time Employment (FTE) */}
+            {(() => {
+              const q = opportunitySearchQuery.trim().toLowerCase();
+              const matchingJobs = jobs.filter((job) => {
+                if (opportunityTrackFilter !== "ALL" && job.roleType !== opportunityTrackFilter) return false;
+                if (opportunityDomainFilter !== "ALL" && job.domain !== opportunityDomainFilter) return false;
+                if (!q) return true;
+                return (
+                  job.title.toLowerCase().includes(q) ||
+                  job.companyName.toLowerCase().includes(q) ||
+                  job.jobCode.toLowerCase().includes(q) ||
+                  job.location.toLowerCase().includes(q) ||
+                  (job.jdText || "").toLowerCase().includes(q) ||
+                  job.requiredSkillTags.some((t) => t.toLowerCase().includes(q))
+                );
+              });
+              const internshipJobs = matchingJobs.filter((j) => j.roleType === "INTERNSHIP");
+              const fteJobs = matchingJobs.filter((j) => j.roleType === "FULL_TIME");
+
+              const renderOpportunityCard = (job: JobDriveItem) => {
                 const elig = evaluateEligibilityForDrive(job);
                 const existingApp = applications.find((a) => a.jobId === job.id);
 
@@ -5658,18 +5854,61 @@ export default function App() {
 
                       <div className="flex flex-wrap gap-2 text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Domain: {job.domain === "DATA_SCIENCE" ? "Data Science" : "Software Dev"}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
                           Min CGPA: {job.minCgpa.toFixed(2)}
                         </span>
                         <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
-                          Levels: {job.allowedLevels.join(", ")}
+                          {job.location}{job.workMode ? ` (${job.workMode})` : ""}
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
-                          {job.location}
-                        </span>
+                        {job.openingsCount && (
+                          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-cyan-300">
+                            {job.openingsCount} Openings
+                          </span>
+                        )}
+                        {job.applicationDeadline && (
+                          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-amber-300">
+                            Deadline: {job.applicationDeadline}
+                          </span>
+                        )}
                         {job.requireExaminerReady && (
                           <span className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
                             Examiner Viva Ready Required
                           </span>
+                        )}
+                      </div>
+
+                      {job.requiredSkillTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                          {job.requiredSkillTags.map((tag, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-200"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveJdModalJob(job)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          View Full JD {job.jdPdfName ? "(PDF + Details)" : "(Text + Details)"}
+                        </button>
+                        {job.jdPdfDataUrl && (
+                          <a
+                            href={job.jdPdfDataUrl}
+                            download={job.jdPdfName || `${job.jobCode}_JD.pdf`}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-[11px] font-semibold text-emerald-300"
+                          >
+                            Download JD PDF
+                          </a>
                         )}
                       </div>
 
@@ -5742,9 +5981,214 @@ export default function App() {
                     )}
                   </div>
                 );
-              })}
-            </div>
-            )}
+              };
+
+              return (
+                <div className="space-y-6">
+                  {/* Segregated Track Filter Header (Internships vs Full-Time FTE) */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setOpportunityTrackFilter("ALL")}
+                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                          opportunityTrackFilter === "ALL"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-950 border border-slate-800 text-slate-300 hover:text-white"
+                        }`}
+                      >
+                        All Opportunities ({jobs.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOpportunityTrackFilter("INTERNSHIP")}
+                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                          opportunityTrackFilter === "INTERNSHIP"
+                            ? "bg-cyan-600 text-white"
+                            : "bg-slate-950 border border-slate-800 text-cyan-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        Internships ({jobs.filter((j) => j.roleType === "INTERNSHIP").length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOpportunityTrackFilter("FULL_TIME")}
+                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                          opportunityTrackFilter === "FULL_TIME"
+                            ? "bg-emerald-600 text-white"
+                            : "bg-slate-950 border border-slate-800 text-emerald-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        Full-Time Employment / FTE ({jobs.filter((j) => j.roleType === "FULL_TIME").length})
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <select
+                        value={opportunityDomainFilter}
+                        onChange={(e) => setOpportunityDomainFilter(e.target.value as "ALL" | QuizDomainOption)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                      >
+                        <option value="ALL">All Domains</option>
+                        <option value="DATA_SCIENCE">Data Science</option>
+                        <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={opportunitySearchQuery}
+                        onChange={(e) => setOpportunitySearchQuery(e.target.value)}
+                        placeholder="Search company, role, skill..."
+                        className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 w-52"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section A: Internship Opportunities */}
+                  {(opportunityTrackFilter === "ALL" || opportunityTrackFilter === "INTERNSHIP") && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+                          <Briefcase className="w-4 h-4" />
+                          Internship Opportunities ({internshipJobs.length})
+                        </h3>
+                        <span className="text-[11px] text-slate-400">
+                          6-Month &amp; Summer Industry Internships
+                        </span>
+                      </div>
+                      {internshipJobs.length === 0 ? (
+                        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                          No Internship opportunities match the current filter.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {internshipJobs.map(renderOpportunityCard)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Section B: Full-Time Employment (FTE) Opportunities */}
+                  {(opportunityTrackFilter === "ALL" || opportunityTrackFilter === "FULL_TIME") && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          Full-Time Employment (FTE) Opportunities ({fteJobs.length})
+                        </h3>
+                        <span className="text-[11px] text-slate-400">
+                          Graduate Full-Time Roles (BSc / BS)
+                        </span>
+                      </div>
+                      {fteJobs.length === 0 ? (
+                        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                          No Full-Time Employment (FTE) opportunities match the current filter.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {fteJobs.map(renderOpportunityCard)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Full Job Description (Plain Text + Embedded PDF Viewer) Modal */}
+                  {activeJdModalJob && (
+                    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-4 shadow-2xl">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-indigo-400">{activeJdModalJob.jobCode}</span>
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                                  activeJdModalJob.roleType === "INTERNSHIP"
+                                    ? "bg-cyan-500/20 text-cyan-300"
+                                    : "bg-emerald-500/20 text-emerald-300"
+                                }`}
+                              >
+                                {activeJdModalJob.roleType === "INTERNSHIP" ? "INTERNSHIP" : "FULL-TIME (FTE)"}
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-bold text-white mt-1">
+                              {activeJdModalJob.companyName} — {activeJdModalJob.title}
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {activeJdModalJob.location} {activeJdModalJob.workMode ? `• ${activeJdModalJob.workMode}` : ""} • {activeJdModalJob.compensation}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveJdModalJob(null)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200"
+                          >
+                            Close ✕
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">Min CGPA</span>
+                            <span className="font-bold text-white">{activeJdModalJob.minCgpa.toFixed(2)}</span>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">Openings</span>
+                            <span className="font-bold text-cyan-300">{activeJdModalJob.openingsCount || "Multiple"}</span>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">Deadline</span>
+                            <span className="font-bold text-amber-300">{activeJdModalJob.applicationDeadline || "Rolling"}</span>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">Allowed Levels</span>
+                            <span className="font-bold text-slate-200">{activeJdModalJob.allowedLevels.join(", ")}</span>
+                          </div>
+                        </div>
+
+                        {activeJdModalJob.selectionRounds && (
+                          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                            <span className="text-slate-400 font-semibold">Selection Process: </span>
+                            <span className="text-slate-200">{activeJdModalJob.selectionRounds}</span>
+                          </div>
+                        )}
+
+                        {activeJdModalJob.jdText && (
+                          <div className="space-y-1.5">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300 block">
+                              Detailed Job Description
+                            </span>
+                            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
+                              {activeJdModalJob.jdText}
+                            </div>
+                          </div>
+                        )}
+
+                        {activeJdModalJob.jdPdfDataUrl && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+                                Attached JD Document ({activeJdModalJob.jdPdfName || "JD.pdf"})
+                              </span>
+                              <a
+                                href={activeJdModalJob.jdPdfDataUrl}
+                                download={activeJdModalJob.jdPdfName || `${activeJdModalJob.jobCode}_JD.pdf`}
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
+                              >
+                                Download PDF
+                              </a>
+                            </div>
+                            <iframe
+                              src={activeJdModalJob.jdPdfDataUrl}
+                              title="Job Description PDF Preview"
+                              className="w-full h-96 rounded-xl border border-slate-800 bg-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Applications & Recruiter ATS Pipeline */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
