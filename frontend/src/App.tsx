@@ -11103,7 +11103,7 @@ export default function App() {
                 {previewSubmission.completedDate !== undefined && previewSubmission.completedDate !== "" && (
                   <div><span className="text-slate-400">completedDate: </span><span className="text-slate-200">{String(previewSubmission.completedDate)}</span></div>
                 )}
-                {previewSubmission.reviewStatus !== undefined && previewSubmission.reviewStatus !== "" && (
+                {previewSubmission.reviewStatus && (
                   <div><span className="text-slate-400">reviewStatus: </span><span className="text-slate-200">{String(previewSubmission.reviewStatus)}</span></div>
                 )}
                 {previewSubmission.reviewerNote !== undefined && previewSubmission.reviewerNote !== "" && (
