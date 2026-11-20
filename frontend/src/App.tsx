@@ -2397,14 +2397,6 @@ export default function App() {
       ).trim();
       if (derivedCompany) {
         setNewCompany(derivedCompany);
-        setRecruiterProfile((prev) => ({
-          ...prev,
-          companyName: derivedCompany,
-          contactName: matchedReg?.fullName || user.name || prev.contactName,
-          about:
-            matchedReg?.recruiterProfileDetails?.about ||
-            `${derivedCompany} campus & lateral talent partner hiring IITM BS Data Science & Electronic Systems graduates.`,
-        }));
       }
     }
   }, [user?.email, user?.role, registrations]);
