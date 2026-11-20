@@ -830,14 +830,14 @@ export default function App() {
   const [adminDirectorySearch, setAdminDirectorySearch] = useState("");
   const [adminNewFullName, setAdminNewFullName] = useState("");
   const [adminNewEmail, setAdminNewEmail] = useState("");
-  const [adminNewRole, setAdminNewRole] = useState<Role>("STUDENT");
+  const [adminNewRole, setAdminNewRole] = useState<Exclude<Role, "ADMIN">>("STUDENT");
   const [adminNewOrgOrDept, setAdminNewOrgOrDept] = useState("");
   const [adminNewStatus, setAdminNewStatus] = useState<"APPROVED" | "PENDING" | "REJECTED">("APPROVED");
   const [editingRegId, setEditingRegId] = useState<string | null>(null);
   const [editRegDraft, setEditRegDraft] = useState<{
     fullName: string;
     email: string;
-    role: Role;
+    role: Exclude<Role, "ADMIN">;
     orgOrDept: string;
     status: "APPROVED" | "PENDING" | "REJECTED";
   }>({
@@ -1029,7 +1029,7 @@ export default function App() {
       "ADMIN",
       "ADMIN_USER_DELETED",
       `Deleted ${reg.id} • ${reg.fullName} (${reg.role})`,
-      "RECORDED"
+      "SUCCESS"
     );
     setAdminCommandAlert({
       type: "OK",
@@ -1083,7 +1083,7 @@ export default function App() {
       "ADMIN",
       "ADMIN_DRIVE_DELETED",
       `Deleted drive ${job.jobCode} (${job.companyName} — ${job.title})`,
-      "RECORDED"
+      "SUCCESS"
     );
     setAdminCommandAlert({
       type: "OK",
@@ -1200,7 +1200,6 @@ export default function App() {
   const [activityEvidenceLabel, setActivityEvidenceLabel] = useState<string>("");
   const [activityCompletedDate, setActivityCompletedDate] = useState<string>("2026-11-15");
   const [activityAlert, setActivityAlert] = useState<string | null>(null);
-  const [previewSubmission, setPreviewSubmission] = useState<ActivitySubmission | null>(null);
   const [coordTargetRoll, setCoordTargetRoll] = useState<string>("21F3001013");
   const [coordFeedback, setCoordFeedback] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
   const coordCsvInputRef = useRef<HTMLInputElement | null>(null);  const [isWorkingProf, setIsWorkingProf] = useState<boolean>(false);
@@ -2692,11 +2691,6 @@ export default function App() {
     );
   };
 
-  const handleRoleSwitch = (nextRole: Role) => {
-    if (!user || nextRole === user.role) return;
-    setUser({ ...user, role: nextRole });
-    appendAudit(user.email, nextRole, "ROLE_SWITCH", `RBAC Context -> ${nextRole}`, "SUCCESS");
-  };
 
   const handleSaveRegistration = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5753,7 +5747,7 @@ export default function App() {
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <Shield className="w-3.5 h-3.5" />
+                <ShieldCheck className="w-3.5 h-3.5" />
                 Executive Command, CRUD &amp; Exports ({registrations.length} Users)
               </button>
 
@@ -10394,7 +10388,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-indigo-400" />
+                      <ShieldCheck className="w-5 h-5 text-indigo-400" />
                       Placement Admin Executive Command Center
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -10457,7 +10451,7 @@ export default function App() {
                 {/* Role-Segmented Master CSV Data Export Bar */}
                 <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs font-semibold text-slate-300 flex items-center gap-2">
-                    <Download className="w-4 h-4 text-emerald-400" />
+                    <Upload className="w-4 h-4 text-emerald-400" />
                     Export Stakeholder Directories (Excel-Ready CSV):
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -10523,7 +10517,7 @@ export default function App() {
                   />
                   <select
                     value={adminNewRole}
-                    onChange={(e) => setAdminNewRole(e.target.value as Role)}
+                    onChange={(e) => setAdminNewRole(e.target.value as Exclude<Role, "ADMIN">)}
                     className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100"
                   >
                     <option value="STUDENT">STUDENT</option>
@@ -10640,7 +10634,7 @@ export default function App() {
                               {isEditing ? (
                                 <select
                                   value={editRegDraft.role}
-                                  onChange={(e) => setEditRegDraft({ ...editRegDraft, role: e.target.value as Role })}
+                                  onChange={(e) => setEditRegDraft({ ...editRegDraft, role: e.target.value as Exclude<Role, "ADMIN"> })}
                                   className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-100"
                                 >
                                   <option value="STUDENT">STUDENT</option>
@@ -11038,12 +11032,12 @@ export default function App() {
                             <div className="text-[11px] text-slate-500">{log.timestamp}</div>
                           </td>
                           <td className="py-2.5 pr-3">
-                            <div className="font-semibold text-slate-200">{log.actorEmail}</div>
-                            <div className="text-[11px] text-indigo-400">{log.actorRole}</div>
+                            <div className="font-semibold text-slate-200">{log.actor}</div>
+                            <div className="text-[11px] text-indigo-400">{log.role}</div>
                           </td>
                           <td className="py-2.5 pr-3">
                             <div className="font-semibold text-slate-100">{log.action}</div>
-                            <div className="text-[11px] text-slate-400">{log.details}</div>
+                            <div className="text-[11px] text-slate-400">{log.resource}</div>
                           </td>
                           <td className="py-2.5 text-right">
                             <span
@@ -11065,6 +11059,37 @@ export default function App() {
             </div>
           );
         })()}
+
+        {driveDocPreview && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white">{driveDocPreview.title}</h3>
+                  <p className="text-xs text-slate-400">{driveDocPreview.subtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDriveDocPreview(null)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Close ✕
+                </button>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+                <p className="text-slate-400">Verified Document Link:</p>
+                <a
+                  href={driveDocPreview.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-400 hover:underline break-all font-mono"
+                >
+                  {driveDocPreview.url}
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
