@@ -7929,6 +7929,7 @@ export default function App() {
                       </p>
                     </div>
                   ) : (
+                    <>
                     <div className="mb-4 p-4 rounded-xl bg-slate-950 border border-indigo-500/30 space-y-3 text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -8189,6 +8190,7 @@ export default function App() {
                         Record Final Examiner Interview Evaluation
                       </button>
                     </form>
+                    </>
                   )}
                 </div>
 
