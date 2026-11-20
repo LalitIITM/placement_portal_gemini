@@ -851,7 +851,7 @@ export default function App() {
     {
       id: "REG-103",
       fullName: "Ricoh India HR",
-      email: "hr@ricoh.in",
+      email: "lalit@iit.in",
       role: "RECRUITER",
       orgOrDept: "Ricoh India • Talent Acquisition",
       password: "123456",
@@ -1233,7 +1233,15 @@ export default function App() {
         }
         const snap = data.snapshot || {};
         if (Array.isArray(snap.registrations) && snap.registrations.length > 0) {
-          setRegistrations(snap.registrations);
+          setRegistrations((prevDefaults) => {
+            const existingEmails = new Set(
+              snap.registrations.map((r: RegistrationRequestRecord) => `${r.role}::${r.email.toLowerCase()}`)
+            );
+            const missingSeeded = prevDefaults.filter(
+              (d) => !existingEmails.has(`${d.role}::${d.email.toLowerCase()}`)
+            );
+            return [...snap.registrations, ...missingSeeded];
+          });
         }
         if (Array.isArray(snap.jobs) && snap.jobs.length > 0) {
           setJobs(snap.jobs);
@@ -4256,7 +4264,7 @@ export default function App() {
                     selectedRole === "STUDENT"
                       ? "22f3001013@ds.study.iitm.ac.in"
                       : selectedRole === "RECRUITER"
-                      ? "hr@ricoh.in"
+                      ? "lalit@iit.in"
                       : selectedRole === "EXAMINER"
                       ? "shyam@ds.iitm.ac.in"
                       : selectedRole === "TRAINING_COORDINATOR"
@@ -4948,7 +4956,7 @@ export default function App() {
                             : selectedRole === "EXAMINER"
                             ? "shyam@ds.iitm.ac.in"
                             : selectedRole === "RECRUITER"
-                            ? "hr@ricoh.in"
+                            ? "lalit@iit.in"
                             : "placement.admin@iitm.ac.in"
                         );
                         setPassword("123456");
