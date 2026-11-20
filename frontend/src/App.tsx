@@ -1317,7 +1317,7 @@ export default function App() {
   const [newCompany, setNewCompany] = useState("Swiggy");
   const [newJobTitle, setNewJobTitle] = useState("Data Science Intern — Logistics");
   const [newRoleType, setNewRoleType] = useState<JobRoleTypeOption>("INTERNSHIP");
-  const [newJobDomain, setNewJobDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
+  const [newJobDomain, setNewJobDomain] = useState<QuizDomainOption | "">("");
   const [newLocation, setNewLocation] = useState("Bengaluru");
   const [newCompensation, setNewCompensation] = useState("₹60,000 / month");
   const [newMinCgpa, setNewMinCgpa] = useState("7.50");
@@ -3707,6 +3707,13 @@ export default function App() {
       setJobAlert({ type: "ERR", text: "Job Code, Company Name, and Title are required." });
       return;
     }
+    if (!newJobDomain) {
+      setJobAlert({
+        type: "ERR",
+        text: "Please select a Target Domain (Data Science or Software Development) before publishing.",
+      });
+      return;
+    }
     const minCg = parseFloat(newMinCgpa);
     if (isNaN(minCg) || minCg < 0 || minCg > 10) {
       setJobAlert({ type: "ERR", text: "Minimum CGPA must be between 0.00 and 10.00." });
@@ -3758,6 +3765,7 @@ export default function App() {
     };
 
     setJobs((prev) => [created, ...prev]);
+    setNewJobDomain("");
     setNewJobCode(`DRV-2026-${Math.floor(100 + Math.random() * 899)}`);
     setNewJdText("");
     setNewJdPdfName("");
@@ -5358,7 +5366,7 @@ export default function App() {
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
-                Opportunities ({jobs.length} Open • {applications.length} Applied)
+                Opportunities ({jobs.filter((j) => j.domain === studentTargetDomain && j.roleType === studentApplyingTrack).length} Open • {applications.length} Applied)
               </button>
             </>
           ) : user.role === "TRAINING_COORDINATOR" ? (
@@ -6052,12 +6060,16 @@ export default function App() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1">Domain</label>
+                    <label className="block text-slate-400 mb-1">
+                      Target Domain <span className="text-rose-400">*</span>
+                    </label>
                     <select
+                      required
                       value={newJobDomain}
-                      onChange={(e) => setNewJobDomain(e.target.value as QuizDomainOption)}
+                      onChange={(e) => setNewJobDomain(e.target.value as QuizDomainOption | "")}
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
                     >
+                      <option value="">Select Domain (Required)...</option>
                       <option value="DATA_SCIENCE">Data Science</option>
                       <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
                     </select>
@@ -6248,7 +6260,13 @@ export default function App() {
               ).trim();
 
               const baseJobs =
-                user.role === "RECRUITER" && !recruiterShowAllDrives
+                user.role === "STUDENT"
+                  ? jobs.filter(
+                      (j) =>
+                        j.domain === studentTargetDomain &&
+                        j.roleType === studentApplyingTrack
+                    )
+                  : user.role === "RECRUITER" && !recruiterShowAllDrives
                   ? jobs.filter(
                       (j) =>
                         j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
@@ -6256,10 +6274,15 @@ export default function App() {
                     )
                   : jobs;
 
+              const effectiveTrackFilter =
+                user.role === "STUDENT" ? studentApplyingTrack : opportunityTrackFilter;
+              const effectiveDomainFilter =
+                user.role === "STUDENT" ? studentTargetDomain : opportunityDomainFilter;
+
               const q = opportunitySearchQuery.trim().toLowerCase();
               const matchingJobs = baseJobs.filter((job) => {
-                if (opportunityTrackFilter !== "ALL" && job.roleType !== opportunityTrackFilter) return false;
-                if (opportunityDomainFilter !== "ALL" && job.domain !== opportunityDomainFilter) return false;
+                if (effectiveTrackFilter !== "ALL" && job.roleType !== effectiveTrackFilter) return false;
+                if (effectiveDomainFilter !== "ALL" && job.domain !== effectiveDomainFilter) return false;
                 if (!q) return true;
                 return (
                   job.title.toLowerCase().includes(q) ||
@@ -6437,52 +6460,67 @@ export default function App() {
                 <div className="space-y-6">
                   {/* Segregated Track Filter Header (Internships vs Full-Time FTE) */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setOpportunityTrackFilter("ALL")}
-                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
-                          opportunityTrackFilter === "ALL"
-                            ? "bg-indigo-600 text-white"
-                            : "bg-slate-950 border border-slate-800 text-slate-300 hover:text-white"
-                        }`}
-                      >
-                        All Opportunities ({baseJobs.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOpportunityTrackFilter("INTERNSHIP")}
-                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
-                          opportunityTrackFilter === "INTERNSHIP"
-                            ? "bg-cyan-600 text-white"
-                            : "bg-slate-950 border border-slate-800 text-cyan-300 hover:bg-slate-800"
-                        }`}
-                      >
-                        Internships ({baseJobs.filter((j) => j.roleType === "INTERNSHIP").length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOpportunityTrackFilter("FULL_TIME")}
-                        className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
-                          opportunityTrackFilter === "FULL_TIME"
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-950 border border-slate-800 text-emerald-300 hover:bg-slate-800"
-                        }`}
-                      >
-                        Full-Time Employment / FTE ({baseJobs.filter((j) => j.roleType === "FULL_TIME").length})
-                      </button>
-                    </div>
+                    {user.role === "STUDENT" ? (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 font-semibold">
+                          Registered Cohort:{" "}
+                          {studentTargetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} •{" "}
+                          {studentApplyingTrack === "INTERNSHIP" ? "Internship Plan" : "Full-Time Placement Plan"}
+                        </span>
+                        <span className="text-slate-400">
+                          Showing {baseJobs.length} matching {studentApplyingTrack === "INTERNSHIP" ? "Internship" : "Full-Time"} drive(s)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setOpportunityTrackFilter("ALL")}
+                          className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                            opportunityTrackFilter === "ALL"
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-950 border border-slate-800 text-slate-300 hover:text-white"
+                          }`}
+                        >
+                          All Opportunities ({baseJobs.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOpportunityTrackFilter("INTERNSHIP")}
+                          className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                            opportunityTrackFilter === "INTERNSHIP"
+                              ? "bg-cyan-600 text-white"
+                              : "bg-slate-950 border border-slate-800 text-cyan-300 hover:bg-slate-800"
+                          }`}
+                        >
+                          Internships ({baseJobs.filter((j) => j.roleType === "INTERNSHIP").length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOpportunityTrackFilter("FULL_TIME")}
+                          className={`px-3.5 py-1.5 rounded-xl font-semibold transition ${
+                            opportunityTrackFilter === "FULL_TIME"
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-950 border border-slate-800 text-emerald-300 hover:bg-slate-800"
+                          }`}
+                        >
+                          Full-Time Employment / FTE ({baseJobs.filter((j) => j.roleType === "FULL_TIME").length})
+                        </button>
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <select
-                        value={opportunityDomainFilter}
-                        onChange={(e) => setOpportunityDomainFilter(e.target.value as "ALL" | QuizDomainOption)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
-                      >
-                        <option value="ALL">All Domains</option>
-                        <option value="DATA_SCIENCE">Data Science</option>
-                        <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
-                      </select>
+                      {user.role !== "STUDENT" && (
+                        <select
+                          value={opportunityDomainFilter}
+                          onChange={(e) => setOpportunityDomainFilter(e.target.value as "ALL" | QuizDomainOption)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                        >
+                          <option value="ALL">All Domains</option>
+                          <option value="DATA_SCIENCE">Data Science</option>
+                          <option value="SOFTWARE_DEVELOPMENT">Software Development</option>
+                        </select>
+                      )}
                       <input
                         type="text"
                         value={opportunitySearchQuery}
@@ -6494,7 +6532,7 @@ export default function App() {
                   </div>
 
                   {/* Section A: Internship Opportunities */}
-                  {(opportunityTrackFilter === "ALL" || opportunityTrackFilter === "INTERNSHIP") && (
+                  {(effectiveTrackFilter === "ALL" || effectiveTrackFilter === "INTERNSHIP") && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
@@ -6518,7 +6556,7 @@ export default function App() {
                   )}
 
                   {/* Section B: Full-Time Employment (FTE) Opportunities */}
-                  {(opportunityTrackFilter === "ALL" || opportunityTrackFilter === "FULL_TIME") && (
+                  {(effectiveTrackFilter === "ALL" || effectiveTrackFilter === "FULL_TIME") && (
                     <div className="space-y-3 pt-2">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
