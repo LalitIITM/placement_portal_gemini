@@ -24,6 +24,7 @@ import {
   BarChart3,
   Video,
 } from "lucide-react";
+import type { HelpdeskTicketRecord } from "./types/portal";
 
 type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "TRAINING_COORDINATOR" | "ADMIN";
 type AuthMode = "SIGN_IN" | "SIGN_UP";
@@ -108,7 +109,7 @@ interface RegistrationRequestRecord {
   examinerProfileDetails?: ExaminerOnboardingDetails;
   recruiterProfileDetails?: RecruiterOnboardingDetails;
 }
-type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE" | "RECRUITER_COMPANY" | "RECRUITER_DRIVES";
+type ActiveTab = "IDENTITY" | "TRAINING" | "RECRUITMENT" | "PLACEMENT" | "GOVERNANCE" | "RECRUITER_COMPANY" | "RECRUITER_DRIVES" | "HELPDESK";
 type CategoryOption = "GENERAL" | "GENERAL_EWS" | "OBC" | "OBC_NCL" | "SC_ST";
 type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
@@ -1701,6 +1702,33 @@ export default function App() {
     return [];
   });
   const [selectedResumeIdForApply, setSelectedResumeIdForApply] = useState<string>("res-1");
+  const [interviews, setInterviews] = useState<InterviewScheduleRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_interviews_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_INTERVIEWS;
+  });
+  const [offers, setOffers] = useState<OfferLetterRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_offers_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_OFFERS;
+  });
+  const [helpdeskTickets, setHelpdeskTickets] = useState<HelpdeskTicketRecord[]>([]);
+  const [hdCategory, setHdCategory] = useState<string>("PLACEMENT");
+  const [hdPriority, setHdPriority] = useState<"LOW" | "MEDIUM" | "HIGH" | "URGENT">("MEDIUM");
+  const [hdSubject, setHdSubject] = useState<string>("");
+  const [hdDescription, setHdDescription] = useState<string>("");
+  const [hdFilterStatus, setHdFilterStatus] = useState<string>("ALL");
+  const [hdReplyDrafts, setHdReplyDrafts] = useState<Record<string, string>>({});
   const [jobAlert, setJobAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
   // Recruiter New Job Form
@@ -1901,6 +1929,30 @@ export default function App() {
         if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
           setAuditLogs(snap.auditLogs);
         }
+        if (Array.isArray(snap.interviews)) {
+          setInterviews(snap.interviews);
+        }
+        if (Array.isArray(snap.offers)) {
+          setOffers(snap.offers);
+        }
+        if (Array.isArray(data.helpdeskTickets)) {
+          setHelpdeskTickets(data.helpdeskTickets);
+        }
+        if (data.studentProfile && typeof data.studentProfile === "object") {
+          const prof = data.studentProfile;
+          if (prof.fullName) setFullName(prof.fullName);
+          if (prof.cgpa) setCgpaInput(String(prof.cgpa));
+          if (typeof prof.activeBacklogs === "number") setActiveBacklogs(prof.activeBacklogs);
+          if (prof.programLevel) setProgramLevel(prof.programLevel);
+          if (prof.degreeType) setDegreeType(prof.degreeType);
+          if (prof.applyingTrack) setStudentApplyingTrack(prof.applyingTrack);
+          if (prof.targetDomain) setStudentTargetDomain(prof.targetDomain);
+          if (prof.personalEmail) setPersonalEmail(prof.personalEmail);
+          if (prof.mobileNumber) setMobileNumber(prof.mobileNumber);
+          if (prof.linkedinUrl) setLinkedinId(prof.linkedinUrl);
+          if (prof.githubUrl) setGithubUsername(prof.githubUrl);
+          if (prof.kaggleUrl) setKaggleUsername(prof.kaggleUrl);
+        }
         setResumes(Array.isArray(snap.resumes) ? snap.resumes : []);
         setMarksheet(snap.marksheet && typeof snap.marksheet === "object" ? snap.marksheet : null);
         loadedRollRef.current = rollToFetch;
@@ -1936,10 +1988,36 @@ export default function App() {
             studentRoll: rollToSave,
             trainingStages,
             activitySubmissions,
+            studentProfile: {
+              studentRoll: rollToSave,
+              fullName,
+              iitmEmail: user?.email || `${rollToSave.toLowerCase()}@ds.study.iitm.ac.in`,
+              personalEmail,
+              mobileNumber,
+              cgpa: cgpaInput,
+              activeBacklogs,
+              programLevel,
+              degreeType,
+              applyingTrack: studentApplyingTrack,
+              targetDomain: studentTargetDomain,
+              headline: `${programLevel} • ${studentTargetDomain.replace("_", " ")}`,
+              githubUrl: githubUsername,
+              linkedinUrl: linkedinId,
+              kaggleUrl: kaggleUsername,
+              portfolioUrl: "",
+              skills: [],
+              projects: [],
+              experiences: [],
+              isSuspended: false,
+              noShowCount: 0,
+            },
+            helpdeskTickets,
             snapshot: {
               registrations,
               jobs,
               applications,
+              interviews,
+              offers,
               evaluations,
               oneOnOneSlots,
               auditLogs,
@@ -1971,6 +2049,21 @@ export default function App() {
     auditLogs,
     resumes,
     marksheet,
+    interviews,
+    offers,
+    helpdeskTickets,
+    fullName,
+    cgpaInput,
+    activeBacklogs,
+    programLevel,
+    degreeType,
+    studentApplyingTrack,
+    studentTargetDomain,
+    personalEmail,
+    mobileNumber,
+    linkedinId,
+    githubUsername,
+    kaggleUsername,
   ]);
 
   const appendAudit = useCallback(
@@ -2999,27 +3092,7 @@ export default function App() {
   };
 
 
-  // Increment 4: Interviews, Offers & Placement Analytics State
-  const [interviews, setInterviews] = useState<InterviewScheduleRecord[]>(() => {
-    try {
-      const raw = localStorage.getItem("iitm_os_interviews_v1");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return INITIAL_INTERVIEWS;
-  });
-  const [offers, setOffers] = useState<OfferLetterRecord[]>(() => {
-    try {
-      const raw = localStorage.getItem("iitm_os_offers_v1");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return INITIAL_OFFERS;
-  });
+  // Increment 4: Interviews & Offers State (hydrated from PostgreSQL)
 
   useEffect(() => {
     setJobAlert(null);
@@ -5937,6 +6010,18 @@ export default function App() {
               </button>
             </>
           )}
+
+          <button
+            onClick={() => setActiveTab("HELPDESK")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+              activeTab === "HELPDESK"
+                ? "bg-indigo-600/25 text-indigo-200 border border-indigo-500/50"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Helpdesk &amp; Support ({helpdeskTickets.filter((t) => t.status !== "RESOLVED" && t.status !== "CLOSED").length} Open)
+          </button>
         </div>
       </header>
 
@@ -8547,6 +8632,324 @@ export default function App() {
             </div>
           </div>
         )}
+        {activeTab === "HELPDESK" && (() => {
+          const isStaff = user.role === "ADMIN" || user.role === "TRAINING_COORDINATOR";
+          const visibleTickets = helpdeskTickets
+            .filter((t) =>
+              isStaff ? true : t.raisedByEmail.toLowerCase() === user.email.toLowerCase()
+            )
+            .filter((t) => (hdFilterStatus === "ALL" ? true : t.status === hdFilterStatus));
+
+          const handleCreateTicket = (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!hdSubject.trim() || !hdDescription.trim()) return;
+            const nowIso = new Date().toISOString();
+            const newTicket: HelpdeskTicketRecord = {
+              id: `TKT-${Date.now()}`,
+              ticketNumber: `HD-${new Date().getFullYear()}-${String(helpdeskTickets.length + 101)}`,
+              raisedByEmail: user.email,
+              raisedByName: user.name || fullName || user.email.split("@")[0],
+              raisedByRole: user.role,
+              category: hdCategory,
+              priority: hdPriority,
+              subject: hdSubject.trim(),
+              description: hdDescription.trim(),
+              status: "OPEN",
+              assignedTo: null,
+              escalationCount: 0,
+              comments: [],
+              createdAt: nowIso,
+            };
+            setHelpdeskTickets((prev) => [newTicket, ...prev]);
+            setHdSubject("");
+            setHdDescription("");
+          };
+
+          const handleAddReply = (ticketId: string) => {
+            const draft = (hdReplyDrafts[ticketId] || "").trim();
+            if (!draft) return;
+            setHelpdeskTickets((prev) =>
+              prev.map((t) =>
+                t.id === ticketId
+                  ? {
+                      ...t,
+                      status: t.status === "OPEN" ? "IN_PROGRESS" : t.status,
+                      comments: [
+                        ...(t.comments || []),
+                        {
+                          author: user.name || user.email,
+                          role: user.role,
+                          text: draft,
+                          createdAt: new Date().toISOString(),
+                        },
+                      ],
+                    }
+                  : t
+              )
+            );
+            setHdReplyDrafts((prev) => ({ ...prev, [ticketId]: "" }));
+          };
+
+          const handleEscalateTicket = (ticketId: string) => {
+            setHelpdeskTickets((prev) =>
+              prev.map((t) =>
+                t.id === ticketId
+                  ? {
+                      ...t,
+                      status: "ESCALATED",
+                      priority: "URGENT",
+                      escalationCount: (t.escalationCount || 0) + 1,
+                    }
+                  : t
+              )
+            );
+          };
+
+          const handleResolveTicket = (ticketId: string) => {
+            setHelpdeskTickets((prev) =>
+              prev.map((t) =>
+                t.id === ticketId
+                  ? {
+                      ...t,
+                      status: "RESOLVED",
+                      assignedTo: t.assignedTo || user.email,
+                    }
+                  : t
+              )
+            );
+          };
+
+          return (
+            <div className="space-y-6">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-indigo-400" />
+                      Placement &amp; Training Helpdesk Desk
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Raise support queries, track coordinator resolutions, and sync ticket threads directly to PostgreSQL.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 font-semibold">
+                      Total: {visibleTickets.length}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+                      Open/Active: {visibleTickets.filter((t) => t.status !== "RESOLVED" && t.status !== "CLOSED").length}
+                    </span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleCreateTicket} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Category
+                    </label>
+                    <select
+                      value={hdCategory}
+                      onChange={(e) => setHdCategory(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="PLACEMENT">Placement &amp; Drives</option>
+                      <option value="OFFER_VERIFICATION">Offer Letter Verification</option>
+                      <option value="TRAINING">Training &amp; Activity Points</option>
+                      <option value="EVALUATION">1-on-1 Viva &amp; Evaluation</option>
+                      <option value="TECHNICAL">Portal Technical Issue</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Priority
+                    </label>
+                    <select
+                      value={hdPriority}
+                      onChange={(e) => setHdPriority(e.target.value as "LOW" | "MEDIUM" | "HIGH" | "URGENT")}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                    >
+                      <option value="LOW">LOW</option>
+                      <option value="MEDIUM">MEDIUM</option>
+                      <option value="HIGH">HIGH</option>
+                      <option value="URGENT">URGENT</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={hdSubject}
+                      onChange={(e) => setHdSubject(e.target.value)}
+                      placeholder="e.g., Requesting CGPA verification update before shortlist freeze"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Detailed Description
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={hdDescription}
+                      onChange={(e) => setHdDescription(e.target.value)}
+                      placeholder="Include roll number, drive code, or slot ID for faster resolution..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-2 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Raise Ticket
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-white">
+                    {isStaff ? "All Support Tickets Queue" : "My Support Tickets"}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["ALL", "OPEN", "IN_PROGRESS", "ESCALATED", "RESOLVED"].map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setHdFilterStatus(st)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                          hdFilterStatus === st
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {visibleTickets.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl border border-dashed border-slate-800 text-xs text-slate-400">
+                    No helpdesk tickets match the selected filter.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {visibleTickets.map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-[11px] font-bold text-indigo-400">
+                                {ticket.ticketNumber}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-semibold">
+                                {ticket.category}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  ticket.priority === "URGENT" || ticket.priority === "HIGH"
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : "bg-slate-800 text-slate-300"
+                                }`}
+                              >
+                                {ticket.priority}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  ticket.status === "RESOLVED"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : ticket.status === "ESCALATED"
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : "bg-indigo-500/20 text-indigo-300"
+                                }`}
+                              >
+                                {ticket.status}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-white mt-1.5">{ticket.subject}</h4>
+                            <p className="text-xs text-slate-300 mt-1">{ticket.description}</p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Raised by {ticket.raisedByName} ({ticket.raisedByEmail}) • Escalations: {ticket.escalationCount || 0}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {ticket.status !== "RESOLVED" && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEscalateTicket(ticket.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-semibold"
+                                >
+                                  Escalate
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleResolveTicket(ticket.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold"
+                                >
+                                  Mark Resolved
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {(ticket.comments || []).length > 0 && (
+                          <div className="pl-3 border-l-2 border-slate-800 space-y-2">
+                            {ticket.comments.map((c, idx) => (
+                              <div key={idx} className="text-xs bg-slate-900/90 rounded-lg p-2.5">
+                                <span className="font-semibold text-indigo-300">{c.author}</span>{" "}
+                                <span className="text-[10px] text-slate-500">({c.role})</span>
+                                <p className="text-slate-300 mt-0.5">{c.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {ticket.status !== "RESOLVED" && (
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={hdReplyDrafts[ticket.id] || ""}
+                              onChange={(e) =>
+                                setHdReplyDrafts((prev) => ({ ...prev, [ticket.id]: e.target.value }))
+                              }
+                              placeholder="Write an update or coordinator note..."
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddReply(ticket.id)}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                            >
+                              <Send className="w-3 h-3" />
+                              Reply
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </main>
     </div>
   );

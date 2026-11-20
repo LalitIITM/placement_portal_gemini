@@ -329,3 +329,44 @@ export interface OfferLetterRecord {
   status: OfferStatusOption;
   remarks?: string;
 }
+
+export interface HelpdeskTicketRecord {
+  id: string;
+  ticketNumber: string;
+  raisedByEmail: string;
+  raisedByName: string;
+  raisedByRole: string;
+  category: string;
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  subject: string;
+  description: string;
+  status: "OPEN" | "ASSIGNED" | "IN_PROGRESS" | "ESCALATED" | "RESOLVED" | "CLOSED";
+  assignedTo?: string | null;
+  escalationCount: number;
+  comments: Array<{ author: string; role: string; text: string; createdAt: string }>;
+  createdAt?: string | null;
+}
+
+export interface StudentProfileSyncDTO {
+  studentRoll: string;
+  fullName: string;
+  iitmEmail: string;
+  personalEmail: string;
+  mobileNumber: string;
+  cgpa: string;
+  activeBacklogs: number;
+  programLevel: ProgramLevelOption;
+  degreeType: DegreeTypeOption;
+  applyingTrack: JobRoleTypeOption;
+  targetDomain: QuizDomainOption;
+  headline: string;
+  githubUrl: string;
+  linkedinUrl: string;
+  kaggleUrl: string;
+  portfolioUrl: string;
+  skills: string[];
+  projects: Array<Record<string, unknown>>;
+  experiences: Array<Record<string, unknown>>;
+  isSuspended: boolean;
+  noShowCount: number;
+}

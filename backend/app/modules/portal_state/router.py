@@ -1,13 +1,22 @@
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.portal_state.models import (
     ActivityPointSubmissionRecord,
+    HelpdeskTicketRecord,
+    OneOnOneSlotRecordModel,
+    PortalExaminerEvaluationRecord,
+    PortalInterviewRecord,
+    PortalJobApplicationRecord,
+    PortalOfferLetterRecord,
     PortalStateSnapshot,
+    StudentProfileRecord,
+    StudentResumeRecord,
     StudentTrainingStageRecord,
 )
 from app.shared.database import get_db
@@ -79,10 +88,53 @@ class ActivitySubmissionDTO(BaseModel):
     reviewerNote: Optional[str] = None
 
 
+class StudentProfileDTO(BaseModel):
+    studentRoll: str
+    fullName: str = ""
+    iitmEmail: str = ""
+    personalEmail: str = ""
+    mobileNumber: str = ""
+    cgpa: str = "8.20"
+    activeBacklogs: int = 0
+    programLevel: str = "BSC"
+    degreeType: str = "STANDALONE"
+    applyingTrack: str = "FULL_TIME"
+    targetDomain: str = "DATA_SCIENCE"
+    headline: str = ""
+    githubUrl: str = ""
+    linkedinUrl: str = ""
+    kaggleUrl: str = ""
+    portfolioUrl: str = ""
+    skills: list[str] = Field(default_factory=list)
+    projects: list[dict[str, Any]] = Field(default_factory=list)
+    experiences: list[dict[str, Any]] = Field(default_factory=list)
+    isSuspended: bool = False
+    noShowCount: int = 0
+
+
+class HelpdeskTicketDTO(BaseModel):
+    id: str
+    ticketNumber: str
+    raisedByEmail: str
+    raisedByName: str
+    raisedByRole: str
+    category: str = "PLACEMENT"
+    priority: str = "MEDIUM"
+    subject: str
+    description: str
+    status: str = "OPEN"
+    assignedTo: Optional[str] = None
+    escalationCount: int = 0
+    comments: list[dict[str, Any]] = Field(default_factory=list)
+    createdAt: Optional[str] = None
+
+
 class PortalSyncPayload(BaseModel):
     studentRoll: str = Field(default="21F3001013")
     trainingStages: list[TrainingStageDTO] = Field(default_factory=list)
     activitySubmissions: list[ActivitySubmissionDTO] = Field(default_factory=list)
+    studentProfile: Optional[StudentProfileDTO] = None
+    helpdeskTickets: list[HelpdeskTicketDTO] = Field(default_factory=list)
     snapshot: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -132,25 +184,90 @@ async def _ensure_activities(db: AsyncSession, roll: Optional[str] = None) -> li
     return list(rows)
 
 
+async def _ensure_student_profile(db: AsyncSession, roll: str) -> StudentProfileRecord:
+    normalized_roll = roll.strip().upper() or "21F3001013"
+    prof = (
+        await db.execute(
+            select(StudentProfileRecord).where(StudentProfileRecord.student_roll == normalized_roll)
+        )
+    ).scalar_one_or_none()
+    if prof is None:
+        prof = StudentProfileRecord(
+            student_roll=normalized_roll,
+            full_name="Aarav Sharma" if normalized_roll in {"21F3001013", "22F3001234"} else normalized_roll,
+            iitm_email=f"{normalized_roll.lower()}@ds.study.iitm.ac.in",
+            cgpa="8.45" if normalized_roll in {"21F3001013", "22F3001234"} else "8.00",
+            skills=["Python", "SQL", "FastAPI", "React", "Machine Learning"],
+        )
+        db.add(prof)
+        await db.flush()
+    return prof
+
+
 @router.get("/bootstrap", response_model=PortalSyncPayload)
 async def get_portal_bootstrap_state(
     student_roll: str = "21F3001013",
     scope_student_only: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> PortalSyncPayload:
-    """Fetches roll-isolated 3-level stages, activity evidence, resumes, scorecard, and global portal collections."""
+    """Hydrates roll-isolated stages, activities, profile, resumes, slots, evaluations, applications, offers, and helpdesk tickets from normalized PostgreSQL tables."""
     normalized_roll = student_roll.strip().upper() or "21F3001013"
     stage_rows = await _ensure_roll_stages(db, normalized_roll)
     act_rows = await _ensure_activities(db, roll=normalized_roll if scope_student_only else None)
+    profile_row = await _ensure_student_profile(db, normalized_roll)
 
+    # Normalized resumes per student roll
+    resume_rows = (
+        await db.execute(
+            select(StudentResumeRecord)
+            .where(StudentResumeRecord.student_roll == normalized_roll)
+            .order_by(StudentResumeRecord.is_primary.desc(), StudentResumeRecord.created_at.desc())
+        )
+    ).scalars().all()
+
+    # Normalized 1-on-1 evaluation slots
+    slot_rows = (
+        await db.execute(
+            select(OneOnOneSlotRecordModel).order_by(OneOnOneSlotRecordModel.date.asc())
+        )
+    ).scalars().all()
+
+    # Normalized examiner evaluations
+    eval_stmt = select(PortalExaminerEvaluationRecord).order_by(PortalExaminerEvaluationRecord.created_at.desc())
+    if scope_student_only:
+        eval_stmt = eval_stmt.where(PortalExaminerEvaluationRecord.student_roll == normalized_roll)
+    eval_rows = (await db.execute(eval_stmt)).scalars().all()
+
+    # Normalized ATS applications
+    app_stmt = select(PortalJobApplicationRecord).order_by(PortalJobApplicationRecord.created_at.desc())
+    if scope_student_only:
+        app_stmt = app_stmt.where(PortalJobApplicationRecord.student_roll == normalized_roll)
+    app_rows = (await db.execute(app_stmt)).scalars().all()
+
+    # Normalized interviews & offers
+    int_stmt = select(PortalInterviewRecord).order_by(PortalInterviewRecord.created_at.desc())
+    offer_stmt = select(PortalOfferLetterRecord).order_by(PortalOfferLetterRecord.created_at.desc())
+    if scope_student_only:
+        int_stmt = int_stmt.where(PortalInterviewRecord.student_roll == normalized_roll)
+        offer_stmt = offer_stmt.where(PortalOfferLetterRecord.student_roll == normalized_roll)
+    interview_rows = (await db.execute(int_stmt)).scalars().all()
+    offer_rows = (await db.execute(offer_stmt)).scalars().all()
+
+    # Normalized helpdesk tickets
+    ticket_stmt = select(HelpdeskTicketRecord).order_by(HelpdeskTicketRecord.created_at.desc())
+    if scope_student_only:
+        ticket_stmt = ticket_stmt.where(
+            HelpdeskTicketRecord.raised_by_email.ilike(f"{normalized_roll.lower()}@%")
+        )
+    ticket_rows = (await db.execute(ticket_stmt)).scalars().all()
+
+    # Supplementary snapshot fallback for legacy keys / marksheet
     global_snap_row = (
         await db.execute(
             select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
         )
     ).scalar_one_or_none()
     global_payload = dict(global_snap_row.payload) if global_snap_row else {}
-
-    # Strip any legacy global resumes/marksheet so each roll gets isolated documents
     global_payload.pop("resumes", None)
     global_payload.pop("marksheet", None)
 
@@ -161,12 +278,127 @@ async def get_portal_bootstrap_state(
         )
     ).scalar_one_or_none()
 
-    if roll_docs_row and isinstance(roll_docs_row.payload, dict):
-        global_payload["resumes"] = roll_docs_row.payload.get("resumes", [])
-        global_payload["marksheet"] = roll_docs_row.payload.get("marksheet", None)
-    else:
-        global_payload["resumes"] = []
-        global_payload["marksheet"] = None
+    resumes_payload = [
+        {
+            "id": r.id,
+            "title": r.title,
+            "targetRole": r.target_role,
+            "driveUrl": r.drive_url,
+            "fileSize": r.file_size,
+            "updatedAt": r.updated_at_label,
+            "isPrimary": r.is_primary,
+        }
+        for r in resume_rows
+    ]
+    if not resumes_payload and roll_docs_row and isinstance(roll_docs_row.payload, dict):
+        resumes_payload = roll_docs_row.payload.get("resumes", [])
+
+    global_payload["resumes"] = resumes_payload
+    global_payload["marksheet"] = (
+        roll_docs_row.payload.get("marksheet")
+        if roll_docs_row and isinstance(roll_docs_row.payload, dict)
+        else None
+    )
+
+    if slot_rows:
+        global_payload["oneOnOneSlots"] = [
+            {
+                "id": s.id,
+                "studentEmail": s.student_email,
+                "studentName": s.student_name,
+                "date": s.date,
+                "slotTime": s.slot_time,
+                "instructor": s.instructor,
+                "status": s.status,
+                "instructorFeedback": s.instructor_feedback,
+                "isPlacementReady": s.is_placement_ready,
+                "programmingRating": s.programming_rating,
+                "dataScienceRating": s.data_science_rating,
+                "communicationRating": s.communication_rating,
+                "remedialTasks": s.remedial_tasks or [],
+                "completedAt": s.completed_at,
+            }
+            for s in slot_rows
+        ]
+
+    if eval_rows:
+        global_payload["evaluations"] = [
+            {
+                "id": e.id,
+                "studentRoll": e.student_roll,
+                "examinerEmail": e.examiner_email,
+                "skillsets": e.skillsets or [],
+                "programmingRating": e.programming_rating,
+                "dataScienceRating": e.data_science_rating,
+                "communicationRating": e.communication_rating,
+                "isPlacementReady": e.is_placement_ready,
+                "performingExceptionallyGood": e.performing_exceptionally_good,
+                "remedialTasks": e.remedial_tasks or [],
+                "notes": e.notes,
+                "evaluatedAt": e.evaluated_at,
+            }
+            for e in eval_rows
+        ]
+
+    if app_rows:
+        global_payload["applications"] = [
+            {
+                "id": a.id,
+                "jobId": a.job_id,
+                "jobCode": a.job_code,
+                "companyName": a.company_name,
+                "jobTitle": a.job_title,
+                "roleType": a.role_type,
+                "studentRoll": a.student_roll,
+                "studentName": a.student_name,
+                "studentCgpa": a.student_cgpa,
+                "resumeTitle": a.resume_title,
+                "status": a.status,
+                "appliedAt": a.applied_at,
+            }
+            for a in app_rows
+        ]
+
+    if interview_rows:
+        global_payload["interviews"] = [
+            {
+                "id": i.id,
+                "applicationId": i.application_id,
+                "studentRoll": i.student_roll,
+                "studentName": i.student_name,
+                "companyName": i.company_name,
+                "jobTitle": i.job_title,
+                "roundNumber": i.round_number,
+                "roundType": i.round_type,
+                "mode": i.mode,
+                "scheduledAt": i.scheduled_at,
+                "meetingLink": i.meeting_link,
+                "panelistName": i.panelist_name,
+                "status": i.status,
+                "notes": i.notes,
+            }
+            for i in interview_rows
+        ]
+
+    if offer_rows:
+        global_payload["offers"] = [
+            {
+                "id": o.id,
+                "offerCode": o.offer_code,
+                "applicationId": o.application_id,
+                "studentRoll": o.student_roll,
+                "studentName": o.student_name,
+                "companyName": o.company_name,
+                "roleTitle": o.role_title,
+                "roleType": o.role_type,
+                "ctcLpa": o.ctc_lpa,
+                "joiningDate": o.joining_date,
+                "expiresAt": o.expires_at,
+                "status": o.status,
+                "remarks": o.remarks,
+            }
+            for o in offer_rows
+        ]
 
     return PortalSyncPayload(
         studentRoll=normalized_roll,
@@ -203,6 +435,48 @@ async def get_portal_bootstrap_state(
             )
             for a in act_rows
         ],
+        studentProfile=StudentProfileDTO(
+            studentRoll=profile_row.student_roll,
+            fullName=profile_row.full_name,
+            iitmEmail=profile_row.iitm_email,
+            personalEmail=profile_row.personal_email,
+            mobileNumber=profile_row.mobile_number,
+            cgpa=profile_row.cgpa,
+            activeBacklogs=profile_row.active_backlogs,
+            programLevel=profile_row.program_level,
+            degreeType=profile_row.degree_type,
+            applyingTrack=profile_row.applying_track,
+            targetDomain=profile_row.target_domain,
+            headline=profile_row.headline,
+            githubUrl=profile_row.github_url,
+            linkedinUrl=profile_row.linkedin_url,
+            kaggleUrl=profile_row.kaggle_url,
+            portfolioUrl=profile_row.portfolio_url,
+            skills=profile_row.skills or [],
+            projects=profile_row.projects or [],
+            experiences=profile_row.experiences or [],
+            isSuspended=profile_row.is_suspended,
+            noShowCount=profile_row.no_show_count,
+        ),
+        helpdeskTickets=[
+            HelpdeskTicketDTO(
+                id=t.id,
+                ticketNumber=t.ticket_number,
+                raisedByEmail=t.raised_by_email,
+                raisedByName=t.raised_by_name,
+                raisedByRole=t.raised_by_role,
+                category=t.category,
+                priority=t.priority,
+                subject=t.subject,
+                description=t.description,
+                status=t.status,
+                assignedTo=t.assigned_to,
+                escalationCount=t.escalation_count,
+                comments=t.comments or [],
+                createdAt=t.created_at.isoformat() if t.created_at else None,
+            )
+            for t in ticket_rows
+        ],
         snapshot=global_payload,
     )
 
@@ -212,9 +486,10 @@ async def sync_portal_state(
     payload: PortalSyncPayload,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Persists roll-isolated stages, resumes, scorecard, and upserts activity submissions in PostgreSQL."""
+    """Atomically persists stages, activities, profile, resumes, slots, evaluations, applications, interviews, offers, and helpdesk tickets into normalized PostgreSQL tables."""
     normalized_roll = payload.studentRoll.strip().upper() or "21F3001013"
 
+    # 1. Training stages (BRULE-09: max 2 attempts)
     if payload.trainingStages:
         existing_stages = await _ensure_roll_stages(db, normalized_roll)
         stage_map = {s.stage_id: s for s in existing_stages}
@@ -222,7 +497,7 @@ async def sync_portal_state(
             if st.attemptsUsed > 2:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Stage {st.id} exceeds maximum 2 attempts limit.",
+                    detail=f"Stage {st.id} exceeds maximum 2 attempts limit (BRULE-09).",
                 )
             rec = stage_map.get(st.id)
             if rec:
@@ -230,6 +505,7 @@ async def sync_portal_state(
                 rec.attempts_used = st.attemptsUsed
                 rec.status_text = st.statusText
 
+    # 2. Activity ledger submissions
     if payload.activitySubmissions:
         for sub in payload.activitySubmissions:
             await db.merge(
@@ -248,12 +524,248 @@ async def sync_portal_state(
                 )
             )
 
+    # 3. Student Career & Academic Profile
+    if payload.studentProfile:
+        p = payload.studentProfile
+        await db.merge(
+            StudentProfileRecord(
+                student_roll=normalized_roll,
+                full_name=p.fullName,
+                iitm_email=p.iitmEmail,
+                personal_email=p.personalEmail,
+                mobile_number=p.mobileNumber,
+                cgpa=p.cgpa,
+                active_backlogs=p.activeBacklogs,
+                program_level=p.programLevel,
+                degree_type=p.degreeType,
+                applying_track=p.applyingTrack,
+                target_domain=p.targetDomain,
+                headline=p.headline,
+                github_url=p.githubUrl,
+                linkedin_url=p.linkedinUrl,
+                kaggle_url=p.kaggleUrl,
+                portfolio_url=p.portfolioUrl,
+                skills=p.skills,
+                projects=p.projects,
+                experiences=p.experiences,
+                is_suspended=p.isSuspended,
+                no_show_count=p.noShowCount,
+            )
+        )
+
+    # 4. Helpdesk Tickets
+    if payload.helpdeskTickets:
+        for t in payload.helpdeskTickets:
+            await db.merge(
+                HelpdeskTicketRecord(
+                    id=t.id,
+                    ticket_number=t.ticketNumber,
+                    raised_by_email=t.raisedByEmail,
+                    raised_by_name=t.raisedByName,
+                    raised_by_role=t.raisedByRole,
+                    category=t.category,
+                    priority=t.priority,
+                    subject=t.subject,
+                    description=t.description,
+                    status=t.status,
+                    assigned_to=t.assignedTo,
+                    escalation_count=t.escalationCount,
+                    comments=t.comments,
+                )
+            )
+
     if payload.snapshot:
         snap_copy = dict(payload.snapshot)
         roll_resumes = snap_copy.pop("resumes", None)
         roll_marksheet = snap_copy.pop("marksheet", None)
+        slots_list = snap_copy.pop("oneOnOneSlots", None)
+        evals_list = snap_copy.pop("evaluations", None)
+        apps_list = snap_copy.pop("applications", None)
+        interviews_list = snap_copy.pop("interviews", None)
+        offers_list = snap_copy.pop("offers", None)
 
-        # 1. Persist per-roll Resumes & IITM BS Scorecard under STUDENT_DOCS::<ROLL>
+        # 5. Normalized Resumes per roll (BRULE-55: max 3 active resume versions)
+        if isinstance(roll_resumes, list):
+            if len(roll_resumes) > 3:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Students may maintain up to three active resume versions (BRULE-55).",
+                )
+            await db.execute(
+                delete(StudentResumeRecord).where(StudentResumeRecord.student_roll == normalized_roll)
+            )
+            for r in roll_resumes:
+                db.add(
+                    StudentResumeRecord(
+                        id=str(r.get("id")),
+                        student_roll=normalized_roll,
+                        title=str(r.get("title", "Resume")),
+                        target_role=str(r.get("targetRole", "General")),
+                        drive_url=str(r.get("driveUrl", "")),
+                        file_size=str(r.get("fileSize", "0 KB")),
+                        updated_at_label=str(r.get("updatedAt", "")),
+                        is_primary=bool(r.get("isPrimary", False)),
+                    )
+                )
+
+        # 6. Normalized 1-on-1 Evaluation Slots (BRULE-21: prevent evaluator slot double-booking)
+        if isinstance(slots_list, list):
+            seen_active_slots: dict[tuple[str, str, str], str] = {}
+            for s in slots_list:
+                status_val = str(s.get("status", "SCHEDULED")).upper()
+                if status_val == "SCHEDULED":
+                    key = (
+                        str(s.get("instructor", "")).strip().lower(),
+                        str(s.get("date", "")).strip(),
+                        str(s.get("slotTime", "")).strip(),
+                    )
+                    student_email = str(s.get("studentEmail", "")).strip().lower()
+                    if key[0] and key[1] and key[2]:
+                        prev_student = seen_active_slots.get(key)
+                        if prev_student and prev_student != student_email:
+                            raise HTTPException(
+                                status_code=409,
+                                detail=f"Evaluator slot collision for {s.get('instructor')} on {s.get('date')} ({s.get('slotTime')}) (BRULE-21).",
+                            )
+                        seen_active_slots[key] = student_email
+            for s in slots_list:
+                await db.merge(
+                    OneOnOneSlotRecordModel(
+                        id=str(s.get("id")),
+                        student_email=str(s.get("studentEmail", "")),
+                        student_name=str(s.get("studentName", "")),
+                        date=str(s.get("date", "")),
+                        slot_time=str(s.get("slotTime", "")),
+                        instructor=str(s.get("instructor", "")),
+                        status=str(s.get("status", "SCHEDULED")),
+                        instructor_feedback=s.get("instructorFeedback"),
+                        is_placement_ready=s.get("isPlacementReady"),
+                        programming_rating=s.get("programmingRating"),
+                        data_science_rating=s.get("dataScienceRating"),
+                        communication_rating=s.get("communicationRating"),
+                        remedial_tasks=s.get("remedialTasks") or [],
+                        completed_at=s.get("completedAt"),
+                    )
+                )
+
+        # 7. Normalized Examiner Evaluations
+        if isinstance(evals_list, list):
+            for e in evals_list:
+                await db.merge(
+                    PortalExaminerEvaluationRecord(
+                        id=str(e.get("id")),
+                        student_roll=str(e.get("studentRoll", "")).upper(),
+                        examiner_email=str(e.get("examinerEmail", "")),
+                        skillsets=e.get("skillsets") or [],
+                        programming_rating=int(e.get("programmingRating", 0)),
+                        data_science_rating=int(e.get("dataScienceRating", 0)),
+                        communication_rating=int(e.get("communicationRating", 0)),
+                        is_placement_ready=bool(e.get("isPlacementReady", False)),
+                        performing_exceptionally_good=bool(e.get("performingExceptionallyGood", False)),
+                        remedial_tasks=e.get("remedialTasks") or [],
+                        notes=str(e.get("notes", "")),
+                        evaluated_at=str(e.get("evaluatedAt", "")),
+                    )
+                )
+
+        # 8. Normalized ATS Job Applications (BRULE-49: placed full-time students locked from new applications)
+        if isinstance(apps_list, list):
+            accepted_ft_rolls: set[str] = set()
+            accepted_offer_app_ids: set[str] = set()
+            if isinstance(offers_list, list):
+                for o in offers_list:
+                    if (
+                        str(o.get("status", "")).upper() in {"ACCEPTED", "OFFER_ACCEPTED"}
+                        and str(o.get("roleType", "FULL_TIME")).upper() == "FULL_TIME"
+                    ):
+                        accepted_ft_rolls.add(str(o.get("studentRoll", "")).strip().upper())
+                        accepted_offer_app_ids.add(str(o.get("applicationId", "")).strip())
+            existing_accepted_offers = (
+                await db.execute(
+                    select(PortalOfferLetterRecord).where(
+                        PortalOfferLetterRecord.status.in_(["ACCEPTED", "OFFER_ACCEPTED"]),
+                        PortalOfferLetterRecord.role_type == "FULL_TIME",
+                    )
+                )
+            ).scalars().all()
+            for eo in existing_accepted_offers:
+                accepted_ft_rolls.add(eo.student_roll.strip().upper())
+                accepted_offer_app_ids.add(eo.application_id.strip())
+
+            for a in apps_list:
+                s_roll = str(a.get("studentRoll", "")).strip().upper()
+                a_id = str(a.get("id", "")).strip()
+                a_status = str(a.get("status", "APPLIED")).upper()
+                if (
+                    s_roll in accepted_ft_rolls
+                    and a_status == "APPLIED"
+                    and a_id not in accepted_offer_app_ids
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Student {s_roll} already holds an accepted full-time offer and cannot submit new applications (BRULE-49).",
+                    )
+            for a in apps_list:
+                await db.merge(
+                    PortalJobApplicationRecord(
+                        id=str(a.get("id")),
+                        job_id=str(a.get("jobId", "")),
+                        job_code=str(a.get("jobCode", "")),
+                        company_name=str(a.get("companyName", "")),
+                        job_title=str(a.get("jobTitle", "")),
+                        role_type=str(a.get("roleType", "FULL_TIME")),
+                        student_roll=str(a.get("studentRoll", "")).upper(),
+                        student_name=str(a.get("studentName", "")),
+                        student_cgpa=str(a.get("studentCgpa", "0.0")),
+                        resume_title=str(a.get("resumeTitle", "")),
+                        status=str(a.get("status", "APPLIED")),
+                        applied_at=str(a.get("appliedAt", "")),
+                    )
+                )
+
+        # 9. Normalized Interviews & Offers
+        if isinstance(interviews_list, list):
+            for i in interviews_list:
+                await db.merge(
+                    PortalInterviewRecord(
+                        id=str(i.get("id")),
+                        application_id=str(i.get("applicationId", "")),
+                        student_roll=str(i.get("studentRoll", "")).upper(),
+                        student_name=str(i.get("studentName", "")),
+                        company_name=str(i.get("companyName", "")),
+                        job_title=str(i.get("jobTitle", "")),
+                        round_number=int(i.get("roundNumber", 1)),
+                        round_type=str(i.get("roundType", "TECHNICAL_1")),
+                        mode=str(i.get("mode", "ONLINE_MEET")),
+                        scheduled_at=str(i.get("scheduledAt", "")),
+                        meeting_link=str(i.get("meetingLink", "")),
+                        panelist_name=str(i.get("panelistName", "")),
+                        status=str(i.get("status", "SCHEDULED")),
+                        notes=i.get("notes"),
+                    )
+                )
+
+        if isinstance(offers_list, list):
+            for o in offers_list:
+                await db.merge(
+                    PortalOfferLetterRecord(
+                        id=str(o.get("id")),
+                        offer_code=str(o.get("offerCode", o.get("id"))),
+                        application_id=str(o.get("applicationId", "")),
+                        student_roll=str(o.get("studentRoll", "")).upper(),
+                        student_name=str(o.get("studentName", "")),
+                        company_name=str(o.get("companyName", "")),
+                        role_title=str(o.get("roleTitle", "")),
+                        role_type=str(o.get("roleType", "FULL_TIME")),
+                        ctc_lpa=float(o.get("ctcLpa", 0.0)),
+                        joining_date=str(o.get("joiningDate", "")),
+                        expires_at=str(o.get("expiresAt", "")),
+                        status=str(o.get("status", "ISSUED")),
+                        remarks=o.get("remarks"),
+                    )
+                )
+
+        # 10. Per-roll scorecard metadata & global supplementary config
         roll_docs_key = f"STUDENT_DOCS::{normalized_roll}"
         roll_docs_row = (
             await db.execute(
@@ -269,7 +781,6 @@ async def sync_portal_state(
         else:
             roll_docs_row.payload = roll_docs_payload
 
-        # 2. Persist shared marketplace collections under GLOBAL_PORTAL_STATE
         snap_row = (
             await db.execute(
                 select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
@@ -282,3 +793,59 @@ async def sync_portal_state(
 
     await db.flush()
     return {"status": "persisted", "student_roll": normalized_roll}
+
+
+@router.get("/helpdesk", response_model=list[HelpdeskTicketDTO])
+async def list_helpdesk_tickets(
+    student_email: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+) -> list[HelpdeskTicketDTO]:
+    stmt = select(HelpdeskTicketRecord).order_by(HelpdeskTicketRecord.created_at.desc())
+    if student_email:
+        stmt = stmt.where(HelpdeskTicketRecord.raised_by_email.ilike(student_email.strip()))
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        HelpdeskTicketDTO(
+            id=t.id,
+            ticketNumber=t.ticket_number,
+            raisedByEmail=t.raised_by_email,
+            raisedByName=t.raised_by_name,
+            raisedByRole=t.raised_by_role,
+            category=t.category,
+            priority=t.priority,
+            subject=t.subject,
+            description=t.description,
+            status=t.status,
+            assignedTo=t.assigned_to,
+            escalationCount=t.escalation_count,
+            comments=t.comments or [],
+            createdAt=t.created_at.isoformat() if t.created_at else None,
+        )
+        for t in rows
+    ]
+
+
+@router.post("/helpdesk", response_model=HelpdeskTicketDTO, status_code=status.HTTP_201_CREATED)
+async def create_helpdesk_ticket(
+    ticket: HelpdeskTicketDTO,
+    db: AsyncSession = Depends(get_db),
+) -> HelpdeskTicketDTO:
+    rec = HelpdeskTicketRecord(
+        id=ticket.id,
+        ticket_number=ticket.ticketNumber,
+        raised_by_email=ticket.raisedByEmail,
+        raised_by_name=ticket.raisedByName,
+        raised_by_role=ticket.raisedByRole,
+        category=ticket.category,
+        priority=ticket.priority,
+        subject=ticket.subject,
+        description=ticket.description,
+        status=ticket.status or "OPEN",
+        assigned_to=ticket.assignedTo,
+        escalation_count=ticket.escalationCount,
+        comments=ticket.comments,
+    )
+    db.add(rec)
+    await db.flush()
+    ticket.createdAt = datetime.now(timezone.utc).isoformat()
+    return ticket
