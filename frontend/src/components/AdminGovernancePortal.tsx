@@ -1,15 +1,10 @@
 import {
   Activity,
   Briefcase,
-  CheckCircle,
-  ExternalLink,
   Plus,
-  Search,
   ShieldCheck,
   Upload,
   UserCheck,
-  UserPlus,
-  Users,
 } from "lucide-react";
 import type {
   AuditEntry,
