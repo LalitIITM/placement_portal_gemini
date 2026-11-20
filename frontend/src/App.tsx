@@ -2847,8 +2847,7 @@ export default function App() {
       "Question,Option A,Option B,Option C,Option D,Correct Answer,Domain,Track",
       '"Which SQL window function assigns consecutive ranks without gaps for ties?","RANK()","DENSE_RANK()","ROW_NUMBER()","NTILE(4)","B","DATA_SCIENCE","INTERNSHIP"',
       '"What is the worst-case time complexity of quicksort?","O(n log n)","O(n)","O(n^2)","O(log n)","C","SOFTWARE_DEVELOPMENT","FULL_TIME"',
-    ].join("
-");
+    ].join("\n");
     const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -8683,7 +8682,7 @@ export default function App() {
             )}
 
             {user.role !== "EXAMINER" && (
-                        {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
+            {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
               const bankBuckets: {
                 code: string;
                 title: string;
@@ -8968,7 +8967,7 @@ export default function App() {
               );
             })()}
 
-<div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
