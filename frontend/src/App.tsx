@@ -1044,7 +1044,16 @@ export default function App() {
       localStorage.setItem("iitm_os_jobs_v1", JSON.stringify(jobs));
     } catch {}
   }, [oneOnOneSlots, jobs]);
-  const [applications, setApplications] = useState<JobApplicationRecord[]>([]);
+  const [applications, setApplications] = useState<JobApplicationRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_applications_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [selectedResumeIdForApply, setSelectedResumeIdForApply] = useState<string>("res-1");
   const [jobAlert, setJobAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
@@ -2320,8 +2329,34 @@ export default function App() {
 
 
   // Increment 4: Interviews, Offers & Placement Analytics State
-  const [interviews, setInterviews] = useState<InterviewScheduleRecord[]>(INITIAL_INTERVIEWS);
-  const [offers, setOffers] = useState<OfferLetterRecord[]>(INITIAL_OFFERS);
+  const [interviews, setInterviews] = useState<InterviewScheduleRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_interviews_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_INTERVIEWS;
+  });
+  const [offers, setOffers] = useState<OfferLetterRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_offers_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_OFFERS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("iitm_os_applications_v1", JSON.stringify(applications));
+      localStorage.setItem("iitm_os_interviews_v1", JSON.stringify(interviews));
+      localStorage.setItem("iitm_os_offers_v1", JSON.stringify(offers));
+    } catch {}
+  }, [applications, interviews, offers]);
   const [placementAlert, setPlacementAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
 
   const [ivAppId, setIvAppId] = useState<string>("");
@@ -6190,19 +6225,267 @@ export default function App() {
               );
             })()}
 
-            {/* Applications & Recruiter ATS Pipeline */}
+            {/* Student "My Applications" Live Tracker OR Recruiter/Admin ATS Pipeline */}
+            {user.role === "STUDENT" ? (() => {
+              const myApps = applications.filter(
+                (a) =>
+                  a.studentRoll.toLowerCase() === user.name.toLowerCase() ||
+                  a.studentName.toLowerCase() === fullName.toLowerCase()
+              );
+              const shortlistedCount = myApps.filter((a) => a.status === "SHORTLISTED").length;
+              const interviewCount = myApps.filter(
+                (a) =>
+                  a.status === "INTERVIEW_SCHEDULED" ||
+                  interviews.some((iv) => iv.applicationId === a.id)
+              ).length;
+              const offeredCount = myApps.filter(
+                (a) => a.status === "OFFERED" || offers.some((o) => o.applicationId === a.id)
+              ).length;
+
+              const stageRank = (status: AppStatusOption, hasInterview: boolean, hasOffer: boolean) => {
+                if (hasOffer || status === "OFFERED") return 4;
+                if (hasInterview || status === "INTERVIEW_SCHEDULED") return 3;
+                if (status === "SHORTLISTED") return 2;
+                if (status === "APPLIED") return 1;
+                return 0;
+              };
+
+              return (
+                <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-semibold text-white flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                        My Applications &amp; Live Recruitment Tracker ({myApps.length})
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Track every submitted Internship &amp; FTE application, the exact resume used, and real-time recruiter shortlisting, interview rounds, and offer updates.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-semibold">
+                        Applied: {myApps.length}
+                      </span>
+                      <span className="px-3 py-1 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-semibold">
+                        Shortlisted: {shortlistedCount}
+                      </span>
+                      <span className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold">
+                        Interviews: {interviewCount}
+                      </span>
+                      <span className="px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-semibold">
+                        Offers: {offeredCount}
+                      </span>
+                    </div>
+                  </div>
+
+                  {myApps.length === 0 ? (
+                    <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                      You have not applied to any Internship or Full-Time (FTE) opportunities yet. Select your preferred resume at the top and click <strong className="text-slate-200">1-Click Apply</strong> on any eligible opportunity above.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {myApps.map((app) => {
+                        const matchedJob = jobs.find((j) => j.id === app.jobId);
+                        const appInterviews = interviews.filter((iv) => iv.applicationId === app.id);
+                        const appOffer = offers.find((o) => o.applicationId === app.id);
+                        const currentRank = stageRank(
+                          app.status,
+                          appInterviews.length > 0,
+                          Boolean(appOffer)
+                        );
+                        const isRejected = app.status === "REJECTED";
+                        const isWithdrawn = app.status === "WITHDRAWN";
+
+                        const steps = [
+                          { num: 1, label: "Applied" },
+                          { num: 2, label: "Shortlisted" },
+                          { num: 3, label: "Interview" },
+                          { num: 4, label: "Offer" },
+                        ];
+
+                        return (
+                          <div
+                            key={app.id}
+                            className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-indigo-500/40 transition space-y-3.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[11px] font-mono text-indigo-400">
+                                    {app.id} • {app.jobCode}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                                      app.roleType === "INTERNSHIP"
+                                        ? "bg-cyan-500/20 text-cyan-300"
+                                        : "bg-emerald-500/20 text-emerald-300"
+                                    }`}
+                                  >
+                                    {app.roleType === "INTERNSHIP" ? "INTERNSHIP" : "FULL-TIME (FTE)"}
+                                  </span>
+                                </div>
+                                <h3 className="text-sm font-bold text-white mt-1">
+                                  {app.companyName} — {app.jobTitle}
+                                </h3>
+                              </div>
+
+                              <span
+                                className={`text-[11px] px-2.5 py-1 rounded-full font-semibold shrink-0 ${
+                                  app.status === "OFFERED" || appOffer
+                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    : app.status === "INTERVIEW_SCHEDULED" || appInterviews.length > 0
+                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                    : app.status === "SHORTLISTED"
+                                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                    : isRejected
+                                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                    : isWithdrawn
+                                    ? "bg-slate-800 text-slate-400 border border-slate-700"
+                                    : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                                }`}
+                              >
+                                {appOffer ? "OFFER EXTENDED" : app.status.replace("_", " ")}
+                              </span>
+                            </div>
+
+                            {/* Resume Used & Submission Metadata */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/90 text-[11px]">
+                              <div className="flex items-center gap-1.5 text-slate-300">
+                                <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                <span>Resume Used:</span>
+                                <strong className="text-indigo-200">{app.resumeTitle}</strong>
+                              </div>
+                              <span className="text-slate-400">Submitted: {app.appliedAt}</span>
+                            </div>
+
+                            {/* 4-Stage Visual Pipeline Stepper */}
+                            {isRejected || isWithdrawn ? (
+                              <div
+                                className={`p-2.5 rounded-xl border text-xs font-medium ${
+                                  isRejected
+                                    ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                                    : "bg-slate-900 border-slate-700 text-slate-400"
+                                }`}
+                              >
+                                {isRejected
+                                  ? "Application closed by recruiter after evaluation."
+                                  : "Application withdrawn by candidate."}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                                {steps.map((st) => {
+                                  const reached = currentRank >= st.num;
+                                  return (
+                                    <div
+                                      key={st.num}
+                                      className={`p-2 rounded-lg border text-center transition ${
+                                        reached
+                                          ? "bg-indigo-500/15 border-indigo-500/40 text-indigo-200"
+                                          : "bg-slate-900/60 border-slate-800 text-slate-500"
+                                      }`}
+                                    >
+                                      <span className="block text-[10px] font-bold">
+                                        {reached ? "✓" : `0${st.num}`}
+                                      </span>
+                                      <span className="text-[11px] font-semibold">{st.label}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Live Scheduled Interview Round Details (Synced from Recruiter/Admin Scheduler) */}
+                            {appInterviews.length > 0 && (
+                              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 text-xs">
+                                <div className="font-semibold text-amber-300 flex items-center justify-between">
+                                  <span>Scheduled Interview Round ({appInterviews.length})</span>
+                                  <span className="text-[10px] uppercase">{appInterviews[0].status}</span>
+                                </div>
+                                {appInterviews.map((iv) => (
+                                  <div
+                                    key={iv.id}
+                                    className="text-[11px] text-slate-200 flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-amber-500/20"
+                                  >
+                                    <span>
+                                      <strong>Round {iv.roundNumber}</strong> ({iv.roundType.replace("_", " ")}) •{" "}
+                                      {iv.scheduledAt} • Panel: {iv.panelistName}
+                                    </span>
+                                    {iv.meetingLink && (
+                                      <a
+                                        href={iv.meetingLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 font-semibold hover:bg-amber-500/30"
+                                      >
+                                        Join Link ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Live Offer Letter Callout */}
+                            {appOffer && (
+                              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <span className="font-bold text-emerald-300 block">
+                                    Offer Issued ({appOffer.offerCode}) — ₹{appOffer.ctcLpa} LPA
+                                  </span>
+                                  <span className="text-[11px] text-slate-300">
+                                    Joining: {appOffer.joiningDate} • Expires: {appOffer.expiresAt}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab("PLACEMENT")}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold"
+                                >
+                                  Review Offer →
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Card Footer Actions */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+                              {matchedJob ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveJdModalJob(matchedJob)}
+                                  className="text-indigo-300 hover:text-indigo-200 font-semibold"
+                                >
+                                  View Job Description (JD)
+                                </button>
+                              ) : (
+                                <span className="text-slate-500">Drive ID: {app.jobId}</span>
+                              )}
+                              {app.status === "APPLIED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateApplicationStatus(app.id, "WITHDRAWN")}
+                                  className="text-rose-300 hover:text-rose-200 font-semibold"
+                                >
+                                  Withdraw Application
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })() : (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-semibold text-white">
-                    {user.role === "STUDENT"
-                      ? `My Application Status Tracker (${applications.length})`
-                      : `Applications & Recruiter ATS Pipeline (${applications.length})`}
+                    Applications &amp; Recruiter ATS Pipeline ({applications.length})
                   </h2>
                   <p className="text-xs text-slate-400">
-                    {user.role === "STUDENT"
-                      ? "Track live recruiter decisions, interview shortlists, and offer statuses for your submitted applications."
-                      : "Shortlist candidates, schedule interviews, extend offers, or trigger BRULE-21 placement lock."}
+                    Shortlist candidates, schedule interviews, extend offers, or trigger BRULE-21 placement lock.
                   </p>
                 </div>
               </div>
@@ -6271,6 +6554,7 @@ export default function App() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
