@@ -2386,7 +2386,28 @@ export default function App() {
   useEffect(() => {
     setJobAlert(null);
     setRecruiterWorkspaceView("MY_DRIVES");
-  }, [user?.email, user?.role]);
+    if (user?.role === "RECRUITER") {
+      const matchedReg = registrations.find(
+        (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+      );
+      const derivedCompany = (
+        matchedReg?.recruiterProfileDetails?.companyName ||
+        matchedReg?.orgOrDept?.split("•")[0]?.split("(")[0] ||
+        ""
+      ).trim();
+      if (derivedCompany) {
+        setNewCompany(derivedCompany);
+        setRecruiterProfile((prev) => ({
+          ...prev,
+          companyName: derivedCompany,
+          contactName: matchedReg?.fullName || user.name || prev.contactName,
+          about:
+            matchedReg?.recruiterProfileDetails?.about ||
+            `${derivedCompany} campus & lateral talent partner hiring IITM BS Data Science & Electronic Systems graduates.`,
+        }));
+      }
+    }
+  }, [user?.email, user?.role, registrations]);
 
   useEffect(() => {
     try {
@@ -5170,7 +5191,28 @@ export default function App() {
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
-                Job Drives &amp; Candidate Shortlisting ({jobs.length} Drives • {applications.length} Applicants)
+                {(() => {
+                  if (user.role !== "RECRUITER") {
+                    return `Job Drives & Candidate Shortlisting (${jobs.length} Drives • ${applications.length} ${applications.length === 1 ? "Applicant" : "Applicants"})`;
+                  }
+                  const matchedReg = registrations.find(
+                    (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                  );
+                  const myCo = (
+                    matchedReg?.recruiterProfileDetails?.companyName ||
+                    matchedReg?.orgOrDept?.split("•")[0]?.split("(")[0] ||
+                    newCompany ||
+                    ""
+                  ).trim().toLowerCase();
+                  const myJobs = jobs.filter(
+                    (j) =>
+                      j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
+                      (myCo && j.companyName.toLowerCase().includes(myCo))
+                  );
+                  const myJobIds = new Set(myJobs.map((j) => j.id));
+                  const myAppsCount = applications.filter((a) => myJobIds.has(a.jobId)).length;
+                  return `Job Drives & Candidate Shortlisting (${myJobs.length} ${myJobs.length === 1 ? "Drive" : "Drives"} • ${myAppsCount} ${myAppsCount === 1 ? "Applicant" : "Applicants"})`;
+                })()}
               </button>
 
               <button
@@ -5182,7 +5224,23 @@ export default function App() {
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                Interviews &amp; Offer Rollout ({interviews.length + offers.length})
+                {(() => {
+                  if (user.role !== "RECRUITER") {
+                    return `Interviews & Offer Rollout (${interviews.length + offers.length})`;
+                  }
+                  const matchedReg = registrations.find(
+                    (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                  );
+                  const myCo = (
+                    matchedReg?.recruiterProfileDetails?.companyName ||
+                    matchedReg?.orgOrDept?.split("•")[0]?.split("(")[0] ||
+                    newCompany ||
+                    ""
+                  ).trim().toLowerCase();
+                  const myIvCount = interviews.filter((iv) => myCo && iv.companyName.toLowerCase().includes(myCo)).length;
+                  const myOfferCount = offers.filter((o) => myCo && o.companyName.toLowerCase().includes(myCo)).length;
+                  return `Interviews & Offer Rollout (${myIvCount + myOfferCount})`;
+                })()}
               </button>
             </>
           ) : (
@@ -9177,8 +9235,42 @@ export default function App() {
         )}
 
         {activeTab === "PLACEMENT" && (user.role as Role) !== "STUDENT" && (() => {
-          const acceptedOffers = offers.filter((o) => o.status === "ACCEPTED");
-          const ftOffers = offers.filter((o) => o.roleType === "FULL_TIME");
+          const matchedRecReg =
+            user.role === "RECRUITER"
+              ? registrations.find(
+                  (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                )
+              : undefined;
+          const myRecCompany = (
+            matchedRecReg?.recruiterProfileDetails?.companyName ||
+            matchedRecReg?.orgOrDept?.split("•")[0]?.split("(")[0] ||
+            newCompany ||
+            ""
+          ).trim();
+          const myRecCompanyLower = myRecCompany.toLowerCase();
+          const scopedJobsForPlacement =
+            user.role === "RECRUITER"
+              ? jobs.filter(
+                  (j) =>
+                    j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
+                    (myRecCompanyLower && j.companyName.toLowerCase().includes(myRecCompanyLower))
+                )
+              : jobs;
+          const scopedJobIdsForPlacement = new Set(scopedJobsForPlacement.map((j) => j.id));
+          const scopedAppsForPlacement =
+            user.role === "RECRUITER"
+              ? applications.filter((a) => scopedJobIdsForPlacement.has(a.jobId))
+              : applications;
+          const scopedOffersForPlacement =
+            user.role === "RECRUITER"
+              ? offers.filter((o) => myRecCompanyLower && o.companyName.toLowerCase().includes(myRecCompanyLower))
+              : offers;
+          const scopedInterviewsForPlacement =
+            user.role === "RECRUITER"
+              ? interviews.filter((iv) => myRecCompanyLower && iv.companyName.toLowerCase().includes(myRecCompanyLower))
+              : interviews;
+          const acceptedOffers = scopedOffersForPlacement.filter((o) => o.status === "ACCEPTED");
+          const ftOffers = scopedOffersForPlacement.filter((o) => o.roleType === "FULL_TIME");
           const avgCtc = ftOffers.length
             ? (ftOffers.reduce((acc, o) => acc + o.ctcLpa, 0) / ftOffers.length).toFixed(2)
             : "16.50";
@@ -9233,19 +9325,19 @@ export default function App() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
                     <div className="text-[11px] text-slate-400">Active Drives</div>
-                    <div className="text-xl font-bold text-white mt-1">{jobs.length}</div>
+                    <div className="text-xl font-bold text-white mt-1">{scopedJobsForPlacement.length}</div>
                   </div>
                   <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
                     <div className="text-[11px] text-slate-400">Applications</div>
-                    <div className="text-xl font-bold text-sky-300 mt-1">{applications.length}</div>
+                    <div className="text-xl font-bold text-sky-300 mt-1">{scopedAppsForPlacement.length}</div>
                   </div>
                   <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
                     <div className="text-[11px] text-slate-400">Interviews</div>
-                    <div className="text-xl font-bold text-amber-300 mt-1">{interviews.length}</div>
+                    <div className="text-xl font-bold text-amber-300 mt-1">{scopedInterviewsForPlacement.length}</div>
                   </div>
                   <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
                     <div className="text-[11px] text-slate-400">Offers Issued</div>
-                    <div className="text-xl font-bold text-purple-300 mt-1">{offers.length}</div>
+                    <div className="text-xl font-bold text-purple-300 mt-1">{scopedOffersForPlacement.length}</div>
                   </div>
                   <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
                     <div className="text-[11px] text-slate-400">Offers Accepted</div>
@@ -9266,7 +9358,7 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <BadgeCheck className="w-4 h-4 text-emerald-400" />
-                      Official Offer Letters ({offers.length})
+                      Official Offer Letters ({scopedOffersForPlacement.length})
                     </h3>
                     <span className="text-[11px] text-slate-400">BRULE-35 Single FT Lock Active</span>
                   </div>
@@ -9401,13 +9493,13 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-sky-400" />
-                      Scheduled Interview Panels ({interviews.length})
+                      Scheduled Interview Panels ({scopedInterviewsForPlacement.length})
                     </h3>
                     <span className="text-[11px] text-slate-400">BRULE-31 45-Min Conflict Guard</span>
                   </div>
 
                   <div className="space-y-3">
-                    {interviews.map((iv) => (
+                    {scopedInterviewsForPlacement.map((iv) => (
                       <div
                         key={iv.id}
                         className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
