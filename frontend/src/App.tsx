@@ -3571,7 +3571,19 @@ export default function App() {
     setEvaluations((prev) =>
       prev.length
         ? [{ ...prev[0], isPlacementReady: true, status: "APPROVED" }, ...prev.slice(1)]
-        : prev
+        : [
+            {
+              id: `EVAL-${Date.now()}`,
+              examinerEmail: "examiner@iitm.ac.in",
+              technicalScore: 85,
+              communicationScore: 85,
+              projectDepthScore: 85,
+              isPlacementReady: true,
+              status: "APPROVED",
+              remarks: "Cleared 1-on-1 Examiner Readiness Viva.",
+              evaluatedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }),
+            },
+          ]
     );
     appendAudit(
       "examiner@iitm.ac.in",
@@ -3601,8 +3613,8 @@ export default function App() {
     if (!job.allowedLevels.includes(programLevel)) {
       reasons.push(`BRULE-24: Requires level ${job.allowedLevels.join("/")} (yours: ${programLevel}).`);
     }
-    if (job.requireExaminerReady && !examinerReady) {
-      reasons.push("BRULE-25: Requires 'Placement Ready' sign-off in Final Stage Examiner Interview.");
+    if (!examinerReady) {
+      reasons.push("BRULE-25: Requires 'Placement Ready' declaration by the Examiner after your 1-on-1 interview.");
     }
     const missingBadges = job.requiredSkillTags.filter((tag) => !earnedSkillNames.has(tag));
     if (missingBadges.length > 0) {
@@ -6439,15 +6451,18 @@ export default function App() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleApplyToDrive(job)}
+                            disabled={!elig.eligible}
+                            onClick={() => elig.eligible && handleApplyToDrive(job)}
                             className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition ${
                               elig.eligible
-                                ? "bg-indigo-600 hover:bg-indigo-500 text-white"
-                                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                                ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
+                                : "bg-slate-800/70 border border-slate-700 text-slate-500 cursor-not-allowed"
                             }`}
                           >
                             <Send className="w-3.5 h-3.5" />
-                            {elig.eligible ? "1-Click Apply with Selected Resume" : "Attempt Apply (Test Rule Guard)"}
+                            {elig.eligible
+                              ? "1-Click Apply with Selected Resume"
+                              : "Locked — Requires Examiner 1-on-1 'Placement Ready' Sign-Off"}
                           </button>
                         )}
                       </div>
