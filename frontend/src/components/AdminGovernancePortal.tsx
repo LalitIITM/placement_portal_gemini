@@ -1,6 +1,39 @@
 import * as XLSX from "xlsx";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
+  ShieldCheck,
+  FileText,
+  Trash2,
+  Plus,
+  Lock,
+  UserCheck,
+  AlertTriangle,
+  CheckCircle2,
+  LogOut,
+  Activity,
+  Award,
+  Upload,
+  BookOpen,
+  PlayCircle,
+  CheckSquare,
+  Square,
+  Sparkles,
+  Clock,
+  EyeOff,
+  GraduationCap,
+  ClipboardCheck,
+  Briefcase,
+  Star,
+  Database,
+  Shuffle,
+  Building2,
+  Send,
+  XCircle,
+  Calendar,
+  BadgeCheck,
+  BarChart3,
+  Video,
+} from "lucide-react";
 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,6 +46,9 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     handleRegistrationDecision,
     auditLogs,
     jobs,
+    evaluations,
+    adminDirectoryRoleFilter,
+    setAdminDirectoryRoleFilter,
     adminNewFullName,
     setAdminNewFullName,
     adminNewEmail,
@@ -48,8 +84,6 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     setActiveTab,
   } = ctx;
 
-  return (
-    <>
           const studentRegs = registrations.filter((r) => r.role === "STUDENT");
           const recruiterRegs = registrations.filter((r) => r.role === "RECRUITER");
           const examinerRegs = registrations.filter((r) => r.role === "EXAMINER");
@@ -60,7 +94,9 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
           const filteredDirectory = registrations.filter((r) => {
             if (adminDirectoryRoleFilter !== "ALL" && r.role !== adminDirectoryRoleFilter) return false;
             if (!qDir) return true;
-            return (
+  
+  return (
+
               r.fullName.toLowerCase().includes(qDir) ||
               r.email.toLowerCase().includes(qDir) ||
               r.id.toLowerCase().includes(qDir) ||
@@ -763,7 +799,6 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                 </div>
               </div>
             </div>
-          );
-    </>
+
   );
 }
