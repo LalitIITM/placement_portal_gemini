@@ -11067,10 +11067,8 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-white">{previewSubmission.title}</h3>
-                  <p className="text-xs text-slate-400">
-                    {previewSubmission.studentName} ({previewSubmission.studentRoll}) • {previewSubmission.category}
-                  </p>
+                  <h3 className="text-base font-bold text-white">Activity Submission Evidence ({previewSubmission.id})</h3>
+                  <p className="text-xs text-slate-400">{previewSubmission.studentName}</p>
                 </div>
                 <button
                   type="button"
@@ -11081,16 +11079,35 @@ export default function App() {
                 </button>
               </div>
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
-                <p>{previewSubmission.description}</p>
-                {previewSubmission.evidenceUrl && (
-                  <a
-                    href={previewSubmission.evidenceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-indigo-400 hover:underline break-all font-mono block"
-                  >
-                    {previewSubmission.evidenceUrl}
-                  </a>
+                {previewSubmission.studentName !== undefined && previewSubmission.studentName !== "" && (
+                  <div><span className="text-slate-400">studentName: </span><span className="text-slate-200">{String(previewSubmission.studentName)}</span></div>
+                )}
+                {previewSubmission.studentEmail !== undefined && previewSubmission.studentEmail !== "" && (
+                  <div><span className="text-slate-400">studentEmail: </span><span className="text-slate-200">{String(previewSubmission.studentEmail)}</span></div>
+                )}
+                {previewSubmission.activityId !== undefined && previewSubmission.activityId !== "" && (
+                  <div><span className="text-slate-400">activityId: </span><span className="text-slate-200">{String(previewSubmission.activityId)}</span></div>
+                )}
+                {previewSubmission.evidenceFileName !== undefined && previewSubmission.evidenceFileName !== "" && (
+                  <div><span className="text-slate-400">evidenceFileName: </span><span className="text-slate-200">{String(previewSubmission.evidenceFileName)}</span></div>
+                )}
+                {previewSubmission.evidenceFileType !== undefined && previewSubmission.evidenceFileType !== "" && (
+                  <div><span className="text-slate-400">evidenceFileType: </span><span className="text-slate-200">{String(previewSubmission.evidenceFileType)}</span></div>
+                )}
+                {previewSubmission.evidenceFileSize !== undefined && previewSubmission.evidenceFileSize !== "" && (
+                  <div><span className="text-slate-400">evidenceFileSize: </span><span className="text-slate-200">{String(previewSubmission.evidenceFileSize)}</span></div>
+                )}
+                {previewSubmission.proofUrl && (
+                  <div><span className="text-slate-400">proofUrl: </span><a href={String(previewSubmission.proofUrl)} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline break-all font-mono">{String(previewSubmission.proofUrl)}</a></div>
+                )}
+                {previewSubmission.completedDate !== undefined && previewSubmission.completedDate !== "" && (
+                  <div><span className="text-slate-400">completedDate: </span><span className="text-slate-200">{String(previewSubmission.completedDate)}</span></div>
+                )}
+                {previewSubmission.reviewStatus !== undefined && previewSubmission.reviewStatus !== "" && (
+                  <div><span className="text-slate-400">reviewStatus: </span><span className="text-slate-200">{String(previewSubmission.reviewStatus)}</span></div>
+                )}
+                {previewSubmission.reviewerNote !== undefined && previewSubmission.reviewerNote !== "" && (
+                  <div><span className="text-slate-400">reviewerNote: </span><span className="text-slate-200">{String(previewSubmission.reviewerNote)}</span></div>
                 )}
               </div>
             </div>
