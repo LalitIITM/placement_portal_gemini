@@ -9322,11 +9322,7 @@ export default function App() {
                         Student View — Examiner Interview Rubric Locked
                       </p>
                       <p className="text-slate-400">
-                        Switch your RBAC View in the top bar to{" "}
-                        <span className="text-white font-semibold">ADMIN</span> or{" "}
-                        <span className="text-white font-semibold">RECRUITER</span> (Examiner) to
-                        submit a final-stage interview evaluation for{" "}
-                        <span className="text-white font-mono">{user.name}</span>.
+                        This evaluation rubric is restricted to the IITM Examiner panel. Once your 1-on-1 readiness interview is completed and marked 'Placement Ready', your scorecard and job applications will unlock automatically.name}</span>.
                       </p>
                     </div>
                   ) : (
