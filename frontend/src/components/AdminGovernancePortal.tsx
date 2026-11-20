@@ -1,10 +1,18 @@
 import {
   Activity,
-  Download,
+  Briefcase,
+  CheckCircle,
+  ExternalLink,
+  Plus,
+  Search,
   ShieldCheck,
+  Upload,
+  UserCheck,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import type {
-  AuditLogEntry,
+  AuditEntry,
   JobDriveItem,
   QuizDomainOption,
   RegistrationApprovalStatus,
@@ -741,7 +749,7 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70 text-xs">
-                      {auditLogs.map((log: AuditLogEntry) => (
+                      {auditLogs.map((log: AuditEntry) => (
                         <tr key={log.id} className="hover:bg-slate-950/60">
                           <td className="py-2.5 pr-3 font-mono text-slate-400">
                             <div>{log.id}</div>

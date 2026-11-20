@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   LogOut,
-  Activity,
   Award,
   Upload,
   BookOpen,
