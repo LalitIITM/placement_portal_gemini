@@ -1038,6 +1038,8 @@ export default function App() {
   const [opportunityTrackFilter, setOpportunityTrackFilter] = useState<"ALL" | "INTERNSHIP" | "FULL_TIME">("ALL");
   const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
   const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
+  const [recruiterWorkspaceView, setRecruiterWorkspaceView] = useState<"MY_DRIVES" | "POST_DRIVE" | "ATS_PIPELINE">("MY_DRIVES");
+  const [recruiterShowAllDrives, setRecruiterShowAllDrives] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -2352,6 +2354,11 @@ export default function App() {
   });
 
   useEffect(() => {
+    setJobAlert(null);
+    setRecruiterWorkspaceView("MY_DRIVES");
+  }, [user?.email, user?.role]);
+
+  useEffect(() => {
     try {
       localStorage.setItem("iitm_os_applications_v1", JSON.stringify(applications));
       localStorage.setItem("iitm_os_interviews_v1", JSON.stringify(interviews));
@@ -3486,6 +3493,9 @@ export default function App() {
       type: "OK",
       text: `Published ${created.roleType === "INTERNSHIP" ? "Internship" : "Full-Time (FTE)"} Opportunity ${created.jobCode}: ${created.companyName} — ${created.title}. Live now on Student & Admin Opportunities tabs.`,
     });
+    if (user.role === "RECRUITER") {
+      setRecruiterWorkspaceView("MY_DRIVES");
+    }
     appendAudit(
       user.email,
       user.role,
@@ -5572,23 +5582,103 @@ export default function App() {
 
             {jobAlert && (
               <div
-                className={`p-3.5 rounded-xl border text-xs flex items-start gap-2 ${
+                className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
                   jobAlert.type === "OK"
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
                     : "bg-rose-500/10 border-rose-500/30 text-rose-300"
                 }`}
               >
-                {jobAlert.type === "OK" ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                )}
-                <span>{jobAlert.text}</span>
+                <div className="flex items-start gap-2">
+                  {jobAlert.type === "OK" ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  )}
+                  <span>{jobAlert.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setJobAlert(null)}
+                  className="px-2 py-0.5 rounded bg-slate-900/70 hover:bg-slate-800 text-slate-300 text-[11px] shrink-0"
+                >
+                  Dismiss
+                </button>
               </div>
             )}
 
+            {/* Clean Recruiter Workspace Navigation Bar (Prevents Cluttered Stacked Screens) */}
+            {user.role === "RECRUITER" && (() => {
+              const matchedReg = registrations.find(
+                (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+              );
+              const myCompanyName = (
+                matchedReg?.recruiterProfileDetails?.companyName ||
+                matchedReg?.orgOrDept?.split("(")[0] ||
+                newCompany ||
+                ""
+              ).trim();
+              const myCompanyJobs = jobs.filter(
+                (j) =>
+                  j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
+                  (myCompanyName && j.companyName.toLowerCase().includes(myCompanyName.toLowerCase()))
+              );
+              const scopedJobsCount = recruiterShowAllDrives ? jobs.length : myCompanyJobs.length;
+              const scopedJobIds = new Set((recruiterShowAllDrives ? jobs : myCompanyJobs).map((j) => j.id));
+              const scopedAppsCount = applications.filter((a) => scopedJobIds.has(a.jobId)).length;
+
+              return (
+                <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setRecruiterWorkspaceView("MY_DRIVES")}
+                      className={`px-3.5 py-2 rounded-xl font-semibold transition ${
+                        recruiterWorkspaceView === "MY_DRIVES"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-950 border border-slate-800 text-slate-300 hover:text-white"
+                      }`}
+                    >
+                      My Posted Drives ({scopedJobsCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecruiterWorkspaceView("POST_DRIVE")}
+                      className={`px-3.5 py-2 rounded-xl font-semibold transition ${
+                        recruiterWorkspaceView === "POST_DRIVE"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-950 border border-slate-800 text-emerald-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      + Post New Drive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecruiterWorkspaceView("ATS_PIPELINE")}
+                      className={`px-3.5 py-2 rounded-xl font-semibold transition ${
+                        recruiterWorkspaceView === "ATS_PIPELINE"
+                          ? "bg-cyan-600 text-white"
+                          : "bg-slate-950 border border-slate-800 text-cyan-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      Candidate ATS Pipeline ({scopedAppsCount})
+                    </button>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={recruiterShowAllDrives}
+                      onChange={(e) => setRecruiterShowAllDrives(e.target.checked)}
+                      className="accent-indigo-500"
+                    />
+                    <span>Show All Portal Drives ({jobs.length})</span>
+                  </label>
+                </div>
+              );
+            })()}
+
             {/* Recruiter / Admin Job Drive Publisher */}
-            {user.role !== "STUDENT" && (
+            {(user.role === "ADMIN" || (user.role === "RECRUITER" && recruiterWorkspaceView === "POST_DRIVE")) && (
               <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2">
@@ -5841,9 +5931,31 @@ export default function App() {
             )}
 
             {/* Opportunities Segregated by Internship & Full-Time Employment (FTE) */}
-            {(() => {
+            {(user.role !== "RECRUITER" || recruiterWorkspaceView === "MY_DRIVES") && (() => {
+              const matchedReg =
+                user.role === "RECRUITER"
+                  ? registrations.find(
+                      (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                    )
+                  : undefined;
+              const myCompanyName = (
+                matchedReg?.recruiterProfileDetails?.companyName ||
+                matchedReg?.orgOrDept?.split("(")[0] ||
+                newCompany ||
+                ""
+              ).trim();
+
+              const baseJobs =
+                user.role === "RECRUITER" && !recruiterShowAllDrives
+                  ? jobs.filter(
+                      (j) =>
+                        j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
+                        (myCompanyName && j.companyName.toLowerCase().includes(myCompanyName.toLowerCase()))
+                    )
+                  : jobs;
+
               const q = opportunitySearchQuery.trim().toLowerCase();
-              const matchingJobs = jobs.filter((job) => {
+              const matchingJobs = baseJobs.filter((job) => {
                 if (opportunityTrackFilter !== "ALL" && job.roleType !== opportunityTrackFilter) return false;
                 if (opportunityDomainFilter !== "ALL" && job.domain !== opportunityDomainFilter) return false;
                 if (!q) return true;
@@ -6033,7 +6145,7 @@ export default function App() {
                             : "bg-slate-950 border border-slate-800 text-slate-300 hover:text-white"
                         }`}
                       >
-                        All Opportunities ({jobs.length})
+                        All Opportunities ({baseJobs.length})
                       </button>
                       <button
                         type="button"
@@ -6044,7 +6156,7 @@ export default function App() {
                             : "bg-slate-950 border border-slate-800 text-cyan-300 hover:bg-slate-800"
                         }`}
                       >
-                        Internships ({jobs.filter((j) => j.roleType === "INTERNSHIP").length})
+                        Internships ({baseJobs.filter((j) => j.roleType === "INTERNSHIP").length})
                       </button>
                       <button
                         type="button"
@@ -6055,7 +6167,7 @@ export default function App() {
                             : "bg-slate-950 border border-slate-800 text-emerald-300 hover:bg-slate-800"
                         }`}
                       >
-                        Full-Time Employment / FTE ({jobs.filter((j) => j.roleType === "FULL_TIME").length})
+                        Full-Time Employment / FTE ({baseJobs.filter((j) => j.roleType === "FULL_TIME").length})
                       </button>
                     </div>
 
@@ -6479,11 +6591,41 @@ export default function App() {
                 </div>
               );
             })() : (
+            {(user.role !== "RECRUITER" || recruiterWorkspaceView === "ATS_PIPELINE") && (() => {
+              const matchedReg =
+                user.role === "RECRUITER"
+                  ? registrations.find(
+                      (r) => r.email.toLowerCase() === user.email.toLowerCase() && r.role === "RECRUITER"
+                    )
+                  : undefined;
+              const myCompanyName = (
+                matchedReg?.recruiterProfileDetails?.companyName ||
+                matchedReg?.orgOrDept?.split("(")[0] ||
+                newCompany ||
+                ""
+              ).trim();
+              const myCompanyJobIds = new Set(
+                jobs
+                  .filter(
+                    (j) =>
+                      j.postedByEmail?.toLowerCase() === user.email.toLowerCase() ||
+                      (myCompanyName && j.companyName.toLowerCase().includes(myCompanyName.toLowerCase()))
+                  )
+                  .map((j) => j.id)
+              );
+              const visibleApplications =
+                user.role === "RECRUITER" && !recruiterShowAllDrives
+                  ? applications.filter((a) => myCompanyJobIds.has(a.jobId))
+                  : applications;
+
+              return (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <div>
                   <h2 className="font-semibold text-white">
-                    Applications &amp; Recruiter ATS Pipeline ({applications.length})
+                    {user.role === "RECRUITER" && !recruiterShowAllDrives
+                      ? `My Company Candidate ATS Pipeline (${visibleApplications.length})`
+                      : `Applications & Recruiter ATS Pipeline (${visibleApplications.length})`}
                   </h2>
                   <p className="text-xs text-slate-400">
                     Shortlist candidates, schedule interviews, extend offers, or trigger BRULE-21 placement lock.
@@ -6491,10 +6633,11 @@ export default function App() {
                 </div>
               </div>
 
-              {applications.length === 0 ? (
+              {visibleApplications.length === 0 ? (
                 <p className="text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-xl p-4">
-                  No applications submitted yet. Apply to an eligible drive above to populate the ATS
-                  pipeline.
+                  {user.role === "RECRUITER" && !recruiterShowAllDrives
+                    ? "No candidates have applied to your company's posted drives yet. Toggle 'Show All Portal Drives' above to inspect cross-portal demo applications."
+                    : "No applications submitted yet. Apply to an eligible drive above to populate the ATS pipeline."}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -6509,7 +6652,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70">
-                      {applications.map((app) => (
+                      {visibleApplications.map((app) => (
                         <tr key={app.id}>
                           <td className="py-3 pr-3 font-mono text-slate-300">{app.id}</td>
                           <td className="py-3 px-3">
@@ -6553,6 +6696,8 @@ export default function App() {
                 </div>
               )}
             </div>
+              );
+            })()}
             )}
           </div>
         )}
