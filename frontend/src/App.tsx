@@ -2727,13 +2727,15 @@ export default function App() {
       type: "OK",
       text: `Synced ${imported.length} 1-on-1 slot(s) from ${sourceLabel} to Examiner & Student dashboards.`,
     });
-    appendAudit(
-      user.email,
-      user.role,
-      "ONE_ON_ONE_SLOTS_BULK_UPLOADED",
-      `${imported.length} slot(s) imported via ${sourceLabel}`,
-      "SUCCESS"
-    );
+    if (user) {
+      appendAudit(
+        user.email,
+        user.role,
+        "ONE_ON_ONE_SLOTS_BULK_UPLOADED",
+        `${imported.length} slot(s) imported via ${sourceLabel}`,
+        "SUCCESS"
+      );
+    }
   };
 
   const handleSpreadsheetSlotFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -6362,7 +6364,6 @@ export default function App() {
         {activeTab === "TRAINING" && (
           <div className="space-y-8">
             {user.role === "STUDENT" && (() => {
-              const prog = computeTrainingAndActivityProgress();
               const mySlots = oneOnOneSlots.filter(
                 (s) =>
                   s.studentEmail.toLowerCase() === user.email.toLowerCase() ||
