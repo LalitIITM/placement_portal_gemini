@@ -10,7 +10,7 @@ on:
 
 jobs:
   backend-ci:
-    name: Backend (Ruff + Pytest)
+    name: Backend (Ruff + Alembic + Pytest)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -51,6 +51,13 @@ jobs:
 
       - name: Run Ruff Linter
         run: ruff check .
+
+      - name: Run Alembic Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://placement_user:placement_password@localhost:5432/placement_test_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-test-secret-key-not-for-prod
+        run: alembic upgrade head
 
       - name: Run Pytest
         env:
