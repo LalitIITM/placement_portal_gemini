@@ -6,7 +6,6 @@ import {
   Trash2,
   Plus,
   Lock,
-  Shield,
   UserCheck,
   AlertTriangle,
   CheckCircle2,
@@ -1011,12 +1010,6 @@ export default function App() {
   const [manualSlotInstructor, setManualSlotInstructor] = useState("");
 
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("iitm_os_one_on_one_slots_v1", JSON.stringify(oneOnOneSlots));
-      localStorage.setItem("iitm_os_jobs_v1", JSON.stringify(jobs));
-    } catch {}
-  }, [oneOnOneSlots, jobs]);
 
   // Increment 3: Recruitment, Job Postings & Application Eligibility Engine
   const [jobs, setJobs] = useState<JobDriveItem[]>(() => {
@@ -1044,6 +1037,13 @@ export default function App() {
   const [opportunityTrackFilter, setOpportunityTrackFilter] = useState<"ALL" | "INTERNSHIP" | "FULL_TIME">("ALL");
   const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
   const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("iitm_os_one_on_one_slots_v1", JSON.stringify(oneOnOneSlots));
+      localStorage.setItem("iitm_os_jobs_v1", JSON.stringify(jobs));
+    } catch {}
+  }, [oneOnOneSlots, jobs]);
   const [applications, setApplications] = useState<JobApplicationRecord[]>([]);
   const [selectedResumeIdForApply, setSelectedResumeIdForApply] = useState<string>("res-1");
   const [jobAlert, setJobAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
