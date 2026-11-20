@@ -839,7 +839,7 @@ export default function App() {
     email: string;
     role: Exclude<Role, "ADMIN">;
     orgOrDept: string;
-    status: "APPROVED" | "PENDING" | "REJECTED";
+    status: RegistrationApprovalStatus;
   }>({
     fullName: "",
     email: "",
@@ -956,6 +956,7 @@ export default function App() {
       id: newId,
       fullName: adminNewFullName.trim(),
       email: adminNewEmail.trim().toLowerCase(),
+      password: "123456",
       role: adminNewRole,
       orgOrDept: adminNewOrgOrDept.trim(),
       status: adminNewStatus,
@@ -1226,6 +1227,7 @@ export default function App() {
   const [newResumeDriveUrl, setNewResumeDriveUrl] = useState("");
   const [newTarget, setNewTarget] = useState("");
   const [vaultAlert, setVaultAlert] = useState<string | null>(null);
+  const [previewSubmission, setPreviewSubmission] = useState<ActivitySubmission | null>(null);
   const [driveDocPreview, setDriveDocPreview] = useState<{ title: string; subtitle: string; url: string } | null>(null);
 
   // Increment 2: Question Bank Database + Random 15-Question Quiz Engine
@@ -10737,7 +10739,7 @@ export default function App() {
                                   onChange={(e) =>
                                     setEditRegDraft({
                                       ...editRegDraft,
-                                      status: e.target.value as "APPROVED" | "PENDING" | "REJECTED",
+                                      status: e.target.value as RegistrationApprovalStatus,
                                     })
                                   }
                                   className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-100"
@@ -11060,6 +11062,40 @@ export default function App() {
           );
         })()}
 
+        {previewSubmission && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white">{previewSubmission.title}</h3>
+                  <p className="text-xs text-slate-400">
+                    {previewSubmission.studentName} ({previewSubmission.studentRoll}) • {previewSubmission.category}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSubmission(null)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Close ✕
+                </button>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+                <p>{previewSubmission.description}</p>
+                {previewSubmission.evidenceUrl && (
+                  <a
+                    href={previewSubmission.evidenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-400 hover:underline break-all font-mono block"
+                  >
+                    {previewSubmission.evidenceUrl}
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {driveDocPreview && (
           <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
