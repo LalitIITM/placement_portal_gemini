@@ -20,13 +20,11 @@ from app.modules.student.router import router as student_router
 from app.modules.training import models as training_models  # noqa: F401
 from app.modules.training.router import router as training_router
 from app.modules.training.seed import ensure_training_seed
-from app.shared.database import AsyncSessionLocal, Base, engine
+from app.shared.database import AsyncSessionLocal
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as session:
         await ensure_base_seed(session)
         await ensure_training_seed(session)
