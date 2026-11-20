@@ -8646,7 +8646,7 @@ export default function App() {
             const nowIso = new Date().toISOString();
             const newTicket: HelpdeskTicketRecord = {
               id: `TKT-${Date.now()}`,
-              ticketNumber: `HD-${new Date().getFullYear()}-${String(helpdeskTickets.length + 101)}`,
+              ticketNumber: `HD-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}${Math.floor(10 + Math.random() * 90)}`,
               raisedByEmail: user.email,
               raisedByName: user.name || fullName || user.email.split("@")[0],
               raisedByRole: user.role,
