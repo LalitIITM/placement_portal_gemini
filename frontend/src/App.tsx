@@ -9322,7 +9322,7 @@ export default function App() {
                         Student View — Examiner Interview Rubric Locked
                       </p>
                       <p className="text-slate-400">
-                        This evaluation rubric is restricted to the IITM Examiner panel. Once your 1-on-1 readiness interview is completed and marked 'Placement Ready', your scorecard and job applications will unlock automatically.name}</span>.
+                        This evaluation rubric is restricted to the IITM Examiner panel. Once your 1-on-1 readiness interview is completed and marked 'Placement Ready', your scorecard and job applications will unlock automatically.
                       </p>
                     </div>
                   ) : (
