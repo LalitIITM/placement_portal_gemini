@@ -1,54 +1,33 @@
-import * as XLSX from "xlsx";
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
-  ShieldCheck,
-  FileText,
-  Trash2,
-  Plus,
-  Lock,
-  UserCheck,
-  AlertTriangle,
-  CheckCircle2,
-  LogOut,
   Activity,
-  Award,
-  Upload,
-  BookOpen,
-  PlayCircle,
-  CheckSquare,
-  Square,
-  Sparkles,
-  Clock,
-  EyeOff,
-  GraduationCap,
-  ClipboardCheck,
-  Briefcase,
-  Star,
-  Database,
-  Shuffle,
-  Building2,
-  Send,
-  XCircle,
-  Calendar,
-  BadgeCheck,
-  BarChart3,
-  Video,
+  Download,
+  ShieldCheck,
 } from "lucide-react";
-
+import type {
+  AuditLogEntry,
+  JobDriveItem,
+  QuizDomainOption,
+  RegistrationApprovalStatus,
+  RegistrationRequestRecord,
+  Role,
+} from "../types/portal";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
   const {
-    user,
     registrations,
-    regFilter,
-    setRegFilter,
+    evaluations,
+    applications,
+    offers,
     handleRegistrationDecision,
+    handleAdminDownloadRosterCsv,
+    setDriveDocPreview,
     auditLogs,
     jobs,
-    evaluations,
     adminDirectoryRoleFilter,
     setAdminDirectoryRoleFilter,
+    adminDirectorySearch,
+    setAdminDirectorySearch,
     adminNewFullName,
     setAdminNewFullName,
     adminNewEmail,
@@ -61,8 +40,6 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     setAdminNewStatus,
     adminCommandAlert,
     setAdminCommandAlert,
-    adminUserSearch,
-    setAdminUserSearch,
     editingRegId,
     setEditingRegId,
     editRegDraft,
@@ -78,20 +55,17 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     handleAdminStartEditJob,
     handleAdminSaveEditJob,
     handleAdminDeleteJob,
-    handleExportUsersCsv,
-    handleExportJobsCsv,
-    handleExportAuditCsv,
     setActiveTab,
   } = ctx;
 
-          const studentRegs = registrations.filter((r) => r.role === "STUDENT");
-          const recruiterRegs = registrations.filter((r) => r.role === "RECRUITER");
-          const examinerRegs = registrations.filter((r) => r.role === "EXAMINER");
-          const coordinatorRegs = registrations.filter((r) => r.role === "TRAINING_COORDINATOR");
-          const vivaReadyCount = evaluations.filter((e) => e.isPlacementReady).length;
+          const studentRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "STUDENT");
+          const recruiterRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "RECRUITER");
+          const examinerRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "EXAMINER");
+          const coordinatorRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "TRAINING_COORDINATOR");
+          const vivaReadyCount = evaluations.filter((e: { isPlacementReady?: boolean }) => e.isPlacementReady).length;
 
           const qDir = adminDirectorySearch.trim().toLowerCase();
-          const filteredDirectory = registrations.filter((r) => {
+          const filteredDirectory = registrations.filter((r: RegistrationRequestRecord) => {
             if (adminDirectoryRoleFilter !== "ALL" && r.role !== adminDirectoryRoleFilter) return false;
             if (!qDir) return true;
   
@@ -344,7 +318,7 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70 text-xs">
-                      {filteredDirectory.map((reg) => {
+                      {filteredDirectory.map((reg: RegistrationRequestRecord) => {
                         const isEditing = editingRegId === reg.id;
                         return (
                           <tr key={reg.id} className="hover:bg-slate-950/60 align-top">
@@ -601,7 +575,7 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70 text-xs">
-                      {jobs.map((job) => {
+                      {jobs.map((job: JobDriveItem) => {
                         const isJobEditing = editingJobId === job.id;
                         return (
                           <tr key={job.id} className="hover:bg-slate-950/60">
@@ -767,7 +741,7 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70 text-xs">
-                      {auditLogs.map((log) => (
+                      {auditLogs.map((log: AuditLogEntry) => (
                         <tr key={log.id} className="hover:bg-slate-950/60">
                           <td className="py-2.5 pr-3 font-mono text-slate-400">
                             <div>{log.id}</div>

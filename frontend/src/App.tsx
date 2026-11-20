@@ -10502,7 +10502,51 @@ export default function App() {
 
         {activeTab === "GOVERNANCE" && user.role === "ADMIN" && (
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading Executive Command Center...</div>}>
-            <AdminGovernancePortal ctx={{ user, registrations, evaluations, adminDirectoryRoleFilter, setAdminDirectoryRoleFilter, regFilter, setRegFilter, handleRegistrationDecision, auditLogs, jobs, adminNewFullName, setAdminNewFullName, adminNewEmail, setAdminNewEmail, adminNewRole, setAdminNewRole, adminNewOrgOrDept, setAdminNewOrgOrDept, adminNewStatus, setAdminNewStatus, adminCommandAlert, setAdminCommandAlert, adminUserSearch, setAdminUserSearch, editingRegId, setEditingRegId, editRegDraft, setEditRegDraft, editingJobId, setEditingJobId, editJobDraft, setEditJobDraft, handleAdminCreateUser, handleAdminStartEditUser, handleAdminSaveEditUser, handleAdminDeleteUser, handleAdminStartEditJob, handleAdminSaveEditJob, handleAdminDeleteJob, handleExportUsersCsv, handleExportJobsCsv, handleExportAuditCsv, setActiveTab }} />
+            <AdminGovernancePortal
+              ctx={{
+                registrations,
+                evaluations,
+                applications,
+                offers,
+                handleRegistrationDecision,
+                handleAdminDownloadRosterCsv,
+                setDriveDocPreview,
+                auditLogs,
+                jobs,
+                adminDirectoryRoleFilter,
+                setAdminDirectoryRoleFilter,
+                adminDirectorySearch,
+                setAdminDirectorySearch,
+                adminNewFullName,
+                setAdminNewFullName,
+                adminNewEmail,
+                setAdminNewEmail,
+                adminNewRole,
+                setAdminNewRole,
+                adminNewOrgOrDept,
+                setAdminNewOrgOrDept,
+                adminNewStatus,
+                setAdminNewStatus,
+                adminCommandAlert,
+                setAdminCommandAlert,
+                editingRegId,
+                setEditingRegId,
+                editRegDraft,
+                setEditRegDraft,
+                editingJobId,
+                setEditingJobId,
+                editJobDraft,
+                setEditJobDraft,
+                handleAdminCreateUser,
+                handleAdminStartEditUser,
+                handleAdminSaveEditUser,
+                handleAdminDeleteUser,
+                handleAdminStartEditJob,
+                handleAdminSaveEditJob,
+                handleAdminDeleteJob,
+                setActiveTab,
+              }}
+            />
           </Suspense>
         )}
 
