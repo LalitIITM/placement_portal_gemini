@@ -289,7 +289,7 @@ type AppStatusOption =
   | "INTERVIEW_SCHEDULED"
   | "OFFERED"
   | "OFFER_ACCEPTED"
-  | "REJECTED";
+  | "REJECTED" | "WITHDRAWN";
 
 interface ResumeItem {
   id: string;
