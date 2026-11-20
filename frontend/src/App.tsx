@@ -37,7 +37,8 @@ import {
 
 type Role = "STUDENT" | "RECRUITER" | "EXAMINER" | "TRAINING_COORDINATOR" | "ADMIN";
 type AuthMode = "SIGN_IN" | "SIGN_UP";
-type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED"
+  | "WITHDRAWN";
 type StudentOnboardingStep = "AUTH" | "STUDENT_FORM" | "PAYMENT";
 
 interface StudentOnboardingDraft {
@@ -6504,7 +6505,7 @@ export default function App() {
                         <th className="py-2.5 px-3">Drive & Company</th>
                         <th className="py-2.5 px-3">Candidate & Resume</th>
                         <th className="py-2.5 px-3">Stage</th>
-                        {user.role !== "STUDENT" && <th className="py-2.5 pl-3">Recruiter Action</th>}
+                        <th className="py-2.5 pl-3">Recruiter Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70">
@@ -6526,7 +6527,6 @@ export default function App() {
                               {app.status}
                             </span>
                           </td>
-                          {user.role !== "STUDENT" && (
                             <td className="py-3 pl-3">
                               <select
                                 value={app.status}
@@ -6546,7 +6546,6 @@ export default function App() {
                                 <option value="REJECTED">REJECTED</option>
                               </select>
                             </td>
-                          )}
                         </tr>
                       ))}
                     </tbody>
