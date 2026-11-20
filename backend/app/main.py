@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -39,9 +40,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+exact_origins = [origin for origin in settings.ALLOWED_ORIGINS if "*" not in origin]
+wildcard_patterns = [
+    re.escape(origin).replace(r"\*", ".*")
+    for origin in settings.ALLOWED_ORIGINS
+    if "*" in origin
+]
+allow_origin_regex = f"^({'|'.join(wildcard_patterns)})$" if wildcard_patterns else None
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=exact_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
