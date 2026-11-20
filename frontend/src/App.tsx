@@ -5745,16 +5745,6 @@ export default function App() {
                       Candidate ATS Pipeline ({scopedAppsCount})
                     </button>
                   </div>
-
-                  <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={recruiterShowAllDrives}
-                      onChange={(e) => setRecruiterShowAllDrives(e.target.checked)}
-                      className="accent-indigo-500"
-                    />
-                    <span>Show All Portal Drives ({jobs.length})</span>
-                  </label>
                 </div>
               );
             })()}
@@ -9265,9 +9255,13 @@ export default function App() {
           const ftOffers = scopedOffersForPlacement.filter((o) => o.roleType === "FULL_TIME");
           const avgCtc = ftOffers.length
             ? (ftOffers.reduce((acc, o) => acc + o.ctcLpa, 0) / ftOffers.length).toFixed(2)
+            : user.role === "RECRUITER"
+            ? "0.00"
             : "16.50";
           const maxCtc = ftOffers.length
             ? Math.max(...ftOffers.map((o) => o.ctcLpa)).toFixed(2)
+            : user.role === "RECRUITER"
+            ? "0.00"
             : "22.00";
 
           return (
@@ -9303,7 +9297,7 @@ export default function App() {
                   <div>
                     <h2 className="text-base font-bold text-white flex items-center gap-2">
                       <BarChart3 className="w-5 h-5 text-indigo-400" />
-                      IITM BS Placement Analytics & Cohort Telemetry
+                      {user.role === "RECRUITER" ? `${myRecCompany || "Company"} Hiring Funnel & Offer Telemetry` : "IITM BS Placement Analytics & Cohort Telemetry"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Live conversion funnel across drives, interviews, issued offers, and BRULE-35 locked acceptances.
@@ -9356,7 +9350,12 @@ export default function App() {
                   </div>
 
                   <div className="space-y-3">
-                    {offers.map((ofr) => (
+                    {scopedOffersForPlacement.length === 0 ? (
+                      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 text-xs text-slate-400">
+                        No formal offer letters issued yet{user.role === "RECRUITER" && myRecCompany ? ` for ${myRecCompany}` : ""}.
+                      </div>
+                    ) : (
+                      scopedOffersForPlacement.map((ofr) => (
                       <div
                         key={ofr.id}
                         className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -9409,7 +9408,8 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                    ))}
+                    ))
+                    )}
                   </div>
                 </div>
 
@@ -9427,10 +9427,10 @@ export default function App() {
                         onChange={(e) => setOfrAppId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
                       >
-                        {applications.length === 0 ? (
-                          <option value="">Aarav Sharma — Fractal Analytics (Associate Data Scientist)</option>
+                        {scopedAppsForPlacement.length === 0 ? (
+                          <option value="">No applicants for {myRecCompany || "your company"} drives yet</option>
                         ) : (
-                          applications.map((app) => (
+                          scopedAppsForPlacement.map((app) => (
                             <option key={app.id} value={app.id}>
                               {app.studentName} — {app.companyName} ({app.jobTitle})
                             </option>
@@ -9470,7 +9470,7 @@ export default function App() {
                     </div>
                     <button
                       type="submit"
-                      disabled={user?.role === "STUDENT"}
+                      disabled={user?.role === "STUDENT" || scopedAppsForPlacement.length === 0}
                       className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold transition"
                     >
                       {user?.role === "STUDENT" ? "Switch to Recruiter / Admin to Issue Offers" : "Generate & Issue Offer Letter"}
@@ -9491,7 +9491,12 @@ export default function App() {
                   </div>
 
                   <div className="space-y-3">
-                    {scopedInterviewsForPlacement.map((iv) => (
+                    {scopedInterviewsForPlacement.length === 0 ? (
+                      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 text-xs text-slate-400">
+                        No interview panels scheduled yet{user.role === "RECRUITER" && myRecCompany ? ` for ${myRecCompany}` : ""}.
+                      </div>
+                    ) : (
+                      scopedInterviewsForPlacement.map((iv) => (
                       <div
                         key={iv.id}
                         className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -9555,7 +9560,8 @@ export default function App() {
                           )}
                         </div>
                       </div>
-                    ))}
+                    ))
+                    )}
                   </div>
                 </div>
 
@@ -9573,10 +9579,10 @@ export default function App() {
                         onChange={(e) => setIvAppId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
                       >
-                        {applications.length === 0 ? (
-                          <option value="">Aarav Sharma — Google Research India (AI/ML Research Fellow)</option>
+                        {scopedAppsForPlacement.length === 0 ? (
+                          <option value="">No applicants for {myRecCompany || "your company"} drives yet</option>
                         ) : (
-                          applications.map((app) => (
+                          scopedAppsForPlacement.map((app) => (
                             <option key={app.id} value={app.id}>
                               {app.studentName} — {app.companyName} ({app.jobTitle})
                             </option>
@@ -9639,7 +9645,7 @@ export default function App() {
                     </div>
                     <button
                       type="submit"
-                      disabled={user?.role === "STUDENT"}
+                      disabled={user?.role === "STUDENT" || scopedAppsForPlacement.length === 0}
                       className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white text-xs font-semibold transition"
                     >
                       {user?.role === "STUDENT" ? "Switch to Recruiter / Admin to Schedule" : "Schedule Interview Slot"}
