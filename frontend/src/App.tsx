@@ -3570,17 +3570,20 @@ export default function App() {
     );
     setEvaluations((prev) =>
       prev.length
-        ? [{ ...prev[0], isPlacementReady: true, status: "APPROVED" }, ...prev.slice(1)]
+        ? [{ ...prev[0], isPlacementReady: true }, ...prev.slice(1)]
         : [
             {
               id: `EVAL-${Date.now()}`,
+              studentRoll: "22F3001234",
               examinerEmail: "examiner@iitm.ac.in",
-              technicalScore: 85,
-              communicationScore: 85,
-              projectDepthScore: 85,
+              skillsets: ["Core Domain", "Problem Solving"],
+              programmingRating: 4,
+              dataScienceRating: 4,
+              communicationRating: 4,
               isPlacementReady: true,
-              status: "APPROVED",
-              remarks: "Cleared 1-on-1 Examiner Readiness Viva.",
+              performingExceptionallyGood: false,
+              remedialTasks: [],
+              notes: "Cleared 1-on-1 Examiner Readiness Viva.",
               evaluatedAt: new Date().toLocaleTimeString("en-IN", { hour12: false }),
             },
           ]
