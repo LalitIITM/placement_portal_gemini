@@ -135,7 +135,13 @@ async def _get_or_create_student(db: AsyncSession, principal: CurrentPrincipal) 
     )
     student = (await db.execute(stmt)).scalar_one_or_none()
     if student is None:
-        prefix = principal.user.email.split("@")[0].upper()[:12]
+        local_part = principal.user.email.split("@")[0].upper()
+        if len(local_part) <= 12:
+            prefix = local_part
+        else:
+            uid_suffix = str(principal.user.id).replace("-", "").upper()[:4]
+            prefix = f"{local_part[:7]}_{uid_suffix}"
+        
         prog = (
             ProgramType.BS_ELECTRONIC_SYSTEMS
             if principal.user.email.endswith("@es.study.iitm.ac.in")
