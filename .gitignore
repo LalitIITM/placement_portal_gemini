@@ -15,3 +15,7 @@ dist/
 .DS_Store
 **/node_modules/
 *.egg-info/
+
+frontend/test-results/
+frontend/playwright-report/
+backend/.env
