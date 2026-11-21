@@ -551,15 +551,21 @@ def test_student_workspace_and_helpdesk_persistence(
     add_skill = client.post("/api/v1/students/me/skills", json=skill_payload, headers=headers)
     assert add_skill.status_code in (200, 201), add_skill.text
 
-    ticket_subject = f"E2E Helpdesk Ticket {uuid.uuid4().hex[:6]}"
+    ticket_uid = uuid.uuid4().hex[:8].upper()
+    ticket_subject = f"E2E Helpdesk Ticket {ticket_uid}"
     ticket_payload = _build_valid_payload(
         "HelpdeskTicketDTO",
         openapi_schema,
         overrides={
+            "id": str(uuid.uuid4()),
+            "ticketNumber": f"TKT-{ticket_uid}",
+            "raisedByEmail": student_auth["email"],
+            "raisedByName": "E2E Student",
+            "raisedByRole": "STUDENT",
             "subject": ticket_subject,
-            "title": ticket_subject,
             "description": "Automated end-to-end Neon persistence check.",
             "category": "TECHNICAL",
+            "priority": "MEDIUM",
             "status": "OPEN",
         },
     )
