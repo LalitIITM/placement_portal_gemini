@@ -44,7 +44,7 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install -e .
           .venv/bin/python -m alembic upgrade head
 
       - name: Set up Node.js 20
