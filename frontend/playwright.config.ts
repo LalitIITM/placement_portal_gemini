@@ -29,7 +29,8 @@ export default defineConfig({
     ? {
         webServer: [
           {
-            command: "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010", cwd: "../backend",
+            command: process.platform === 'win32' ? "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010" : "../backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010",
+            cwd: "../backend",
             url: 'http://127.0.0.1:8010/docs',
             reuseExistingServer: false,
             timeout: 60_000,
