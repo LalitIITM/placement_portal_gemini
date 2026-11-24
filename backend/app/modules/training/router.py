@@ -178,7 +178,7 @@ class BadgeVerificationOut(BaseModel):
 async def list_question_bank(
     domain: Optional[QuizDomain] = Query(None),
     track: Optional[QuizTrack] = Query(None),
-    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.EXAMINER, RoleName.ADMIN, RoleName.RECRUITER)),
     db: AsyncSession = Depends(get_db),
 ) -> list[QuestionBankOut]:
     stmt = select(QuizQuestionBank).where(QuizQuestionBank.is_active.is_(True))
@@ -207,7 +207,7 @@ async def list_question_bank(
 async def add_question_to_bank(
     payload: QuestionBankCreateIn,
     request: Request,
-    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.PLACEMENT_COORDINATOR)),
     db: AsyncSession = Depends(get_db),
 ) -> QuestionBankOut:
     """Add a new MCQ question to the Data Science or Software Development question bank."""
@@ -254,7 +254,7 @@ async def add_question_to_bank(
 async def bulk_add_questions_to_bank(
     items: list[QuestionBankCreateIn],
     request: Request,
-    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.PLACEMENT_COORDINATOR)),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
     """Bulk import MCQ questions into the Data Science / Software Development question bank."""
@@ -689,7 +689,7 @@ async def submit_random_quiz_session(
 async def submit_examiner_evaluation(
     payload: ExaminerEvaluationIn,
     request: Request,
-    principal: CurrentPrincipal = Depends(require_roles(RoleName.ADMIN, RoleName.RECRUITER)),
+    principal: CurrentPrincipal = Depends(require_roles(RoleName.EXAMINER, RoleName.ADMIN, RoleName.RECRUITER)),
     db: AsyncSession = Depends(get_db),
 ) -> ExaminerEvaluationOut:
     """Final stage interview evaluation by examiner with 1-5 skill ratings & remedial tasks."""

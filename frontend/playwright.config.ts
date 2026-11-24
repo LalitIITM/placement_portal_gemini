@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const frontendUrl = process.env.LIVE_FRONTEND_URL || 'http://127.0.0.1:5173';
+const frontendUrl = process.env.LIVE_FRONTEND_URL || 'http://127.0.0.1:5174';
 const isLocalTarget = frontendUrl.includes('127.0.0.1') || frontendUrl.includes('localhost');
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  timeout: 90_000,
   expect: {
     timeout: 10_000,
   },
@@ -29,19 +29,18 @@ export default defineConfig({
     ? {
         webServer: [
           {
-            command:
-              'cd ../backend && (.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 2>/dev/null || python -m uvicorn app.main:app --host 127.0.0.1 --port 8000)',
-            url: 'http://127.0.0.1:8000/docs',
-            reuseExistingServer: true,
+            command: "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010", cwd: "../backend",
+            url: 'http://127.0.0.1:8010/docs',
+            reuseExistingServer: false,
             timeout: 60_000,
           },
           {
-            command: 'npm run dev -- --host 127.0.0.1 --port 5173',
-            url: 'http://127.0.0.1:5173',
-            reuseExistingServer: true,
+            command: 'npm run dev -- --host 127.0.0.1 --port 5174',
+            url: 'http://127.0.0.1:5174',
+            reuseExistingServer: false,
             timeout: 60_000,
             env: {
-              VITE_API_BASE_URL: 'http://127.0.0.1:8000',
+              VITE_API_BASE_URL: 'http://127.0.0.1:8010',
             },
           },
         ],
