@@ -434,7 +434,7 @@ test.describe.serial('End-to-End Business Requirements & BRULE Verification (Ste
         round_number: 1,
         round_type: 'TECHNICAL_1',
         mode: 'ONLINE_MEET',
-        scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
+        scheduled_at: new Date(Date.now() + (2 + Math.floor(Math.random() * 360)) * 86_400_000 + Math.floor(Math.random() * 20) * 3_600_000).toISOString(),
         duration_minutes: 45,
         meeting_link_or_venue: 'https://meet.google.com/iitm-e2e-test',
         panelist_name: 'Senior DS Lead',
