@@ -29,7 +29,7 @@ export default defineConfig({
     ? {
         webServer: [
           {
-            command: process.platform === 'win32' ? "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010" : "../backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010",
+            command: process.platform === 'win32' ? "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010" : "sh -c 'if [ -x .venv/bin/python ]; then exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010; else exec python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8010; fi'",
             cwd: "../backend",
             url: 'http://127.0.0.1:8010/docs',
             reuseExistingServer: false,
