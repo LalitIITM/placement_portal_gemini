@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   AlertTriangle,
@@ -128,7 +128,6 @@ export default function TrainingAndVettingPortal({
     setCommRating,
     setCoordTargetRoll,
     setDrawnQuestions,
-    setDriveDocPreview,
     setDsRating,
     setEvalSkillsets,
     setExaminerNotes,
@@ -169,7 +168,7 @@ export default function TrainingAndVettingPortal({
     user,
   } = ctx;
 
-  const effectiveOneOnOneSlots = React.useMemo(() => {
+  const effectiveOneOnOneSlots = useMemo(() => {
     return oneOnOneSlots.map((slot: any) => {
       const sRoll = String(slot.studentEmail || "").split("@")[0].trim().toUpperCase();
       const matchedEval = evaluations.find(
@@ -191,7 +190,6 @@ export default function TrainingAndVettingPortal({
   }, [oneOnOneSlots, evaluations]);
 
 
-  const [exPoolText, setExPoolText] = useState("");
   const [exPoolInstructor, setExPoolInstructor] = useState("");
   const [exPoolDate, setExPoolDate] = useState("");
   const [exPoolTime, setExPoolTime] = useState("");
@@ -204,49 +202,6 @@ export default function TrainingAndVettingPortal({
   const approvedStudents = registrations.filter(
     (r: any) => r.role === "STUDENT" && r.status === "APPROVED"
   );
-
-  const handleImportExaminerPoolRows = (rawText: string) => {
-    const lines = rawText
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return;
-    const startIdx =
-      lines[0].toLowerCase().includes("date") || lines[0].toLowerCase().includes("instructor") ? 1 : 0;
-    const added: any[] = [];
-    for (let i = startIdx; i < lines.length; i++) {
-      const cols = lines[i].split(",").map((c) => c.trim());
-      if (cols.length < 3) continue;
-      const looksLikeDate2 = /^\d{4}-\d{2}-\d{2}$/.test(cols[1]);
-      const instructor = cols[0];
-      const instructorEmail = looksLikeDate2 ? "" : cols[1];
-      const date = looksLikeDate2 ? cols[1] : cols[2];
-      const slotTime = looksLikeDate2 ? cols[2] : cols[3] || "10:00 AM - 10:30 AM IST";
-      const domain = (looksLikeDate2 ? cols[3] : cols[4]) || "Data Science";
-      if (!instructor || !date || !slotTime) continue;
-      added.push({
-        id: `EXPOOL-${Date.now()}-${i}`,
-        instructor,
-        instructorEmail,
-        date,
-        slotTime,
-        domain,
-        status: "OPEN" as const,
-      });
-    }
-    if (added.length === 0) {
-      setExPoolAlert({
-        type: "ERR",
-        text: "No valid rows found. Format: Instructor, Date (YYYY-MM-DD), Slot Time, Domain",
-      });
-      return;
-    }
-    setExaminerSlots((prev: any[]) => [...prev, ...added]);
-    setExPoolAlert({
-      type: "OK",
-      text: `Published ${added.length} Examiner availability slot(s) for students to pick.`,
-    });
-  };
 
   const handleStudentPickSingleSlot = (slotId: string) => {
     const myEmail = user.email.trim().toLowerCase();

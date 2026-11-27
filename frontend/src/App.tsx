@@ -1770,7 +1770,7 @@ export default function App() {
   const [opportunityTrackFilter, setOpportunityTrackFilter] = useState<"ALL" | "INTERNSHIP" | "FULL_TIME">("ALL");
   const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
   const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
-  const [recruiterCandidateDossier, setRecruiterCandidateDossier] = useState<{
+  const [_recruiterCandidateDossier, setRecruiterCandidateDossier] = useState<{
     loading: boolean;
     error: string | null;
     data: any | null;

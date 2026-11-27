@@ -87,7 +87,7 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     }
     setStudentDossierModal({ loading: true, error: null, reg, data: null });
     try {
-      const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+      const apiBase = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
       let token = "";
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
