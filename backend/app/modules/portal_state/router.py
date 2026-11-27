@@ -1,3 +1,4 @@
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import re
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -150,6 +151,7 @@ async def _ensure_roll_stages(db: AsyncSession, roll: str) -> list[StudentTraini
     ).scalars().all()
     if not rows:
         is_demo_roll = normalized_roll in {"21F3001013", "22F3001234"}
+        rows_to_insert = []
         for item in DEFAULT_STAGE_ROWS:
             row_data = dict(item)
             if is_demo_roll and item["stage_id"] in DEMO_STAGE_OVERRIDES:
@@ -157,7 +159,13 @@ async def _ensure_roll_stages(db: AsyncSession, roll: str) -> list[StudentTraini
                 row_data["obtained_marks"] = marks
                 row_data["attempts_used"] = attempts
                 row_data["status_text"] = st
-            db.add(StudentTrainingStageRecord(student_roll=normalized_roll, **row_data))
+            rows_to_insert.append({"student_roll": normalized_roll, **row_data})
+        stmt = (
+            pg_insert(StudentTrainingStageRecord.__table__)
+            .values(rows_to_insert)
+            .on_conflict_do_nothing(constraint="uq_student_roll_stage_id")
+        )
+        await db.execute(stmt)
         await db.flush()
         rows = (
             await db.execute(

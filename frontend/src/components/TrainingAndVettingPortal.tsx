@@ -30,26 +30,6 @@ import {
 
 export default function TrainingAndVettingPortal({
  ctx }: { ctx: any }) {
-  const effectiveOneOnOneSlots = React.useMemo(() => {
-    return oneOnOneSlots.map((slot: any) => {
-      const sRoll = String(slot.studentEmail || "").split("@")[0].trim().toUpperCase();
-      const matchedEval = evaluations.find(
-        (ev: any) => String(ev.studentRoll || "").trim().toUpperCase() === sRoll
-      );
-      if (!matchedEval) return slot;
-      return {
-        ...slot,
-        status: "COMPLETED",
-        isPlacementReady: matchedEval.isPlacementReady,
-        instructorFeedback:
-          matchedEval.notes ||
-          slot.instructorFeedback ||
-          (matchedEval.isPlacementReady
-            ? "Cleared 1-on-1 Viva — Placement Ready."
-            : "Completed 1-on-1 Viva — Remedial tasks assigned."),
-      };
-    });
-  }, [oneOnOneSlots, evaluations]);
 
   const [inlineDocPreview, setInlineDocPreview] = useState<{ title: string; url: string } | null>(null);
   const toDriveEmbedUrl = (rawUrl: string) => {
@@ -188,6 +168,28 @@ export default function TrainingAndVettingPortal({
     trainingStages,
     user,
   } = ctx;
+
+  const effectiveOneOnOneSlots = React.useMemo(() => {
+    return oneOnOneSlots.map((slot: any) => {
+      const sRoll = String(slot.studentEmail || "").split("@")[0].trim().toUpperCase();
+      const matchedEval = evaluations.find(
+        (ev: any) => String(ev.studentRoll || "").trim().toUpperCase() === sRoll
+      );
+      if (!matchedEval) return slot;
+      return {
+        ...slot,
+        status: "COMPLETED",
+        isPlacementReady: matchedEval.isPlacementReady,
+        instructorFeedback:
+          matchedEval.notes ||
+          slot.instructorFeedback ||
+          (matchedEval.isPlacementReady
+            ? "Cleared 1-on-1 Viva — Placement Ready."
+            : "Completed 1-on-1 Viva — Remedial tasks assigned."),
+      };
+    });
+  }, [oneOnOneSlots, evaluations]);
+
 
   const [exPoolText, setExPoolText] = useState("");
   const [exPoolInstructor, setExPoolInstructor] = useState("");
