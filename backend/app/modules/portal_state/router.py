@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -651,10 +652,13 @@ async def sync_portal_state(
         # 7. Normalized Examiner Evaluations
         if isinstance(evals_list, list):
             for e in evals_list:
+                raw_eval_roll = str(e.get("studentRoll", "")).strip().upper()
+                roll_match = re.search(r"\b\d{2}[A-Z]\d{7}\b", raw_eval_roll)
+                clean_eval_roll = roll_match.group(0) if roll_match else raw_eval_roll[:32]
                 await db.merge(
                     PortalExaminerEvaluationRecord(
                         id=str(e.get("id")),
-                        student_roll=str(e.get("studentRoll", "")).upper(),
+                        student_roll=clean_eval_roll,
                         examiner_email=str(e.get("examinerEmail", "")),
                         skillsets=e.get("skillsets") or [],
                         programming_rating=int(e.get("programmingRating", 0)),

@@ -19,3 +19,5 @@ dist/
 frontend/test-results/
 frontend/playwright-report/
 backend/.env
+
+user_ids.txt

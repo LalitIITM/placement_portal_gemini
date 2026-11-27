@@ -743,6 +743,17 @@ function drawRandomQuestions(pool: BankQuestionItem[], count: number): BankQuest
 const AdminGovernancePortal = lazy(() => import("./components/AdminGovernancePortal"));
 const TrainingAndVettingPortal = lazy(() => import("./components/TrainingAndVettingPortal"));
 
+const dedupeEvaluationsByRoll = (list: any[]) => {
+  const seen = new Set<string>();
+  return list.filter((ev: any) => {
+    const r = String(ev?.studentRoll || "").trim().toUpperCase();
+    if (!r) return true;
+    if (seen.has(r)) return false;
+    seen.add(r);
+    return true;
+  });
+};
+
 export default function App() {
   const [email, setEmail] = useState("22f3001234@ds.study.iitm.ac.in");
   const [selectedRole, setSelectedRole] = useState<Role>("STUDENT");
@@ -1622,7 +1633,84 @@ export default function App() {
   );
   const [examinerNotes, setExaminerNotes] = useState("");
   const [evalBanner, setEvalBanner] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
-  const [evaluations, setEvaluations] = useState<ExaminerEvaluationRecord[]>([]);
+  const [evaluations, setEvaluations] = useState<ExaminerEvaluationRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("iitm_os_examiner_evaluations_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [examinerSlots, setExaminerSlots] = useState<
+    Array<{
+      id: string;
+      instructor: string;
+      instructorEmail: string;
+      date: string;
+      slotTime: string;
+      domain: string;
+      status: "OPEN" | "REQUESTED" | "ALLOTTED";
+      requestedByEmail?: string;
+      requestedByName?: string;
+    }>
+  >(() => {
+    try {
+      const saved = localStorage.getItem("iitm_examiner_slots_v1");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("iitm_examiner_slots_v1", JSON.stringify(examinerSlots));
+    } catch {}
+  }, [examinerSlots]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "iitm_examiner_slots_v1" && e.newValue) {
+        try {
+          setExaminerSlots(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    const syncLatestSnapshot = async () => {
+      try {
+        const rollParam = encodeURIComponent(resolveActiveStudentRoll());
+        const res = await fetch(`${API_BASE_URL}/api/v1/portal-state/sync?student_roll=${rollParam}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const snap = data?.snapshot || {};
+        if (Array.isArray(snap.evaluations)) setEvaluations(dedupeEvaluationsByRoll(snap.evaluations));
+        if (Array.isArray(snap.oneOnOneSlots) && snap.oneOnOneSlots.length > 0) {
+          setOneOnOneSlots(snap.oneOnOneSlots);
+        }
+        if (Array.isArray(snap.examinerSlots) && snap.examinerSlots.length > 0) {
+          setExaminerSlots(snap.examinerSlots);
+        }
+        if (Array.isArray(data.activitySubmissions)) {
+          setActivitySubmissions(data.activitySubmissions);
+        }
+      } catch {}
+    };
+    const onFocus = () => { void syncLatestSnapshot(); };
+    const onVisible = () => { if (document.visibilityState === "visible") void syncLatestSnapshot(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
   const [oneOnOneSlots, setOneOnOneSlots] = useState<OneOnOneSlotRecord[]>(() => {
     try {
       const raw = localStorage.getItem("iitm_os_one_on_one_slots_v1");
@@ -1682,6 +1770,40 @@ export default function App() {
   const [opportunityTrackFilter, setOpportunityTrackFilter] = useState<"ALL" | "INTERNSHIP" | "FULL_TIME">("ALL");
   const [opportunityDomainFilter, setOpportunityDomainFilter] = useState<"ALL" | QuizDomainOption>("ALL");
   const [opportunitySearchQuery, setOpportunitySearchQuery] = useState("");
+  const [recruiterCandidateDossier, setRecruiterCandidateDossier] = useState<{
+    loading: boolean;
+    error: string | null;
+    data: any | null;
+    inlineDoc: { title: string; url: string } | null;
+  } | null>(null);
+
+  const handleOpenRecruiterCandidateDossier = async (studentRoll: string, studentName: string) => {
+    const cleanRoll = (studentRoll || "").trim().toUpperCase();
+    setRecruiterCandidateDossier({ loading: true, error: null, data: null, inlineDoc: null });
+    try {
+      const token = localStorage.getItem("iitm_os_access_token") || "";
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/students/dossier/${encodeURIComponent(cleanRoll)}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setRecruiterCandidateDossier({ loading: false, error: null, data, inlineDoc: null });
+    } catch (err: any) {
+      setRecruiterCandidateDossier({
+        loading: false,
+        error: err?.message || `Unable to load dossier for ${studentName} (${cleanRoll})`,
+        data: null,
+        inlineDoc: null,
+      });
+    }
+  };
+
   const [recruiterWorkspaceView, setRecruiterWorkspaceView] = useState<"MY_DRIVES" | "POST_DRIVE" | "ATS_PIPELINE">("MY_DRIVES");
   const recruiterShowAllDrives = false;
 
@@ -1870,6 +1992,20 @@ export default function App() {
 
   const loadedRollRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (user?.role !== "EXAMINER") return;
+    const slot =
+      oneOnOneSlots.find((s) => s.id === selectedSlotIdForEval) ||
+      oneOnOneSlots.find((s) => s.status === "SCHEDULED") ||
+      oneOnOneSlots[0];
+    if (slot?.studentEmail) {
+      const derivedRoll = slot.studentEmail.split("@")[0].trim().toUpperCase();
+      if (derivedRoll && derivedRoll !== coordTargetRoll) {
+        setCoordTargetRoll(derivedRoll);
+      }
+    }
+  }, [user?.role, selectedSlotIdForEval, oneOnOneSlots]);
+
   const resolveActiveStudentRoll = (): string => {
     if (user?.role === "STUDENT" && user.email) {
       return user.email.split("@")[0].trim().toUpperCase();
@@ -1921,10 +2057,34 @@ export default function App() {
           setApplications(snap.applications);
         }
         if (Array.isArray(snap.evaluations)) {
-          setEvaluations(snap.evaluations);
+          setEvaluations(dedupeEvaluationsByRoll(snap.evaluations));
         }
         if (Array.isArray(snap.oneOnOneSlots) && snap.oneOnOneSlots.length > 0) {
           setOneOnOneSlots(snap.oneOnOneSlots);
+        }
+        if (Array.isArray(snap.examinerSlots) && snap.examinerSlots.length > 0) {
+          const seenKeys = new Set<string>();
+          const normalized = snap.examinerSlots
+            .map((s: any) => {
+              let d = String(s.date || "").trim();
+              if (/^\d{2}-\d{2}-\d{4}$/.test(d)) {
+                const [dd, mm, yyyy] = d.split("-");
+                d = `${yyyy}-${mm}-${dd}`;
+              } else if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(d)) {
+                const [p1, p2, p3] = d.split("/");
+                const yyyy = p3.length === 2 ? `20${p3}` : p3;
+                d = `${yyyy}-${p1.padStart(2, "0")}-${p2.padStart(2, "0")}`;
+              }
+              return { ...s, date: d };
+            })
+            .filter((s: any) => {
+              if (/^\d+(\.\d+)?$/.test(s.date)) return false;
+              const k = `${String(s.instructor || "").trim().toLowerCase()}::${s.date}::${String(s.slotTime || "").trim().toLowerCase()}`;
+              if (seenKeys.has(k) && s.status === "OPEN") return false;
+              seenKeys.add(k);
+              return true;
+            });
+          setExaminerSlots(normalized);
         }
         if (Array.isArray(snap.auditLogs) && snap.auditLogs.length > 0) {
           setAuditLogs(snap.auditLogs);
@@ -1970,7 +2130,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [user?.email, user?.role, coordTargetRoll]);
+  }, [user?.email, user?.role, coordTargetRoll, activeTab]);
 
   // Write-through sync to PostgreSQL scoped strictly to loadedRollRef.current
   useEffect(() => {
@@ -2020,6 +2180,7 @@ export default function App() {
               offers,
               evaluations,
               oneOnOneSlots,
+              examinerSlots,
               auditLogs,
               resumes,
               marksheet,
@@ -2046,6 +2207,7 @@ export default function App() {
     applications,
     evaluations,
     oneOnOneSlots,
+    examinerSlots,
     auditLogs,
     resumes,
     marksheet,
@@ -3427,21 +3589,34 @@ export default function App() {
       return;
     }
 
+    const selectedCandidateRoll = resolveActiveStudentRoll();
     const activeSlot =
       oneOnOneSlots.find((s) => s.id === selectedSlotIdForEval) ||
+      oneOnOneSlots.find(
+        (s) =>
+          s.status === "SCHEDULED" &&
+          String(s.studentEmail || "").split("@")[0].trim().toUpperCase() === selectedCandidateRoll
+      ) ||
+      oneOnOneSlots.find(
+        (s) => String(s.studentEmail || "").split("@")[0].trim().toUpperCase() === selectedCandidateRoll
+      ) ||
       oneOnOneSlots.find((s) => s.status === "SCHEDULED");
+    const slotRoll = activeSlot?.studentEmail
+      ? activeSlot.studentEmail.split("@")[0].trim().toUpperCase()
+      : resolveActiveStudentRoll();
     const evaluatedStudentLabel = activeSlot
-      ? `${activeSlot.studentName} (${activeSlot.studentEmail})`
-      : user.name;
+      ? `${activeSlot.studentName} • Roll ${slotRoll} (${activeSlot.studentEmail})`
+      : `${resolveActiveStudentRoll()} • ${user.name}`;
     const completedStamp =
       new Date().toLocaleDateString("en-IN") +
       " " +
       new Date().toLocaleTimeString("en-IN", { hour12: false }) +
       " IST";
 
+    const cleanRoll = slotRoll.slice(0, 32);
     const record: ExaminerEvaluationRecord = {
       id: `EVAL-${Date.now()}`,
-      studentRoll: evaluatedStudentLabel,
+      studentRoll: cleanRoll,
       examinerEmail: user.email,
       skillsets: skills,
       programmingRating: progRating,
@@ -3454,7 +3629,16 @@ export default function App() {
       evaluatedAt: completedStamp,
     };
 
-    setEvaluations((prev) => [record, ...prev]);
+    setEvaluations((prev) => {
+      const withoutSameRoll = prev.filter(
+        (ev) => String(ev.studentRoll || "").trim().toUpperCase() !== cleanRoll
+      );
+      const next = [record, ...withoutSameRoll];
+      try {
+        localStorage.setItem("iitm_os_examiner_evaluations_v1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (activeSlot) {
       setOneOnOneSlots((prev) =>
@@ -3480,6 +3664,63 @@ export default function App() {
       );
       setSelectedSlotIdForEval("");
     }
+
+    const updatedSlots = activeSlot
+      ? oneOnOneSlots.map((slot) =>
+          slot.id === activeSlot.id
+            ? {
+                ...slot,
+                status: "COMPLETED" as const,
+                instructorFeedback:
+                  examinerNotes.trim() ||
+                  (isPlacementReady
+                    ? "Cleared 1-on-1 Viva with strong technical & communication readiness."
+                    : "Completed 1-on-1 Viva — please complete the assigned remedial tasks before re-evaluation."),
+                isPlacementReady,
+                programmingRating: progRating,
+                dataScienceRating: dsRating,
+                communicationRating: commRating,
+                remedialTasks: tasks,
+                completedAt: completedStamp,
+              }
+            : slot
+        )
+      : oneOnOneSlots;
+    try {
+      localStorage.setItem("iitm_os_one_on_one_slots_v1", JSON.stringify(updatedSlots));
+    } catch {}
+    const updatedEvals = [
+      record,
+      ...evaluations.filter((ev) => String(ev.studentRoll || "").trim().toUpperCase() !== cleanRoll),
+    ];
+
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/portal-state/sync`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentRoll: slotRoll || resolveActiveStudentRoll(),
+            trainingStages,
+            activitySubmissions,
+            helpdeskTickets,
+            snapshot: {
+              registrations,
+              jobs,
+              applications,
+              interviews,
+              offers,
+              evaluations: updatedEvals,
+              oneOnOneSlots: updatedSlots,
+              auditLogs,
+              resumes,
+              marksheet,
+            },
+          }),
+        });
+        if (res.ok) setDbSyncStatus("SYNCED");
+      } catch {}
+    })();
 
     if (isPlacementReady) {
       setTrainingStages((prev) =>
@@ -3514,19 +3755,74 @@ export default function App() {
         mapped[normalizeKey(k)] = String(v ?? "").trim();
       });
 
-      const email = mapped["email"] || mapped["studentemail"] || mapped["mail"] || "";
-      const studentName = mapped["studentname"] || mapped["name"] || mapped["student"] || "";
-      const date = mapped["date"] || mapped["slotdate"] || mapped["vivadate"] || "";
-      const slotTime = mapped["slottime"] || mapped["time"] || mapped["slot"] || "";
-      const instructor = mapped["instructor"] || mapped["examiner"] || mapped["mentor"] || mapped["panelist"] || "";
+      const studentEmail = mapped["studentemail"] || mapped["email"] || mapped["mail"] || "";
+      const studentName = mapped["studentname"] || mapped["student"] || "";
+      let date = mapped["date"] || mapped["slotdate"] || mapped["vivadate"] || mapped["availabledate"] || "";
+      if (/^\d+(\.\d+)?$/.test(date)) {
+        const serial = Math.floor(Number(date));
+        const utcDays = serial - 25569;
+        const dt = new Date(utcDays * 86400 * 1000);
+        if (!Number.isNaN(dt.getTime())) {
+          date = dt.toISOString().slice(0, 10);
+        }
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(date)) {
+        const [dd, mm, yyyy] = date.split("-");
+        date = `${yyyy}-${mm}-${dd}`;
+      } else if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(date)) {
+        const [p1, p2, p3] = date.split("/");
+        const yyyy = p3.length === 2 ? `20${p3}` : p3;
+        const mm = p1.padStart(2, "0");
+        const dd = p2.padStart(2, "0");
+        date = `${yyyy}-${mm}-${dd}`;
+      }
+      const slotTime = mapped["slottime"] || mapped["timeslot"] || mapped["time"] || mapped["slot"] || "";
+      const instructor = mapped["instructor"] || mapped["examiner"] || mapped["examinername"] || mapped["name"] || mapped["mentor"] || mapped["panelist"] || "";
+      const domain = mapped["domain"] || mapped["track"] || "Data Science";
+      const instructorEmail = mapped["examineremail"] || mapped["instructoremail"] || "";
 
-      if (!email && !studentName) return;
+      // Mode A: Examiner Availability row (no Student Email / Student Name) -> publish to Examiner Slot Pool (deduplicated)
+      if (!studentEmail && !studentName) {
+        if (!instructor || !date || !slotTime) return;
+        setExaminerSlots((prev) => {
+          const cleanPrev = prev.filter((s) => !/^\d+(\.\d+)?$/.test(String(s.date || "")));
+          const exists = cleanPrev.some(
+            (s) =>
+              s.instructor.trim().toLowerCase() === instructor.trim().toLowerCase() &&
+              s.date.trim() === date.trim() &&
+              s.slotTime.trim().toLowerCase() === slotTime.trim().toLowerCase()
+          );
+          if (exists) return cleanPrev;
+          return [
+            ...cleanPrev,
+            {
+              id: `EXPOOL-${Date.now()}-${idx + 1}`,
+              instructor,
+              instructorEmail,
+              date,
+              slotTime,
+              domain,
+              status: "OPEN",
+            },
+          ];
+        });
+        imported.push({
+          id: `__POOL__-${idx}`,
+          studentEmail: "",
+          studentName: "",
+          date,
+          slotTime,
+          instructor,
+          status: "SCHEDULED",
+        });
+        return;
+      }
+
+      // Mode B: Direct Student Allotment row (Email + Student Name + Date + Slot Time + Instructor)
       if (!date || !slotTime || !instructor) return;
-
       imported.push({
         id: `SLOT-${Date.now()}-${idx + 1}`,
-        studentEmail: email || `${studentName.toLowerCase().replace(/\s+/g, ".")}@ds.study.iitm.ac.in`,
-        studentName: studentName || email.split("@")[0],
+        studentEmail: studentEmail || `${studentName.toLowerCase().replace(/\s+/g, ".")}@ds.study.iitm.ac.in`,
+        studentName: studentName || studentEmail.split("@")[0],
         date,
         slotTime,
         instructor,
@@ -3534,17 +3830,28 @@ export default function App() {
       });
     });
 
+    const poolCount = imported.filter((r) => r.id.startsWith("__POOL__")).length;
+    const directAssigned = imported.filter((r) => !r.id.startsWith("__POOL__"));
+
     if (imported.length === 0) {
       setSlotUploadAlert({
         type: "ERR",
-        text: "No valid rows found. Ensure columns include: Email, Student Name, Date, Slot Time, Instructor.",
+        text: "No valid rows found. Use columns: Instructor, Date, Slot Time, Domain",
+      });
+      return;
+    }
+
+    if (poolCount > 0 && directAssigned.length === 0) {
+      setSlotUploadAlert({
+        type: "OK",
+        text: `Published ${poolCount} Examiner availability slot(s) from ${sourceLabel}. Unlocked students can now pick 1 preferred slot.`,
       });
       return;
     }
 
     setOneOnOneSlots((prev) => {
       const updated = [...prev];
-      imported.forEach((item) => {
+      directAssigned.forEach((item) => {
         const existingIdx = updated.findIndex(
           (s) =>
             s.studentEmail.toLowerCase() === item.studentEmail.toLowerCase() &&
@@ -3581,7 +3888,7 @@ export default function App() {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: "array" });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "", raw: false });
       ingestParsedSlotRows(rows, file.name);
     } catch {
       setSlotUploadAlert({
@@ -3599,7 +3906,7 @@ export default function App() {
     try {
       const wb = XLSX.read(slotPasteText.trim(), { type: "string" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
       ingestParsedSlotRows(rows, "Pasted Spreadsheet Table");
       setSlotPasteText("");
     } catch {
@@ -3636,16 +3943,16 @@ export default function App() {
 
   const handleDownloadSampleSlotsCsv = () => {
     const csvContent = [
-      "Email,Student Name,Date,Slot Time,Instructor",
-      "22f3001842@ds.study.iitm.ac.in,Aarav Sharma,2026-11-24,10:00 AM - 10:30 AM IST,Dr. R. Subramanian",
-      "22f3002190@ds.study.iitm.ac.in,Diya Nair,2026-11-24,10:30 AM - 11:00 AM IST,Dr. R. Subramanian",
-      "23f1000814@ds.study.iitm.ac.in,Rohan Kulkarni,2026-11-24,11:00 AM - 11:30 AM IST,Prof. Meera Krishnan",
+      "Instructor,Date,Slot Time,Domain",
+      "Lalit,2026-11-28,10:00 AM - 10:30 AM IST,Data Science",
+      "Lalit,2026-11-28,11:00 AM - 11:30 AM IST,Data Science",
+      "Dr. R. Subramanian,2026-11-28,02:00 PM - 02:30 PM IST,Software Development",
     ].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "iitm_1on1_viva_slots_template.csv";
+    a.download = "iitm_examiner_availability_template.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -3921,7 +4228,7 @@ export default function App() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = String(reader.result || "");
       const lines = text
         .split(/\r?\n/)
@@ -3933,7 +4240,7 @@ export default function App() {
         return;
       }
 
-      const stageUpdates = new Map<string, { attemptNo: number; rawVal: string }>();
+      const updatesByRoll = new Map<string, Map<string, { attemptNo: number; rawVal: string }>>();
       const errors: string[] = [];
       let appliedCount = 0;
 
@@ -3943,8 +4250,13 @@ export default function App() {
           errors.push(`Row ${i + 1}: Expected 4 columns (roll_no,stage_id,attempt_no,score_or_outcome).`);
           continue;
         }
-        const [rollNo, stageId, attemptStr, rawVal] = cols;
-        const stage = trainingStages.find((s) => s.id === stageId.toUpperCase());
+        const [rawRoll, stageId, attemptStr, rawVal] = cols;
+        const rollNo = rawRoll.trim().toUpperCase();
+        if (!rollNo) {
+          errors.push(`Row ${i + 1}: Missing roll_no.`);
+          continue;
+        }
+        const stage = INITIAL_TRAINING_STAGES.find((s) => s.id === stageId.toUpperCase());
         if (!stage || stage.evaluationType === "ONE_ON_ONE") {
           errors.push(`Row ${i + 1}: Unknown or Examiner-only stage '${stageId}'.`);
           continue;
@@ -3961,54 +4273,98 @@ export default function App() {
             continue;
           }
         }
-        stageUpdates.set(stage.id, { attemptNo, rawVal });
+        if (!updatesByRoll.has(rollNo)) {
+          updatesByRoll.set(rollNo, new Map());
+        }
+        updatesByRoll.get(rollNo)!.set(stage.id, { attemptNo, rawVal });
         appliedCount++;
       }
 
-      if (stageUpdates.size > 0) {
-        setTrainingStages((prev) =>
-          prev.map((st) => {
-            const upd = stageUpdates.get(st.id);
-            if (!upd) return st;
-            if (st.evaluationType === "MARKS") {
-              const score = Number(upd.rawVal);
-              return {
-                ...st,
-                attemptsUsed: upd.attemptNo,
-                obtainedMarks: score,
-                statusText: score >= st.minRequired ? "PASSED" : "BELOW_CUTOFF",
-              };
-            }
-            const outcome = upd.rawVal.toLowerCase() === "hire" ? "Hire" : "No-Hire";
+      const applyStageUpdates = (
+        baseStages: TrainingStageScore[],
+        stageMap: Map<string, { attemptNo: number; rawVal: string }>
+      ): TrainingStageScore[] =>
+        baseStages.map((st) => {
+          const upd = stageMap.get(st.id);
+          if (!upd) return st;
+          if (st.evaluationType === "MARKS") {
+            const score = Number(upd.rawVal);
             return {
               ...st,
               attemptsUsed: upd.attemptNo,
-              statusText: outcome,
+              obtainedMarks: score,
+              statusText: score >= st.minRequired ? "PASSED" : "BELOW_CUTOFF",
             };
-          })
-        );
+          }
+          const outcome = upd.rawVal.toLowerCase() === "hire" ? "Hire" : "No-Hire";
+          return {
+            ...st,
+            attemptsUsed: upd.attemptNo,
+            statusText: outcome,
+          };
+        });
+
+      const activeCoordRoll = coordTargetRoll.trim().toUpperCase();
+      for (const [rollNo, stageMap] of updatesByRoll.entries()) {
+        try {
+          const bootRes = await fetch(
+            `${API_BASE_URL}/api/v1/portal-state/bootstrap?student_roll=${encodeURIComponent(rollNo)}&scope_student_only=true`
+          );
+          const bootData = bootRes.ok ? await bootRes.json() : {};
+          const existingStages: TrainingStageScore[] =
+            Array.isArray(bootData.trainingStages) && bootData.trainingStages.length > 0
+              ? bootData.trainingStages
+              : INITIAL_TRAINING_STAGES;
+          const mergedStages = applyStageUpdates(existingStages, stageMap);
+
+          if (rollNo === activeCoordRoll) {
+            setTrainingStages(mergedStages);
+          }
+
+          await fetch(`${API_BASE_URL}/api/v1/portal-state/sync`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentRoll: rollNo,
+              trainingStages: mergedStages,
+              activitySubmissions,
+              helpdeskTickets,
+              studentProfile: bootData.studentProfile || {},
+              snapshot: bootData.snapshot || {},
+            }),
+          });
+        } catch {
+          if (rollNo === activeCoordRoll) {
+            setTrainingStages((prev) => applyStageUpdates(prev, stageMap));
+          }
+        }
+      }
+
+      const firstRoll = Array.from(updatesByRoll.keys())[0];
+      if (firstRoll && !updatesByRoll.has(activeCoordRoll)) {
+        setCoordTargetRoll(firstRoll);
       }
 
       appendAudit(
         user?.email || "coordinator@iitm.ac.in",
         "TRAINING_COORDINATOR",
         "BATCH_TRAINING_CSV_UPLOADED",
-        `Applied ${appliedCount} stage updates (${errors.length} rejected)`,
+        `Applied ${appliedCount} stage updates across ${updatesByRoll.size} student(s) (${errors.length} rejected)`,
         appliedCount > 0 ? "SUCCESS" : "BLOCKED"
       );
 
-      if (errors.length > 0) {
+      if (appliedCount > 0) {
         setCoordFeedback({
-          type: appliedCount > 0 ? "OK" : "ERR",
-          text: `Batch Processed: ${appliedCount} stages updated. ${errors.length} row(s) skipped: ${errors.slice(0, 2).join(" | ")}`,
+          type: "OK",
+          text: `Batch CSV processed: ${appliedCount} stage record(s) updated & persisted to PostgreSQL across ${updatesByRoll.size} student(s) (${Array.from(updatesByRoll.keys()).join(", ")}).${errors.length > 0 ? ` (${errors.length} row(s) skipped)` : ""}`,
         });
       } else {
         setCoordFeedback({
-          type: "OK",
-          text: `Batch CSV Success: Updated ${appliedCount} stage records with 2-attempt validation. Student dashboard is now synced.`,
+          type: "ERR",
+          text: errors[0] || "No valid stage updates found in CSV.",
         });
       }
-      if (coordCsvInputRef.current) coordCsvInputRef.current.value = "";
+      e.target.value = "";
     };
     reader.readAsText(file);
   };
@@ -7461,10 +7817,21 @@ export default function App() {
                             <span className="text-slate-400">{app.jobTitle}</span>
                           </td>
                           <td className="py-3 px-3">
-                            <span className="text-slate-200 block">
-                              {app.studentName} ({app.studentRoll}) • CGPA {app.studentCgpa}
-                            </span>
-                            <span className="text-indigo-300 text-[11px]">{app.resumeTitle}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRecruiterCandidateDossier(app.studentRoll, app.studentName)}
+                              className="text-left group"
+                            >
+                              <span className="text-indigo-300 group-hover:text-indigo-200 underline decoration-indigo-400/60 font-semibold block">
+                                {app.studentName} ({app.studentRoll}) • CGPA {app.studentCgpa}
+                              </span>
+                              <span className="text-slate-400 text-[11px] block">
+                                Applied Resume: <span className="text-slate-200">{app.resumeTitle}</span>
+                              </span>
+                              <span className="inline-block mt-1 px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 text-[10px] font-semibold">
+                                View Scorecard, Drive Links &amp; Inline Resume ↗
+                              </span>
+                            </button>
                           </td>
                           <td className="py-3 px-3">
                             <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold">
@@ -8035,7 +8402,7 @@ export default function App() {
 
         {activeTab === "TRAINING" && (
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading Training & Vetting Workspace...</div>}>
-            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
+            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, examinerSlots, setExaminerSlots, registrations, ingestParsedSlotRows, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
           </Suspense>
         )}
 

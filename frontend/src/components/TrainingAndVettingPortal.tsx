@@ -1,3 +1,4 @@
+import { useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   AlertTriangle,
@@ -28,9 +29,21 @@ import {
 } from "../App";
 
 export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
+  const [inlineDocPreview, setInlineDocPreview] = useState<{ title: string; url: string } | null>(null);
+  const toDriveEmbedUrl = (rawUrl: string) => {
+    const m = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?#]+)/i);
+    if (m && m[1]) return `https://drive.google.com/file/d/${m[1]}/preview`;
+    const mOpen = rawUrl.match(/drive\.google\.com\/open\?id=([^&#]+)/i);
+    if (mOpen && mOpen[1]) return `https://drive.google.com/file/d/${mOpen[1]}/preview`;
+    return rawUrl;
+  };
   const {
     activePoolSize,
     activeTrack,
+    examinerSlots = [],
+    setExaminerSlots,
+    registrations = [],
+    ingestParsedSlotRows,
     activityAlert,
     activityCompletedDate,
     activityProofUrl,
@@ -154,6 +167,107 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
     user,
   } = ctx;
 
+  const [exPoolText, setExPoolText] = useState("");
+  const [exPoolInstructor, setExPoolInstructor] = useState("");
+  const [exPoolDate, setExPoolDate] = useState("");
+  const [exPoolTime, setExPoolTime] = useState("");
+  const [exPoolDomain] = useState("Data Science");
+  const [exPoolAlert, setExPoolAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+
+  const approvedExaminers = registrations.filter(
+    (r: any) => r.role === "EXAMINER" && r.status === "APPROVED"
+  );
+  const approvedStudents = registrations.filter(
+    (r: any) => r.role === "STUDENT" && r.status === "APPROVED"
+  );
+
+  const handleImportExaminerPoolRows = (rawText: string) => {
+    const lines = rawText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return;
+    const startIdx =
+      lines[0].toLowerCase().includes("date") || lines[0].toLowerCase().includes("instructor") ? 1 : 0;
+    const added: any[] = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const cols = lines[i].split(",").map((c) => c.trim());
+      if (cols.length < 3) continue;
+      const looksLikeDate2 = /^\d{4}-\d{2}-\d{2}$/.test(cols[1]);
+      const instructor = cols[0];
+      const instructorEmail = looksLikeDate2 ? "" : cols[1];
+      const date = looksLikeDate2 ? cols[1] : cols[2];
+      const slotTime = looksLikeDate2 ? cols[2] : cols[3] || "10:00 AM - 10:30 AM IST";
+      const domain = (looksLikeDate2 ? cols[3] : cols[4]) || "Data Science";
+      if (!instructor || !date || !slotTime) continue;
+      added.push({
+        id: `EXPOOL-${Date.now()}-${i}`,
+        instructor,
+        instructorEmail,
+        date,
+        slotTime,
+        domain,
+        status: "OPEN" as const,
+      });
+    }
+    if (added.length === 0) {
+      setExPoolAlert({
+        type: "ERR",
+        text: "No valid rows found. Format: Instructor, Date (YYYY-MM-DD), Slot Time, Domain",
+      });
+      return;
+    }
+    setExaminerSlots((prev: any[]) => [...prev, ...added]);
+    setExPoolAlert({
+      type: "OK",
+      text: `Published ${added.length} Examiner availability slot(s) for students to pick.`,
+    });
+  };
+
+  const handleStudentPickSingleSlot = (slotId: string) => {
+    const myEmail = user.email.trim().toLowerCase();
+    const alreadyPicked = examinerSlots.find(
+      (s: any) =>
+        (s.requestedByEmail || "").toLowerCase() === myEmail &&
+        (s.status === "REQUESTED" || s.status === "ALLOTTED")
+    );
+    if (alreadyPicked) return;
+    const myReg = approvedStudents.find((r: any) => r.email.toLowerCase() === myEmail);
+    const myName = myReg?.fullName || myEmail.split("@")[0].toUpperCase();
+    setExaminerSlots((prev: any[]) =>
+      prev.map((s: any) =>
+        s.id === slotId && s.status === "OPEN"
+          ? { ...s, status: "REQUESTED", requestedByEmail: user.email, requestedByName: myName }
+          : s
+      )
+    );
+  };
+
+  const handleCoordinatorAllotFromPool = (poolSlot: any) => {
+    if (!poolSlot.requestedByEmail) return;
+    if (typeof ingestParsedSlotRows === "function") {
+      ingestParsedSlotRows(
+        [
+          {
+            Email: poolSlot.requestedByEmail,
+            "Student Name": poolSlot.requestedByName || poolSlot.requestedByEmail.split("@")[0].toUpperCase(),
+            Date: poolSlot.date,
+            "Slot Time": poolSlot.slotTime,
+            Instructor: poolSlot.instructor,
+          },
+        ],
+        "Examiner Pool Allotment"
+      );
+    }
+    setExaminerSlots((prev: any[]) =>
+      prev.map((s: any) => (s.id === poolSlot.id ? { ...s, status: "ALLOTTED" } : s))
+    );
+    setExPoolAlert({
+      type: "OK",
+      text: `Allotted ${poolSlot.date} (${poolSlot.slotTime}) with ${poolSlot.instructor} to ${poolSlot.requestedByName || poolSlot.requestedByEmail}.`,
+    });
+  };
+
   return (
     <>
           <div className="space-y-8">
@@ -178,24 +292,97 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         </p>
                       </div>
                     </div>
-                    {latestSlot && (
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                          latestSlot.status === "COMPLETED"
-                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                            : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                        }`}
-                      >
-                        {latestSlot.status === "COMPLETED" ? "1-on-1 Completed" : "Scheduled"}
-                      </span>
-                    )}
+                    {latestSlot && (() => {
+                      const sRoll = String(latestSlot.studentEmail || "").split("@")[0].trim().toUpperCase();
+                      const matchedEval = evaluations.find(
+                        (ev: any) => String(ev.studentRoll || "").trim().toUpperCase() === sRoll
+                      );
+                      const isDone = latestSlot.status === "COMPLETED" || Boolean(matchedEval);
+                      return (
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                            isDone
+                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                              : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                          }`}
+                        >
+                          {isDone ? "1-on-1 Completed" : "Scheduled"}
+                        </span>
+                      );
+                    })()}
                   </div>
 
-                  {!latestSlot ? (
-                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
-                      No 1-on-1 Viva slot has been uploaded for <span className="text-slate-200 font-mono">{user.email}</span> yet. Once the Training Coordinator publishes the slot sheet, your Date, Slot Time, and Instructor will appear here.
-                    </div>
-                  ) : (
+                  {!latestSlot ? (() => {
+                    const progCheck = computeTrainingAndActivityProgress();
+                    const myEmailLower = user.email.trim().toLowerCase();
+                    const myRequestedPoolSlot = examinerSlots.find(
+                      (s: any) => (s.requestedByEmail || "").toLowerCase() === myEmailLower
+                    );
+                    const openPoolSlots = examinerSlots.filter((s: any) => s.status === "OPEN");
+
+                    return (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+                        {myRequestedPoolSlot ? (
+                          <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-200 space-y-1">
+                            <div className="font-semibold text-white">
+                              Preferred Slot Selected — Awaiting Coordinator Allotment
+                            </div>
+                            <div>
+                              Date: <strong className="text-white">{myRequestedPoolSlot.date}</strong> • Time:{" "}
+                              <strong className="text-cyan-300">{myRequestedPoolSlot.slotTime}</strong> • Examiner:{" "}
+                              <strong className="text-indigo-300">{myRequestedPoolSlot.instructor}</strong>
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              You may select only 1 slot. Once the Training Coordinator confirms your allotment, it will appear above as Scheduled.
+                            </div>
+                          </div>
+                        ) : !progCheck.eligibleForOneOnOne ? (
+                          <div className="text-slate-400">
+                            Complete Level 1, Level 2, and your required IIC Activity Points to unlock 1-on-1 Viva slot selection.
+                          </div>
+                        ) : openPoolSlots.length === 0 ? (
+                          <div className="text-slate-400">
+                            No open Examiner slots have been published by the Training Coordinator yet. Check back once the Examiner availability sheet is uploaded.
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-semibold text-emerald-300">
+                                Level 3 Unlocked — Pick Your Preferred 1-on-1 Viva Slot (1 Choice Only)
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {openPoolSlots.length} open slot(s) available
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                              {openPoolSlots.map((slot: any) => (
+                                <div
+                                  key={slot.id}
+                                  className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3"
+                                >
+                                  <div>
+                                    <div className="font-semibold text-white">
+                                      {slot.date} • <span className="text-cyan-300">{slot.slotTime}</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 mt-0.5">
+                                      Examiner: <span className="text-indigo-300 font-medium">{slot.instructor}</span> ({slot.domain})
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStudentPickSingleSlot(slot.id)}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shrink-0"
+                                  >
+                                    Pick Slot
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
                         <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
@@ -225,7 +412,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                               ? latestSlot.isPlacementReady
                                 ? "Placement Ready ✓"
                                 : "Action Required (Remedial Tasks)"
-                              : "Awaiting 1-on-1 Completion"}
+                              : (() => { const sRoll = String(latestSlot.studentEmail || "").split("@")[0].trim().toUpperCase(); const ev = evaluations.find((x: any) => String(x.studentRoll || "").trim().toUpperCase() === sRoll); return (latestSlot.status === "COMPLETED" || ev) ? ((ev ? ev.isPlacementReady : latestSlot.isPlacementReady) ? "Placement Ready (Cleared)" : "Remedial Tasks Assigned") : "Awaiting 1-on-1 Completion"; })()}
                           </span>
                         </div>
                       </div>
@@ -673,7 +860,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         1-on-1 Slot Bulk Scheduler (CSV / Excel) &amp; Master Progress Tracker
                       </h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Upload a spreadsheet with columns <code className="text-indigo-300">Email, Student Name, Date, Slot Time, Instructor</code> to sync slots across Examiner &amp; Student dashboards.
+                        Upload your collected Examiner availability sheet (<code className="text-indigo-300">Instructor, Date, Slot Time, Domain</code>) so unlocked students can pick 1 slot for your final allotment.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -682,10 +869,10 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         onClick={handleDownloadSampleSlotsCsv}
                         className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200"
                       >
-                        Download Sample CSV Template
+                        Download Examiner Slots CSV Template
                       </button>
                       <label className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer">
-                        Upload CSV / Excel (.xlsx, .xls, .csv)
+                        Upload Examiner Slots (.xlsx, .xls, .csv)
                         <input
                           type="file"
                           accept=".csv,.xlsx,.xls,.tsv"
@@ -745,7 +932,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         rows={3}
                         value={slotPasteText}
                         onChange={(e: any) => setSlotPasteText(e.target.value)}
-                        placeholder={"Email,Student Name,Date,Slot Time,Instructor\n22f3001842@ds.study.iitm.ac.in,Aarav Sharma,2026-11-25,02:00 PM - 02:30 PM IST,Dr. R. Subramanian"}
+                        placeholder={"Instructor,Date,Slot Time,Domain\nLalit,2026-11-28,10:00 AM - 10:30 AM IST,Data Science\nLalit,2026-11-28,11:00 AM - 11:30 AM IST,Data Science"}
                         className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 font-mono text-[11px]"
                       />
                       <button
@@ -758,6 +945,26 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
 
                     <form onSubmit={handleAddSingleSlot} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
                       <div className="font-semibold text-slate-200">Quick Single-Slot Assignment</div>
+                      {approvedStudents.length > 0 && (
+                        <select
+                          value=""
+                          onChange={(e: any) => {
+                            const chosen = approvedStudents.find((s: any) => s.email === e.target.value);
+                            if (chosen) {
+                              setManualSlotEmail(chosen.email);
+                              setManualSlotName(chosen.fullName);
+                            }
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-200"
+                        >
+                          <option value="">Quick-fill Approved Student (optional)...</option>
+                          {approvedStudents.map((st: any) => (
+                            <option key={st.email} value={st.email}>
+                              {st.fullName} ({st.email})
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           type="email"
@@ -788,21 +995,187 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Instructor / Examiner Name"
-                          value={manualSlotInstructor}
-                          onChange={(e: any) => setManualSlotInstructor(e.target.value)}
+                        <select
+                          value={
+                            approvedExaminers.some((ex: any) => ex.fullName === manualSlotInstructor)
+                              ? manualSlotInstructor
+                              : manualSlotInstructor
+                              ? "__CUSTOM__"
+                              : ""
+                          }
+                          onChange={(e: any) => {
+                            if (e.target.value === "__CUSTOM__") {
+                              setManualSlotInstructor("");
+                            } else {
+                              setManualSlotInstructor(e.target.value);
+                            }
+                          }}
                           className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
-                        />
+                        >
+                          <option value="">Select Approved Examiner...</option>
+                          {approvedExaminers.map((ex: any) => (
+                            <option key={ex.email} value={ex.fullName}>
+                              {ex.fullName} ({ex.email})
+                            </option>
+                          ))}
+                          <option value="__CUSTOM__">Other / External Examiner...</option>
+                        </select>
+                        {!approvedExaminers.some((ex: any) => ex.fullName === manualSlotInstructor) && (
+                          <input
+                            type="text"
+                            placeholder="Examiner Name"
+                            value={manualSlotInstructor}
+                            onChange={(e: any) => setManualSlotInstructor(e.target.value)}
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                          />
+                        )}
                         <button
                           type="submit"
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shrink-0"
                         >
-                          Add Slot
+                          Allot Slot
                         </button>
                       </div>
                     </form>
+                  </div>
+
+                  {/* Examiner Availability Pool & Student Single-Slot Allotment */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-indigo-500/30 space-y-3 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-white text-sm">
+                          Examiner Availability Pool &amp; Student Single-Slot Allotment ({examinerSlots.length})
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          1) Import collected Examiner slots from your Google Form sheet or add below → 2) Unlocked students pick 1 preferred slot → 3) Confirm &amp; Allot here.
+                        </p>
+                      </div>
+                      {examinerSlots.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setExaminerSlots([])}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-semibold"
+                        >
+                          Clear Pool ({examinerSlots.length})
+                        </button>
+                      )}
+                    </div>
+
+                    {exPoolAlert && (
+                      <div
+                        className={`p-2.5 rounded-lg border flex items-center justify-between ${
+                          exPoolAlert.type === "OK"
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                            : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                        }`}
+                      >
+                        <span>{exPoolAlert.text}</span>
+                        <button type="button" onClick={() => setExPoolAlert(null)} className="underline text-[11px]">
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                        <select
+                          value={exPoolInstructor}
+                          onChange={(e: any) => setExPoolInstructor(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        >
+                          <option value="">Choose Approved Examiner...</option>
+                          {approvedExaminers.map((ex: any) => (
+                            <option key={ex.email} value={ex.fullName}>
+                              {ex.fullName} ({ex.email})
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="date"
+                          value={exPoolDate}
+                          onChange={(e: any) => setExPoolDate(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Slot Time (e.g. 03:00 PM - 03:30 PM)"
+                          value={exPoolTime}
+                          onChange={(e: any) => setExPoolTime(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!exPoolInstructor || !exPoolDate || !exPoolTime.trim()) {
+                              setExPoolAlert({ type: "ERR", text: "Select Examiner, Date, and Slot Time." });
+                              return;
+                            }
+                            const exObj = approvedExaminers.find((ex: any) => ex.fullName === exPoolInstructor);
+                            setExaminerSlots((prev: any[]) => [
+                              ...prev,
+                              {
+                                id: `EXPOOL-${Date.now()}`,
+                                instructor: exPoolInstructor,
+                                instructorEmail: exObj?.email || "",
+                                date: exPoolDate,
+                                slotTime: exPoolTime.trim(),
+                                domain: exPoolDomain,
+                                status: "OPEN",
+                              },
+                            ]);
+                            setExPoolTime("");
+                            setExPoolAlert({ type: "OK", text: "Added Examiner slot to Student selection pool." });
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                        >
+                          + Add Examiner Slot
+                        </button>
+                    </div>
+
+                    {examinerSlots.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                        {examinerSlots.map((ps: any) => (
+                          <div
+                            key={ps.id}
+                            className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-2"
+                          >
+                            <div>
+                              <div className="font-semibold text-white">
+                                {ps.date} • <span className="text-cyan-300">{ps.slotTime}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                Examiner: <span className="text-indigo-300">{ps.instructor}</span>
+                                {ps.requestedByEmail && (
+                                  <>
+                                    {" "}
+                                    • Selected by:{" "}
+                                    <span className="text-amber-300 font-semibold">
+                                      {ps.requestedByName} ({ps.requestedByEmail})
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {ps.status === "OPEN" ? (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-semibold">
+                                OPEN FOR STUDENTS
+                              </span>
+                            ) : ps.status === "REQUESTED" ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCoordinatorAllotFromPool(ps)}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shrink-0"
+                              >
+                                Confirm &amp; Allot
+                              </button>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                                ALLOTTED ✓
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Entire 1-on-1 Progress Table */}
@@ -1258,19 +1631,36 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {marksheet ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDriveDocPreview({
-                            title: `${resolveActiveStudentRoll()} — IITM BS Official Scorecard`,
-                            subtitle: `Verified CGPA: ${marksheet.cgpa}`,
-                            url: marksheet.driveUrl,
-                          })
-                        }
-                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold"
-                      >
-                        Preview BS Scorecard (CGPA {marksheet.cgpa})
-                      </button>
+                      <>
+                        {marksheet.driveUrl && (
+                          <a
+                            href={marksheet.driveUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs font-semibold"
+                          >
+                            Scorecard Drive Link ↗
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setInlineDocPreview(
+                              inlineDocPreview?.url === marksheet.driveUrl
+                                ? null
+                                : {
+                                    title: `${resolveActiveStudentRoll()} — IITM BS Official Scorecard (CGPA ${marksheet.cgpa})`,
+                                    url: marksheet.driveUrl,
+                                  }
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold"
+                        >
+                          {inlineDocPreview?.url === marksheet.driveUrl
+                            ? "Hide Scorecard Preview"
+                            : `Inline Preview Scorecard (CGPA ${marksheet.cgpa})`}
+                        </button>
+                      </>
                     ) : (
                       <span className="px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 text-xs">
                         No BS Scorecard Linked
@@ -1278,20 +1668,36 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                     )}
                     {resumes.length > 0 ? (
                       resumes.map((resItem: any, rIdx: any) => (
-                        <button
-                          key={resItem.id}
-                          type="button"
-                          onClick={() =>
-                            setDriveDocPreview({
-                              title: `${resolveActiveStudentRoll()} — Resume #${rIdx + 1}: ${resItem.title}`,
-                              subtitle: `Target Role: ${resItem.targetRole}`,
-                              url: resItem.driveUrl,
-                            })
-                          }
-                          className="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs font-semibold"
-                        >
-                          Preview Resume #{rIdx + 1}
-                        </button>
+                        <div key={resItem.id} className="inline-flex items-center gap-1.5">
+                          {resItem.driveUrl && (
+                            <a
+                              href={resItem.driveUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs font-semibold"
+                            >
+                              Resume #{rIdx + 1} Drive ↗
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setInlineDocPreview(
+                                inlineDocPreview?.url === resItem.driveUrl
+                                  ? null
+                                  : {
+                                      title: `${resolveActiveStudentRoll()} — Resume #${rIdx + 1}: ${resItem.title} (${resItem.targetRole})`,
+                                      url: resItem.driveUrl,
+                                    }
+                              )
+                            }
+                            className="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold"
+                          >
+                            {inlineDocPreview?.url === resItem.driveUrl
+                              ? `Hide Resume #${rIdx + 1}`
+                              : `Inline Preview Resume #${rIdx + 1}`}
+                          </button>
+                        </div>
                       ))
                     ) : (
                       <span className="px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 text-xs">
@@ -1300,6 +1706,72 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                     )}
                   </div>
                 </div>
+
+                {(marksheet?.driveUrl || resumes.length > 0) && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-1 text-[11px]">
+                    {marksheet?.driveUrl && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 shrink-0">BS Scorecard Drive URL:</span>
+                        <a
+                          href={marksheet.driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sky-300 hover:text-sky-200 underline truncate font-mono"
+                        >
+                          {marksheet.driveUrl}
+                        </a>
+                      </div>
+                    )}
+                    {resumes.map((resItem: any, rIdx: any) =>
+                      resItem.driveUrl ? (
+                        <div key={`url-${resItem.id}`} className="flex items-center gap-2">
+                          <span className="text-slate-400 shrink-0">Resume #{rIdx + 1} ({resItem.title}) URL:</span>
+                          <a
+                            href={resItem.driveUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sky-300 hover:text-sky-200 underline truncate font-mono"
+                          >
+                            {resItem.driveUrl}
+                          </a>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                )}
+
+                {inlineDocPreview && (
+                  <div className="mt-3 rounded-xl border border-indigo-500/40 bg-slate-900 overflow-hidden">
+                    <div className="px-3.5 py-2 bg-indigo-950/60 border-b border-indigo-500/30 flex items-center justify-between gap-2">
+                      <span className="font-semibold text-indigo-200 text-xs truncate">
+                        Inline Document Viewer: {inlineDocPreview.title}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href={inlineDocPreview.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 text-[11px] font-semibold"
+                        >
+                          Open in New Tab ↗
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setInlineDocPreview(null)}
+                          className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px] font-semibold"
+                        >
+                          Close Viewer ✕
+                        </button>
+                      </div>
+                    </div>
+                    <iframe
+                      src={toDriveEmbedUrl(inlineDocPreview.url)}
+                      title={inlineDocPreview.title}
+                      className="w-full h-[460px] bg-white"
+                      allow="autoplay"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1588,7 +2060,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
               );
             })()}
 
-            {user.role !== "EXAMINER" && (
+            {user.role === "STUDENT" && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Domain & Track Selector + Question Bank Builder + Verified Badges */}
               <div className="lg:col-span-5 space-y-6">
@@ -1882,13 +2354,17 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6">
-                  {user.role === "STUDENT" ? (
+                  {user.role !== "EXAMINER" ? (
                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
                       <p className="font-semibold text-indigo-300">
-                        Student View — Examiner Interview Rubric Locked
+                        {user.role === "STUDENT"
+                          ? "Student View — Examiner Interview Rubric Locked"
+                          : "Coordinator Governance View — Examiner Rubric Restricted to Approved Examiners"}
                       </p>
                       <p className="text-slate-400">
-                        This evaluation rubric is restricted to the IITM Examiner panel. Once your 1-on-1 readiness interview is completed and marked 'Placement Ready', your scorecard and job applications will unlock automatically.
+                        {user.role === "STUDENT"
+                          ? "This evaluation rubric is restricted to the IITM Examiner panel. Once your 1-on-1 readiness interview is completed and marked 'Placement Ready', your scorecard and job applications will unlock automatically."
+                          : "Live 1-on-1 competency scoring and Placement Ready sign-offs can only be submitted by an approved IITM Examiner. Completed verdicts sync automatically to the ledger on the right."}
                       </p>
                     </div>
                   ) : (
@@ -1978,6 +2454,9 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                                       type="button"
                                       onClick={() => {
                                         setSelectedSlotIdForEval(slot.id);
+                                        if (slot.studentEmail) {
+                                          setCoordTargetRoll(slot.studentEmail.split("@")[0].trim().toUpperCase());
+                                        }
                                         if (slot.instructorFeedback) setExaminerNotes(slot.instructorFeedback);
                                       }}
                                       className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
@@ -2158,20 +2637,69 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                 </div>
 
                 <div className="lg:col-span-6 space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Recorded Examiner Viva Evaluations ({evaluations.length})
-                  </h3>
+                  {(() => {
+                    const activeRoll = String(resolveActiveStudentRoll() || user.email.split("@")[0]).trim().toUpperCase();
+                    const myEmailLower = user.email.trim().toLowerCase();
+                    const seenRolls = new Set<string>();
+                    const uniqueEvaluations = evaluations.filter((ev: any) => {
+                      const r = String(ev.studentRoll || "").trim().toUpperCase();
+                      if (!r) return true;
+                      if (seenRolls.has(r)) return false;
+                      seenRolls.add(r);
+                      return true;
+                    });
+                    const visibleEvaluations =
+                      user.role === "STUDENT"
+                        ? uniqueEvaluations.filter(
+                            (ev: any) =>
+                              String(ev.studentRoll || "").trim().toUpperCase() === activeRoll ||
+                              String(ev.studentEmail || "").trim().toLowerCase() === myEmailLower
+                          )
+                        : uniqueEvaluations;
 
-                  {evaluations.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
-                      No final-stage examiner interview evaluations recorded yet.
-                    </div>
-                  ) : (
-                    evaluations.map((ev: any) => (
+                    return (
+                      <>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          {user.role === "STUDENT"
+                            ? `Your Recorded Examiner Viva Evaluations (${visibleEvaluations.length})`
+                            : `Recorded Examiner Viva Evaluations (${visibleEvaluations.length})`}
+                        </h3>
+
+                        {visibleEvaluations.length === 0 ? (
+                          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                            {user.role === "STUDENT"
+                              ? "No 1-on-1 Viva evaluations recorded for your account yet."
+                              : "No final-stage examiner interview evaluations recorded yet."}
+                          </div>
+                        ) : (
+                          visibleEvaluations.map((ev: any) => (
                       <div
                         key={ev.id}
                         className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5 text-xs"
                       >
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+                          <div>
+                            <div className="font-bold text-white text-xs">
+                              {(() => {
+                                const cleanRoll = String(ev.studentRoll || "").trim().toUpperCase();
+                                const matchedSlot = oneOnOneSlots.find(
+                                  (s: any) =>
+                                    String(s.studentEmail || "").split("@")[0].trim().toUpperCase() === cleanRoll
+                                );
+                                return matchedSlot
+                                  ? `${matchedSlot.studentName} • ${cleanRoll} (${matchedSlot.studentEmail})`
+                                  : cleanRoll || "Candidate";
+                              })()}
+                            </div>
+                            {ev.examinerEmail && (
+                              <div className="text-[11px] text-slate-400">
+                                Evaluated by: <span className="text-indigo-300 font-mono">{ev.examinerEmail}</span>
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500">{ev.evaluatedAt}</span>
+                        </div>
+
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span
@@ -2190,7 +2718,6 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                               </span>
                             )}
                           </div>
-                          <span className="text-slate-500">{ev.evaluatedAt}</span>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 pt-1">
@@ -2214,6 +2741,12 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                           <span className="text-slate-500">Observed Skillsets: </span>
                           <span className="text-slate-200">{ev.skillsets.join(", ")}</span>
                         </div>
+                        {ev.notes && (
+                          <div className="text-slate-300 bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                            <span className="text-slate-400 font-semibold">Examiner Remarks: </span>
+                            {ev.notes}
+                          </div>
+                        )}
 
                         {!ev.isPlacementReady && ev.remedialTasks.length > 0 && (
                           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
@@ -2228,8 +2761,11 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                           </div>
                         )}
                       </div>
-                    ))
-                  )}
+                          ))
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Activity,
   Briefcase,
@@ -61,7 +62,73 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     setActiveTab,
   } = ctx;
 
-          const studentRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "STUDENT");
+          const [inlinePreviewDoc, setInlinePreviewDoc] = useState<{ title: string; url: string } | null>(null);
+  const toEmbedUrl = (rawUrl: string) => {
+    const m = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?#]+)/i);
+    if (m && m[1]) return `https://drive.google.com/file/d/${m[1]}/preview`;
+    const mOpen = rawUrl.match(/drive\.google\.com\/open\?id=([^&#]+)/i);
+    if (mOpen && mOpen[1]) return `https://drive.google.com/file/d/${mOpen[1]}/preview`;
+    return rawUrl;
+  };
+
+  const [studentDossierModal, setStudentDossierModal] = useState<{
+    loading: boolean;
+    error: string | null;
+    reg: RegistrationRequestRecord;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any | null;
+  } | null>(null);
+
+  const handleOpenUserDossier = async (reg: RegistrationRequestRecord) => {
+    setInlinePreviewDoc(null);
+    if (reg.role !== "STUDENT") {
+      setStudentDossierModal({ loading: false, error: null, reg, data: { nonStudentRole: reg.role } });
+      return;
+    }
+    setStudentDossierModal({ loading: true, error: null, reg, data: null });
+    try {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+      let token = "";
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        const v = localStorage.getItem(k) || "";
+        if (v.startsWith("eyJ")) {
+          token = v;
+          break;
+        }
+        if (v.includes("access_token")) {
+          try {
+            const parsed = JSON.parse(v);
+            if (parsed?.access_token) {
+              token = parsed.access_token;
+              break;
+            }
+          } catch {
+            // ignore non-JSON
+          }
+        }
+      }
+      const res = await fetch(`${apiBase}/api/v1/students/admin/${encodeURIComponent(reg.id)}/dossier?email=${encodeURIComponent(reg.email)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Failed to load student dossier (HTTP ${res.status})`);
+      }
+      const data = await res.json();
+      setStudentDossierModal({ loading: false, error: null, reg, data });
+    } catch (err) {
+      setStudentDossierModal({
+        loading: false,
+        error: err instanceof Error ? err.message : "Could not fetch student profile from backend",
+        reg,
+        data: null,
+      });
+    }
+  };
+
+  const studentRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "STUDENT");
           const recruiterRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "RECRUITER");
           const examinerRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "EXAMINER");
           const coordinatorRegs = registrations.filter((r: RegistrationRequestRecord) => r.role === "TRAINING_COORDINATOR");
@@ -344,7 +411,14 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                                 </div>
                               ) : (
                                 <>
-                                  <div className="font-semibold text-slate-100">{reg.fullName}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenUserDossier(reg)}
+                                    title="Click to view complete profile dossier"
+                                    className="text-left font-semibold text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/50 hover:decoration-indigo-300 underline-offset-2 transition cursor-pointer"
+                                  >
+                                    {reg.fullName}
+                                  </button>
                                   <div className="text-[11px] text-slate-400">{reg.email}</div>
                                 </>
                               )}
@@ -500,6 +574,15 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                                   </>
                                 ) : (
                                   <>
+                                    {reg.role === "STUDENT" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenUserDossier(reg)}
+                                        className="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/40 font-semibold text-[11px] transition"
+                                      >
+                                        Full Profile
+                                      </button>
+                                    )}
                                     {reg.status !== "APPROVED" && (
                                       <button
                                         type="button"
@@ -774,6 +857,635 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Student Complete Dossier Modal (Scorecard, Profile, Skills & Resumes) */}
+              {studentDossierModal && (
+                <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                  <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-bold text-white">
+                            {studentDossierModal.reg.fullName}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/30 text-[11px] font-semibold">
+                            {studentDossierModal.reg.role} DOSSIER
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                              studentDossierModal.reg.status === "APPROVED"
+                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            }`}
+                          >
+                            {studentDossierModal.reg.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {studentDossierModal.reg.email} • ID: {studentDossierModal.reg.id}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setStudentDossierModal(null)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                      >
+                        Close ✕
+                      </button>
+                    </div>
+
+                    {studentDossierModal.loading && (
+                      <div className="py-10 text-center text-xs text-slate-300">
+                        Loading student academic scorecard, profile, and resumes...
+                      </div>
+                    )}
+
+                    {studentDossierModal.error && (
+                      <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
+                        {studentDossierModal.error}
+                      </div>
+                    )}
+
+                    {studentDossierModal.data && studentDossierModal.reg.role !== "STUDENT" && (() => {
+                      const r = studentDossierModal.reg;
+                      const rec = r.recruiterProfileDetails;
+                      const exa = r.examinerProfileDetails;
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const postedDrives = jobs.filter((j: any) => j.recruiterEmail?.toLowerCase() === r.email.toLowerCase());
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const conductedEvals = evaluations.filter((ev: any) => ev.examinerEmail?.toLowerCase() === r.email.toLowerCase() || ev.examinerName === r.fullName);
+
+                      return (
+                        <div className="space-y-4 text-xs">
+                          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                            <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                              1. Account &amp; Institutional Overview
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Role</div>
+                                <div className="text-sm font-bold text-indigo-300 mt-0.5">{r.role}</div>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Department / Organization</div>
+                                <div className="text-xs font-semibold text-white mt-0.5">{r.orgOrDept || "—"}</div>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Submitted / Registered</div>
+                                <div className="text-xs font-semibold text-slate-200 mt-0.5">{r.submittedAt || "Active"}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {r.role === "RECRUITER" && (
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                2. Corporate Recruiter Profile &amp; Drives ({postedDrives.length})
+                              </h4>
+                              {rec ? (
+                                <>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                                    <div><span className="text-slate-400">Company:</span> <span className="text-slate-100 font-semibold">{rec.companyName}</span></div>
+                                    <div><span className="text-slate-400">Designation:</span> <span className="text-slate-200">{rec.designation}</span></div>
+                                    <div><span className="text-slate-400">Headquarters:</span> <span className="text-slate-200">{rec.headquartersLocation}</span></div>
+                                    <div><span className="text-slate-400">Compensation Range:</span> <span className="text-emerald-300 font-semibold">{rec.compensationRange}</span></div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 pt-1">
+                                    {rec.linkedinUrl && (
+                                      <a href={rec.linkedinUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-semibold">
+                                        Verify LinkedIn ↗
+                                      </a>
+                                    )}
+                                    {rec.companyWebsite && (
+                                      <a href={rec.companyWebsite} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                                        Company Website ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-slate-400">No extended corporate metadata attached yet.</div>
+                              )}
+                            </div>
+                          )}
+
+                          {r.role === "EXAMINER" && (
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                2. Examiner Credentials &amp; Evaluations ({conductedEvals.length})
+                              </h4>
+                              {exa ? (
+                                <>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                                    <div><span className="text-slate-400">Organization:</span> <span className="text-slate-100 font-semibold">{exa.organization}</span></div>
+                                    <div><span className="text-slate-400">Designation:</span> <span className="text-slate-200">{exa.designation}</span></div>
+                                    <div><span className="text-slate-400">Experience:</span> <span className="text-slate-200">{exa.yearsExperience} years</span></div>
+                                    <div><span className="text-slate-400">Evaluation Domain:</span> <span className="text-emerald-300 font-semibold">{exa.evaluationDomain}</span></div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 pt-1">
+                                    {exa.linkedinUrl && (
+                                      <a href={exa.linkedinUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-semibold">
+                                        Verify LinkedIn ↗
+                                      </a>
+                                    )}
+                                    {exa.cvDriveUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setDriveDocPreview({
+                                            title: `${r.fullName} — Examiner CV / Credentials`,
+                                            subtitle: `${exa.organization} • ${exa.designation}`,
+                                            url: exa.cvDriveUrl!,
+                                          })
+                                        }
+                                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
+                                      >
+                                        Preview Examiner CV / ID
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-slate-400">No extended examiner credentials attached yet.</div>
+                              )}
+                            </div>
+                          )}
+
+                          {r.role === "TRAINING_COORDINATOR" && (
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                2. Training Coordinator Governance Scope
+                              </h4>
+                              <p className="text-slate-300">
+                                Authorized to publish readiness courses, track student cohort attendance, and certify placement readiness across IITM BS tracks.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {studentDossierModal.data && studentDossierModal.reg.role === "STUDENT" && (() => {
+                      const d = studentDossierModal.data;
+                      const p = d.profile || {};
+                      const matchedEvals = evaluations.filter(
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (ev: any) =>
+                          ev.studentEmail?.toLowerCase() === d.email?.toLowerCase() ||
+                          ev.studentId === d.student_id
+                      );
+                      return (
+                        <div className="space-y-5 text-xs">
+                          {/* Academic Scorecard Summary */}
+                          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                1. Academic Scorecard &amp; Standing
+                              </h4>
+                              {p.marksheet_drive_url || p.marksheet_file_name ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {p.marksheet_drive_url && (
+                                    <a
+                                      href={p.marksheet_drive_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 font-semibold text-[11px]"
+                                    >
+                                      Open Scorecard Drive Link ↗
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const targetUrl =
+                                        p.marksheet_drive_url ||
+                                        `https://drive.iitm.ac.in/scorecards/${encodeURIComponent(p.marksheet_file_name)}`;
+                                      setInlinePreviewDoc(
+                                        inlinePreviewDoc?.url === targetUrl
+                                          ? null
+                                          : { title: `${d.full_name} — Official BS Scorecard`, url: targetUrl }
+                                      );
+                                    }}
+                                    className="px-3 py-1 rounded-lg bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/40 font-semibold text-[11px]"
+                                  >
+                                    {inlinePreviewDoc?.title === `${d.full_name} — Official BS Scorecard`
+                                      ? "Hide Inline Preview"
+                                      : "Inline Preview Scorecard"}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-amber-300">
+                                  No BS Scorecard Drive link saved yet
+                                </span>
+                              )}
+                            </div>
+                            {p.marksheet_drive_url && (
+                              <div className="px-3 py-2 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-[11px]">
+                                <span className="text-slate-400 shrink-0">Scorecard Drive URL:</span>
+                                <a
+                                  href={p.marksheet_drive_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-300 hover:text-sky-200 underline truncate font-mono"
+                                >
+                                  {p.marksheet_drive_url}
+                                </a>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">CGPA</div>
+                                <div className="text-base font-bold text-emerald-300 mt-0.5">{d.cgpa} / 10.0</div>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Roll Number</div>
+                                <div className="text-sm font-semibold text-white mt-0.5 font-mono">{d.roll_number}</div>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Program &amp; Level</div>
+                                <div className="text-xs font-semibold text-indigo-200 mt-0.5">
+                                  {d.program} • {d.current_level}
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <div className="text-[10px] text-slate-400">Standing / Backlogs</div>
+                                <div className="text-xs font-semibold text-slate-200 mt-0.5">
+                                  {d.academic_standing} ({d.active_backlogs} backlogs)
+                                </div>
+                              </div>
+                            </div>
+
+                            {matchedEvals.length > 0 && (
+                              <div className="pt-2 border-t border-slate-800/80">
+                                <div className="text-[11px] font-semibold text-indigo-300 mb-1.5">
+                                  Examiner Assessment &amp; Viva Scorecards ({matchedEvals.length})
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                  {matchedEvals.map((ev: any, idx: number) => (
+                                    <div key={ev.id || idx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                                      <div>
+                                        <div className="font-semibold text-slate-100">{ev.domain || "Technical Assessment"}</div>
+                                        <div className="text-[10px] text-slate-400">Examiner: {ev.examinerName || "Panel"}</div>
+                                      </div>
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                                        {ev.score ?? ev.vivaScore ?? "Cleared"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Uploaded Resumes */}
+                          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5">
+                            <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                              2. Uploaded Resumes ({(d.resumes || []).length} Active)
+                            </h4>
+                            {(d.resumes || []).length === 0 ? (
+                              <div className="text-slate-400 text-xs">
+                                Student has not uploaded any resumes yet.
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {d.resumes.map((r: any) => (
+                                  <div
+                                    key={r.id}
+                                    className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2"
+                                  >
+                                    <div>
+                                      <div className="font-semibold text-slate-100 flex items-center gap-2">
+                                        <span>{r.label}</span>
+                                        {r.is_default && (
+                                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold">
+                                            DEFAULT RESUME
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 mt-0.5">
+                                        File: {r.file_name} • {r.file_size_label || `${Math.max(1, Math.round((r.file_size_bytes || 0) / 1024))} KB`}
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {r.drive_url && (
+                                        <a
+                                          href={r.drive_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 font-semibold text-[11px]"
+                                        >
+                                          Open Drive Link ↗
+                                        </a>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const targetUrl =
+                                            r.drive_url ||
+                                            `https://drive.iitm.ac.in/resumes/${encodeURIComponent(r.file_name)}`;
+                                          setInlinePreviewDoc(
+                                            inlinePreviewDoc?.url === targetUrl
+                                              ? null
+                                              : { title: `${d.full_name} — ${r.label}`, url: targetUrl }
+                                          );
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px]"
+                                      >
+                                        {inlinePreviewDoc?.title === `${d.full_name} — ${r.label}`
+                                          ? "Hide Inline Preview"
+                                          : "Inline Preview"}
+                                      </button>
+                                    </div>
+                                    {r.drive_url && (
+                                      <div className="w-full pt-1.5 mt-1 border-t border-slate-800/80 flex items-center gap-2 text-[11px]">
+                                        <span className="text-slate-400 shrink-0">Drive URL:</span>
+                                        <a
+                                          href={r.drive_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-sky-300 hover:text-sky-200 underline truncate font-mono"
+                                        >
+                                          {r.drive_url}
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {inlinePreviewDoc && (
+                              <div className="mt-3 rounded-xl border border-indigo-500/40 bg-slate-900 overflow-hidden">
+                                <div className="px-3.5 py-2 bg-indigo-950/60 border-b border-indigo-500/30 flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-indigo-200 text-[11px] truncate">
+                                    Inline Document Viewer: {inlinePreviewDoc.title}
+                                  </span>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <a
+                                      href={inlinePreviewDoc.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 text-[10px] font-semibold"
+                                    >
+                                      Pop Out ↗
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInlinePreviewDoc(null)}
+                                      className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-semibold"
+                                    >
+                                      Close Viewer ✕
+                                    </button>
+                                  </div>
+                                </div>
+                                <iframe
+                                  src={toEmbedUrl(inlinePreviewDoc.url)}
+                                  title={inlinePreviewDoc.title}
+                                  className="w-full h-[460px] bg-white"
+                                  allow="autoplay"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Personal, Professional & Links */}
+                          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                            <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                              3. Personal Details, Skills &amp; Portfolio Links
+                            </h4>
+                            {p.headline && <div className="text-slate-200 font-semibold">{p.headline}</div>}
+                            {p.bio && <p className="text-slate-400 leading-relaxed">{p.bio}</p>}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
+                              <div><span className="text-slate-400">Personal Email:</span> <span className="text-slate-200">{p.personal_email || "—"}</span></div>
+                              <div><span className="text-slate-400">Mobile:</span> <span className="text-slate-200">{p.phone || "—"}</span></div>
+                              <div><span className="text-slate-400">Location:</span> <span className="text-slate-200">{[p.city, p.state].filter(Boolean).join(", ") || "—"}</span></div>
+                              <div><span className="text-slate-400">Category:</span> <span className="text-slate-200">{p.category || "GENERAL"}</span></div>
+                              <div><span className="text-slate-400">Degree Type:</span> <span className="text-slate-200">{d.degree_type}</span></div>
+                              <div><span className="text-slate-400">Preferred Roles:</span> <span className="text-slate-200">{p.preferred_roles || "—"}</span></div>
+                            </div>
+
+                            {p.is_working_professional && (
+                              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200">
+                                Working Professional: {p.present_company} ({p.work_domain}) • {p.years_of_experience} yrs • {p.work_location} • Current CTC: ₹{p.current_ctc_lpa} LPA
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {p.github_url && (
+                                <a href={p.github_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold">
+                                  GitHub ↗
+                                </a>
+                              )}
+                              {p.linkedin_url && (
+                                <a href={p.linkedin_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-semibold">
+                                  LinkedIn ↗
+                                </a>
+                              )}
+                              {p.kaggle_url && (
+                                <a href={p.kaggle_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-[11px] font-semibold">
+                                  Kaggle ↗
+                                </a>
+                              )}
+                              {p.portfolio_url && (
+                                <a href={p.portfolio_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                                  Portfolio ↗
+                                </a>
+                              )}
+                            </div>
+
+                            {(d.skills || []).length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {d.skills.map((s: any) => (
+                                  <span
+                                    key={s.id}
+                                    className={`px-2.5 py-0.5 rounded-full text-[11px] border ${
+                                      s.is_verified
+                                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+                                        : "bg-slate-900 border-slate-700 text-slate-300"
+                                    }`}
+                                  >
+                                    {s.skill_name} ({s.proficiency}){s.is_verified ? " ✓" : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 4. 1-on-1 Viva & Examiner Evaluation Outcomes */}
+                          {(() => {
+                            const rollPrefix = (d.email || "").split("@")[0].toLowerCase();
+                            const nameLower = (d.full_name || "").toLowerCase();
+                            const studentEvals = (evaluations || []).filter((ev: any) => {
+                              const target = String(ev.studentRoll || "").toLowerCase();
+                              return (
+                                (rollPrefix && target.includes(rollPrefix)) ||
+                                (nameLower && target.includes(nameLower)) ||
+                                (d.email && target.includes(d.email.toLowerCase()))
+                              );
+                            });
+                            return (
+                              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                    4. 1-on-1 Viva &amp; Examiner Evaluation Outcomes ({studentEvals.length})
+                                  </h4>
+                                  <span className="text-[11px] text-indigo-300">Stage 3 Vetting Record</span>
+                                </div>
+                                {studentEvals.length === 0 ? (
+                                  <div className="text-xs text-slate-400">
+                                    No 1-on-1 Examiner Viva evaluations recorded for this candidate yet.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2.5">
+                                    {studentEvals.map((ev: any) => (
+                                      <div
+                                        key={ev.id}
+                                        className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2 text-xs"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2">
+                                            <span
+                                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                ev.isPlacementReady
+                                                  ? "bg-emerald-500/20 text-emerald-300"
+                                                  : "bg-amber-500/20 text-amber-300"
+                                              }`}
+                                            >
+                                              {ev.isPlacementReady ? "PLACEMENT READY" : "NOT READY"}
+                                            </span>
+                                            {ev.performingExceptionallyGood && (
+                                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 font-semibold">
+                                                EXCEPTIONALLY GOOD
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-[11px] text-slate-400">{ev.evaluatedAt}</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                          <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                                            <span className="text-slate-400 block">Programming</span>
+                                            <span className="font-bold text-white">{ev.programmingRating} / 5</span>
+                                          </div>
+                                          <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                                            <span className="text-slate-400 block">Data Science</span>
+                                            <span className="font-bold text-white">{ev.dataScienceRating} / 5</span>
+                                          </div>
+                                          <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                                            <span className="text-slate-400 block">Communication</span>
+                                            <span className="font-bold text-white">{ev.communicationRating} / 5</span>
+                                          </div>
+                                        </div>
+                                        <div className="text-[11px]">
+                                          <span className="text-slate-400">Observed Skillsets: </span>
+                                          <span className="text-slate-200">{(ev.skillsets || []).join(", ")}</span>
+                                        </div>
+                                        {ev.notes && (
+                                          <div className="text-[11px] text-slate-300">
+                                            <span className="text-slate-400">Examiner Remarks: </span>
+                                            {ev.notes}
+                                          </div>
+                                        )}
+                                        {ev.examinerEmail && (
+                                          <div className="text-[10px] text-slate-500 font-mono">
+                                            Examiner: {ev.examinerEmail}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Examiner 1-on-1 Viva Evaluations Audit Summary */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white">
+                      Recorded Examiner 1-on-1 Viva Evaluations ({(evaluations || []).length})
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Stage 3 1-on-1 Viva readiness verdicts, competency ratings, and examiner notes synced from Examiner Console.
+                    </p>
+                  </div>
+                </div>
+                {(evaluations || []).length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                    No 1-on-1 Examiner Viva evaluations recorded yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(evaluations || []).map((ev: any) => (
+                      <div
+                        key={ev.id}
+                        className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+                          <span className="font-bold text-white">{ev.studentRoll}</span>
+                          <span className="text-[11px] text-slate-400">{ev.evaluatedAt}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              ev.isPlacementReady
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : "bg-amber-500/20 text-amber-300"
+                            }`}
+                          >
+                            {ev.isPlacementReady ? "PLACEMENT READY" : "NOT READY"}
+                          </span>
+                          {ev.performingExceptionallyGood && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 font-semibold">
+                              EXCEPTIONALLY GOOD
+                            </span>
+                          )}
+                          {ev.examinerEmail && (
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              by {ev.examinerEmail}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-slate-400 block">Programming</span>
+                            <span className="font-bold text-white">{ev.programmingRating} / 5</span>
+                          </div>
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-slate-400 block">Data Science</span>
+                            <span className="font-bold text-white">{ev.dataScienceRating} / 5</span>
+                          </div>
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-slate-400 block">Communication</span>
+                            <span className="font-bold text-white">{ev.communicationRating} / 5</span>
+                          </div>
+                        </div>
+                        <div className="text-[11px]">
+                          <span className="text-slate-400">Skillsets: </span>
+                          <span className="text-slate-200">{(ev.skillsets || []).join(", ")}</span>
+                        </div>
+                        {ev.notes && (
+                          <div className="text-[11px] text-slate-300">
+                            <span className="text-slate-400">Remarks: </span>
+                            {ev.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
