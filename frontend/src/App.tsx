@@ -5693,27 +5693,6 @@ export default function App() {
                   <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
                     Password
                   </label>
-                  {authMode === "SIGN_IN" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail(
-                          selectedRole === "STUDENT"
-                            ? "22f3001013@ds.study.iitm.ac.in"
-                            : selectedRole === "EXAMINER"
-                            ? "shyam@ds.iitm.ac.in"
-                            : selectedRole === "RECRUITER"
-                            ? "lalit@iit.in"
-                            : "placement.admin@iitm.ac.in"
-                        );
-                        setPassword("123456");
-                        setAuthError(null);
-                      }}
-                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
-                    >
-                      Fill Test {selectedRole}
-                    </button>
-                  )}
                 </div>
                 <input
                   type="password"
