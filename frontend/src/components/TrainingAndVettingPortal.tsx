@@ -28,7 +28,29 @@ import {
   ACTIVITY_CATALOG,
 } from "../App";
 
-export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
+export default function TrainingAndVettingPortal({
+ ctx }: { ctx: any }) {
+  const effectiveOneOnOneSlots = React.useMemo(() => {
+    return oneOnOneSlots.map((slot: any) => {
+      const sRoll = String(slot.studentEmail || "").split("@")[0].trim().toUpperCase();
+      const matchedEval = evaluations.find(
+        (ev: any) => String(ev.studentRoll || "").trim().toUpperCase() === sRoll
+      );
+      if (!matchedEval) return slot;
+      return {
+        ...slot,
+        status: "COMPLETED",
+        isPlacementReady: matchedEval.isPlacementReady,
+        instructorFeedback:
+          matchedEval.notes ||
+          slot.instructorFeedback ||
+          (matchedEval.isPlacementReady
+            ? "Cleared 1-on-1 Viva — Placement Ready."
+            : "Completed 1-on-1 Viva — Remedial tasks assigned."),
+      };
+    });
+  }, [oneOnOneSlots, evaluations]);
+
   const [inlineDocPreview, setInlineDocPreview] = useState<{ title: string; url: string } | null>(null);
   const toDriveEmbedUrl = (rawUrl: string) => {
     const m = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?#]+)/i);
@@ -272,7 +294,7 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
     <>
           <div className="space-y-8">
             {user.role === "STUDENT" && (() => {
-              const mySlots = oneOnOneSlots.filter(
+              const mySlots = effectiveOneOnOneSlots.filter(
                 (s: any) =>
                   s.studentEmail.toLowerCase() === user.email.toLowerCase() ||
                   s.studentName.toLowerCase() === user.name.toLowerCase()
@@ -841,11 +863,11 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
               );
             })()}
             {(user.role === "TRAINING_COORDINATOR" || user.role === "ADMIN") && (() => {
-              const totalSlots = oneOnOneSlots.length;
-              const completedSlots = oneOnOneSlots.filter((s: any) => s.status === "COMPLETED").length;
+              const totalSlots = effectiveOneOnOneSlots.length;
+              const completedSlots = effectiveOneOnOneSlots.filter((s: any) => s.status === "COMPLETED").length;
               const pendingSlots = totalSlots - completedSlots;
-              const readySlots = oneOnOneSlots.filter((s: any) => s.status === "COMPLETED" && s.isPlacementReady).length;
-              const filteredSlots = oneOnOneSlots.filter((s: any) =>
+              const readySlots = effectiveOneOnOneSlots.filter((s: any) => s.status === "COMPLETED" && s.isPlacementReady).length;
+              const filteredSlots = effectiveOneOnOneSlots.filter((s: any) =>
                 slotProgressFilter === "ALL" ? true : s.status === slotProgressFilter
               );
 
@@ -2400,13 +2422,13 @@ export default function TrainingAndVettingPortal({ ctx }: { ctx: any }) {
                                 : "bg-slate-900 text-slate-400"
                             }`}
                           >
-                            All Slots ({oneOnOneSlots.length})
+                            All Slots ({effectiveOneOnOneSlots.length})
                           </button>
                         </div>
                       </div>
 
                       {(() => {
-                        const visibleSlots = oneOnOneSlots.filter((s: any) => {
+                        const visibleSlots = effectiveOneOnOneSlots.filter((s: any) => {
                           if (examinerSlotScope === "ALL") return true;
                           const inst = s.instructor.toLowerCase();
                           const uName = user.name.toLowerCase();
