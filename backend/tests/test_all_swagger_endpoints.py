@@ -26,6 +26,7 @@ PUBLIC_ENDPOINTS = {
     ("GET", "/redoc"),
     ("GET", "/api/v1/portal-state/bootstrap"),
     ("GET", "/api/v1/portal-state/helpdesk"),
+    ("GET", "/api/v1/portal-state/sync"),
     ("PUT", "/api/v1/portal-state/sync"),
 }
 
