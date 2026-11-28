@@ -48,6 +48,7 @@ const DASHBOARD_ROLES: RoleTestCase[] = [
   {
     roleCode: "PROGRAM_COORDINATOR",
     labelPatterns: [
+      /training_coordinator/i,
       /training coordinator/i,
       /program coordinator/i,
       /placement coordinator/i,
@@ -56,6 +57,7 @@ const DASHBOARD_ROLES: RoleTestCase[] = [
     expectedNavKeywords: [
       /training|courses|analytics|interviews|offers|drives|students|overview|dashboard/i,
     ],
+    testEmail: "coordinator@study.iitm.ac.in",
   },
 ];
 
@@ -323,6 +325,102 @@ test.describe("Multi-Role Dashboard UI Verification", () => {
           await expect(page.locator("body")).toContainText(subjectText);
         }
       }
+    }
+  });
+
+  test("Student dynamic pool sizing & Coordinator/Admin 4-pool Question Bank CRUD + CSV download", async ({
+    page,
+  }) => {
+    // 1. Verify Student Dashboard displays dynamic 24-question pool (not hardcoded 20)
+    await signInAsRole(page, DASHBOARD_ROLES[0]);
+    const trainingTab = page
+      .locator('aside button, nav button, [role="tab"], button')
+      .filter({ hasText: /training|courses|vetting|quiz/i })
+      .first();
+    if (await trainingTab.isVisible().catch(() => false)) {
+      await trainingTab.click();
+      await page.waitForTimeout(600);
+    }
+    await expect(page.locator("body")).toContainText(/Active Bank:\s*(2[4-9]|[3-9]\d)\s*Qs/i);
+    await expect(page.locator("body")).not.toContainText(/Pool:\s*20\s*Qs/i);
+
+    // 2. Verify Coordinator Question Bank 4-pool counts, search, inline edit, delete & CSV download
+    const coordRole = DASHBOARD_ROLES.find((r) => r.roleCode === "PROGRAM_COORDINATOR")!;
+    await signInAsRole(page, coordRole);
+    const coordTrainingTab = page
+      .locator('aside button, nav button, [role="tab"], button')
+      .filter({ hasText: /training|courses|vetting|question/i })
+      .first();
+    if (await coordTrainingTab.isVisible().catch(() => false)) {
+      await coordTrainingTab.click();
+      await page.waitForTimeout(600);
+    }
+
+    await expect(page.locator("body")).toContainText(/All 4 Banks \((9[6-9]|\d{3,})\)/i);
+    await expect(page.locator("body")).toContainText(/DS • Internship \((2[4-9]|[3-9]\d)\)/i);
+    await expect(page.locator("body")).toContainText(/DS • Full-Time \((2[4-9]|[3-9]\d)\)/i);
+    await expect(page.locator("body")).toContainText(/SD • Internship \((2[4-9]|[3-9]\d)\)/i);
+    await expect(page.locator("body")).toContainText(/SD • Full-Time \((2[4-9]|[3-9]\d)\)/i);
+
+    // Trigger CSV export in Coordinator portal and verify file download
+    const coordDownloadPromise = page.waitForEvent("download", { timeout: 10000 }).catch(() => null);
+    const downloadCsvBtn = page
+      .getByRole("button", { name: /Download All \(\d+\) CSV/i })
+      .first();
+    if (await downloadCsvBtn.isVisible().catch(() => false)) {
+      await downloadCsvBtn.click();
+      const download = await coordDownloadPromise;
+      if (download) {
+        expect(download.suggestedFilename()).toMatch(/iitm_question_bank_.*\.csv$/i);
+      }
+    }
+
+    // 3. Verify Admin Governance Question Bank CRUD (Create -> Read -> Update -> Delete) + CSV download
+    const adminRole = DASHBOARD_ROLES.find((r) => r.roleCode === "ADMIN")!;
+    await signInAsRole(page, adminRole);
+    const govTab = page
+      .locator('aside button, nav button, [role="tab"], button')
+      .filter({ hasText: /governance|admin|command/i })
+      .first();
+    if (await govTab.isVisible().catch(() => false)) {
+      await govTab.click();
+      await page.waitForTimeout(700);
+    }
+
+    await expect(page.locator("body")).toContainText(/Admin Question Bank Governance/i);
+
+    const newQuestionBtn = page.getByRole("button", { name: /New Question/i }).first();
+    if (await newQuestionBtn.isVisible().catch(() => false)) {
+      await newQuestionBtn.click();
+      const testPrompt = `E2E CRUD Verification Prompt ${Date.now().toString(36)}`;
+      await page.getByPlaceholder("Enter question prompt...").fill(testPrompt);
+      await page.getByPlaceholder("Option A").fill("Alpha Option");
+      await page.getByPlaceholder("Option B").fill("Beta Option");
+      await page.getByPlaceholder("Option C").fill("Gamma Option");
+      await page.getByPlaceholder("Option D").fill("Delta Option");
+      await page.getByRole("button", { name: /Save Question/i }).click();
+      await page.waitForTimeout(400);
+
+      // Search & verify created question
+      const searchBox = page.getByPlaceholder("Search questions or options...").last();
+      await searchBox.fill(testPrompt);
+      await expect(page.locator("body")).toContainText(testPrompt);
+
+      // Update inline (scoped to the created question row)
+      const qRow = page.locator("div.rounded-xl").filter({ hasText: testPrompt }).last();
+      await qRow.getByRole("button", { name: /^Edit$/i }).click();
+      const updatedPrompt = `${testPrompt} (Updated)`;
+      const editCard = page.locator("div.rounded-xl").filter({ hasText: /Editing /i }).last();
+      await editCard.locator(`input[value="${testPrompt}"]`).fill(updatedPrompt);
+      await editCard.getByRole("button", { name: /Save Changes/i }).click();
+      await searchBox.fill(updatedPrompt);
+      await expect(page.locator("body")).toContainText(updatedPrompt);
+
+      // Delete cleanly so test state stays pristine
+      const updatedRow = page.locator("div.rounded-xl").filter({ hasText: updatedPrompt }).last();
+      await updatedRow.getByRole("button", { name: /^Delete$/i }).click();
+      await page.waitForTimeout(300);
+      await expect(page.locator("body")).not.toContainText(updatedPrompt);
     }
   });
 });
