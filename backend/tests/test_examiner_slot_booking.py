@@ -36,11 +36,11 @@ async def test_single_student_slot_locking():
         # 2. Student A books the slot -> 200 OK
         book_a = await client.post(
             f"/api/v1/portal-state/examiner-slots/{test_slot_id}/book",
-            json={"studentEmail": "21f3001013@ds.study.iitm.ac.in", "studentName": "Student A"},
+            json={"studentEmail": "slotlock.test.a@ds.study.iitm.ac.in", "studentName": "Student A"},
         )
         assert book_a.status_code == 200
         assert book_a.json()["slot"]["status"] == "REQUESTED"
-        assert book_a.json()["slot"]["requestedByEmail"] == "21f3001013@ds.study.iitm.ac.in"
+        assert book_a.json()["slot"]["requestedByEmail"] == "slotlock.test.a@ds.study.iitm.ac.in"
 
         # 3. Student B attempts to book the same slot -> 409 Conflict
         book_b = await client.post(
