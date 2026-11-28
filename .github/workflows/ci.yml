@@ -155,8 +155,8 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://placement_user:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/placement_test_db
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: ci-test-secret-key-not-for-prod
-          LIVE_FRONTEND_URL: http://127.0.0.1:5173
-          LIVE_BACKEND_URL: http://127.0.0.1:8000
+          LIVE_FRONTEND_URL: http://127.0.0.1:5174
+          LIVE_BACKEND_URL: http://127.0.0.1:8010
         run: npx playwright test
 
       - name: Upload Playwright report on failure

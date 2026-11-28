@@ -1,7 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const frontendUrl = process.env.LIVE_FRONTEND_URL || 'http://127.0.0.1:5174';
+const backendUrl = process.env.LIVE_BACKEND_URL || 'http://127.0.0.1:8010';
 const isLocalTarget = frontendUrl.includes('127.0.0.1') || frontendUrl.includes('localhost');
+
+const frontendPort = new URL(frontendUrl).port || '5174';
+const backendPort = new URL(backendUrl).port || '8010';
 
 export default defineConfig({
   testDir: './e2e',
@@ -29,19 +33,22 @@ export default defineConfig({
     ? {
         webServer: [
           {
-            command: process.platform === 'win32' ? "..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010" : "sh -c 'if [ -x .venv/bin/python ]; then exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010; else exec python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8010; fi'",
-            cwd: "../backend",
-            url: 'http://127.0.0.1:8010/docs',
+            command:
+              process.platform === 'win32'
+                ? `..\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`
+                : `sh -c 'if [ -x .venv/bin/python ]; then exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}; else exec python3 -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}; fi'`,
+            cwd: '../backend',
+            url: `${backendUrl}/docs`,
             reuseExistingServer: false,
             timeout: 60_000,
           },
           {
-            command: 'npm run dev -- --host 127.0.0.1 --port 5174',
-            url: 'http://127.0.0.1:5174',
+            command: `npm run dev -- --host 127.0.0.1 --port ${frontendPort}`,
+            url: frontendUrl,
             reuseExistingServer: false,
             timeout: 60_000,
             env: {
-              VITE_API_BASE_URL: 'http://127.0.0.1:8010',
+              VITE_API_BASE_URL: backendUrl,
             },
           },
         ],
