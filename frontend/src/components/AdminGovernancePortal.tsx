@@ -1,3 +1,4 @@
+import QuestionBankExplorerCard from "./QuestionBankExplorerCard";
 import { useState } from "react";
 import {
   Activity,
@@ -26,6 +27,11 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     handleRegistrationDecision,
     handleAdminDownloadRosterCsv,
     handleDownloadFullTrainingReportCsv,
+    questionBank,
+    handleCreateQuestionDirect,
+    handleUpdateQuestionInBank,
+    handleDeleteQuestionFromBank,
+    handleDownloadQuestionBankCsv,
     trainingStages,
     trainingStagesByRoll,
     activitySubmissions,
@@ -1657,6 +1663,22 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                   </div>
                 )}
               </div>
+
+              {/* Admin Full Question Bank Governance (View, Create, Edit, Delete & Export CSV) */}
+              {Array.isArray(questionBank) && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <QuestionBankExplorerCard
+                    questionBank={questionBank}
+                    onAddQuestion={handleCreateQuestionDirect}
+                    onUpdateQuestion={handleUpdateQuestionInBank}
+                    onDeleteQuestion={handleDeleteQuestionFromBank}
+                    onDownloadCsv={handleDownloadQuestionBankCsv}
+                    title="Admin Question Bank Governance (All 4 Domain & Track Pools)"
+                    subtitle="Full administrative CRUD & CSV export across Data Science and Software Development (Internship & Full-Time Placement)."
+                    showCreateButton={true}
+                  />
+                </div>
+              )}
             </div>
 
   );

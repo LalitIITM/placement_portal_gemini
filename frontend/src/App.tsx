@@ -700,6 +700,24 @@ function buildInitialQuestionBank(): BankQuestionItem[] {
   return bank;
 }
 
+function mergeSeededQuestionBank(existing: BankQuestionItem[]): BankQuestionItem[] {
+  const deletedIds = new Set<string>(
+    (() => {
+      try {
+        const raw = localStorage.getItem("iitm_os_deleted_qb_ids_v1");
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })()
+  );
+  const existingIds = new Set(existing.map((q) => q.id));
+  const missingSeeds = buildInitialQuestionBank().filter(
+    (seed) => !existingIds.has(seed.id) && !deletedIds.has(seed.id)
+  );
+  return [...existing, ...missingSeeds];
+}
+
 const INITIAL_TRACKS: TrainingTrack[] = [
   {
     id: "track-ds-intern",
@@ -1983,7 +2001,7 @@ export default function App() {
           setExaminerSlots(snap.examinerSlots);
         }
         if (Array.isArray(snap.questionBank) && snap.questionBank.length > 0) {
-          setQuestionBank(snap.questionBank);
+          setQuestionBank(mergeSeededQuestionBank(snap.questionBank));
         }
         if (Array.isArray(data.activitySubmissions)) {
           setActivitySubmissions(data.activitySubmissions);
@@ -2364,7 +2382,7 @@ export default function App() {
           setJobs(snap.jobs);
         }
         if (Array.isArray(snap.questionBank) && snap.questionBank.length > 0) {
-          setQuestionBank(snap.questionBank);
+          setQuestionBank(mergeSeededQuestionBank(snap.questionBank));
         }
         if (Array.isArray(snap.applications)) {
           setApplications(snap.applications);
@@ -3942,6 +3960,101 @@ export default function App() {
       `${qbDomain} / ${qbTrack}: "${newItem.prompt.slice(0, 48)}..."`,
       "SUCCESS"
     );
+  };
+
+  const handleCreateQuestionDirect = (item: Omit<BankQuestionItem, "id">) => {
+    if (!user) return;
+    const newItem: BankQuestionItem = {
+      ...item,
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+    setQuestionBank((prev) => [newItem, ...prev]);
+    setQbBanner({
+      type: "OK",
+      text: `Added question to ${item.domain.replace("_", " ")} • ${
+        item.track === "INTERNSHIP" ? "Internship" : "Full-Time Placement"
+      } Question Bank!`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "QUESTION_BANK_ADDED",
+      `${item.domain} / ${item.track}: "${newItem.prompt.slice(0, 48)}..."`,
+      "SUCCESS"
+    );
+  };
+
+  const handleUpdateQuestionInBank = (updated: BankQuestionItem) => {
+    if (!user) return;
+    setQuestionBank((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    setQbBanner({
+      type: "OK",
+      text: `Updated question ${updated.id} in ${updated.domain.replace("_", " ")} bank.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "QUESTION_BANK_UPDATED",
+      `Updated ${updated.id} (${updated.domain} / ${updated.track})`,
+      "SUCCESS"
+    );
+  };
+
+  const handleDeleteQuestionFromBank = (questionId: string) => {
+    if (!user) return;
+    try {
+      const raw = localStorage.getItem("iitm_os_deleted_qb_ids_v1");
+      const arr: string[] = raw ? JSON.parse(raw) : [];
+      if (!arr.includes(questionId)) {
+        localStorage.setItem("iitm_os_deleted_qb_ids_v1", JSON.stringify([...arr, questionId]));
+      }
+    } catch {}
+    setQuestionBank((prev) => prev.filter((q) => q.id !== questionId));
+    setQbBanner({
+      type: "OK",
+      text: `Removed question ${questionId} from Question Bank.`,
+    });
+    appendAudit(
+      user.email,
+      user.role,
+      "QUESTION_BANK_DELETED",
+      `Deleted question ${questionId}`,
+      "SUCCESS"
+    );
+  };
+
+  const handleDownloadQuestionBankCsv = (domainFilter = "ALL", trackFilter = "ALL") => {
+    const filtered = questionBank.filter((q) => {
+      if (domainFilter !== "ALL" && q.domain !== domainFilter) return false;
+      if (trackFilter !== "ALL" && q.track !== trackFilter) return false;
+      return true;
+    });
+    const escapeCsv = (val: string) => `"${String(val || "").replace(/"/g, '""')}"`;
+    const letters = ["A", "B", "C", "D"];
+    const rows = [
+      "ID,Question,Option A,Option B,Option C,Option D,Correct Answer,Domain,Track",
+      ...filtered.map((q) =>
+        [
+          escapeCsv(q.id),
+          escapeCsv(q.prompt),
+          escapeCsv(q.options[0] || ""),
+          escapeCsv(q.options[1] || ""),
+          escapeCsv(q.options[2] || ""),
+          escapeCsv(q.options[3] || ""),
+          escapeCsv(letters[q.correctIndex] || "A"),
+          escapeCsv(q.domain),
+          escapeCsv(q.track === "INTERNSHIP" ? "INTERNSHIP" : "FULL_TIME"),
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const suffix = domainFilter === "ALL" ? "all_4_banks" : `${domainFilter.toLowerCase()}_${trackFilter.toLowerCase()}`;
+    a.download = `iitm_question_bank_${suffix}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleStartRandomQuiz = () => {
@@ -8963,7 +9076,7 @@ export default function App() {
 
         {activeTab === "TRAINING" && (
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading Training & Vetting Workspace...</div>}>
-            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, examinerSlots, setExaminerSlots, registrations, ingestParsedSlotRows, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleDownloadFullTrainingReportCsv, trainingStagesByRoll, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
+            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, examinerSlots, setExaminerSlots, registrations, ingestParsedSlotRows, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleCreateQuestionDirect, handleUpdateQuestionInBank, handleDeleteQuestionFromBank, handleDownloadQuestionBankCsv, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleDownloadFullTrainingReportCsv, trainingStagesByRoll, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
           </Suspense>
         )}
 

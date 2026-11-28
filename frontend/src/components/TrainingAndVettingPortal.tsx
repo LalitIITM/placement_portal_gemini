@@ -1,3 +1,4 @@
+import QuestionBankExplorerCard from "./QuestionBankExplorerCard";
 import { useMemo, useState } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
@@ -71,6 +72,10 @@ export default function TrainingAndVettingPortal({
     examinerSlotScope,
     formatTimer,
     handleAddQuestionToBank,
+    handleCreateQuestionDirect,
+    handleUpdateQuestionInBank,
+    handleDeleteQuestionFromBank,
+    handleDownloadQuestionBankCsv,
     handleAddSingleSlot,
     handleAttemptTrainingStage,
     handleBatchTrainingCsvUpload,
@@ -2142,6 +2147,18 @@ export default function TrainingAndVettingPortal({
                       </form>
                     </div>
                   </div>
+
+                  {/* Full Question Bank Viewer, Search, Inline Edit, Delete & CSV Download */}
+                  <QuestionBankExplorerCard
+                    questionBank={questionBank}
+                    onAddQuestion={handleCreateQuestionDirect}
+                    onUpdateQuestion={handleUpdateQuestionInBank}
+                    onDeleteQuestion={handleDeleteQuestionFromBank}
+                    onDownloadCsv={handleDownloadQuestionBankCsv}
+                    title="Full Question Bank Repository (View, Search, Edit, Delete & Download)"
+                    subtitle="Browse every question across all 4 assessment pools, edit options/answers inline, delete outdated items, or download CSV."
+                    showCreateButton={false}
+                  />
                 </div>
               );
             })()}
@@ -2256,7 +2273,7 @@ export default function TrainingAndVettingPortal({
                       <h2 className="text-lg font-bold text-white">{activeTrack.title}</h2>
                     </div>
                     <span className="text-xs px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
-                      Pool: {activePoolSize} Qs
+                      Active Bank: {activePoolSize} Qs (Draws {Math.min(15, activePoolSize)}/Attempt)
                     </span>
                   </div>
 
@@ -2335,7 +2352,7 @@ export default function TrainingAndVettingPortal({
                       <span className="font-semibold text-amber-300">
                         Randomized 15-Question Draw • 30:00 Timer • Zero Tab-Switch Tolerance:
                       </span>{" "}
-                      15 questions are randomly drawn from the{" "}
+                      {Math.min(15, activePoolSize)} questions are randomly drawn from the{" "}
                       <span className="text-white font-semibold">{activePoolSize}-question</span>{" "}
                       bank and auto-evaluated on submission. Switching tabs immediately fails the
                       attempt.
