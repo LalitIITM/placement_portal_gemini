@@ -213,6 +213,19 @@ async def _ensure_student_profile(db: AsyncSession, roll: str) -> StudentProfile
     return prof
 
 
+@router.get("/sync", response_model=PortalSyncPayload)
+async def get_portal_sync_alias(
+    student_roll: str = "21F3001013",
+    scope_student_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+) -> PortalSyncPayload:
+    return await get_portal_bootstrap_state(
+        student_roll=student_roll,
+        scope_student_only=scope_student_only,
+        db=db,
+    )
+
+
 @router.get("/bootstrap", response_model=PortalSyncPayload)
 async def get_portal_bootstrap_state(
     student_roll: str = "21F3001013",
@@ -795,9 +808,47 @@ async def sync_portal_state(
 
         snap_row = (
             await db.execute(
-                select(PortalStateSnapshot).where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
+                select(PortalStateSnapshot)
+                .where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
+                .with_for_update()
             )
         ).scalar_one_or_none()
+
+        # Preserve already-booked examinerSlots so stale student tabs cannot overwrite or double-book a slot
+        existing_ex_slots = (
+            snap_row.payload.get("examinerSlots", [])
+            if snap_row and isinstance(snap_row.payload, dict)
+            else []
+        )
+        incoming_ex_slots = snap_copy.get("examinerSlots")
+        if isinstance(incoming_ex_slots, list) and isinstance(existing_ex_slots, list):
+            existing_by_id = {str(s.get("id")): s for s in existing_ex_slots if isinstance(s, dict) and s.get("id")}
+            merged_ex_slots = []
+            seen_ids = set()
+            for inc in incoming_ex_slots:
+                if not isinstance(inc, dict):
+                    continue
+                sid = str(inc.get("id", ""))
+                seen_ids.add(sid)
+                prev = existing_by_id.get(sid)
+                if prev and str(prev.get("status", "OPEN")).upper() in {"REQUESTED", "ALLOTTED"} and prev.get("requestedByEmail"):
+                    prev_email = str(prev.get("requestedByEmail", "")).strip().lower()
+                    inc_email = str(inc.get("requestedByEmail", "")).strip().lower()
+                    inc_status = str(inc.get("status", "OPEN")).upper()
+                    if inc_status in {"REQUESTED", "ALLOTTED"} and inc_email and inc_email != prev_email:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="This 1-on-1 slot has already been booked by another student.",
+                        )
+                    # Keep the authoritative booked state from DB
+                    merged_ex_slots.append(prev)
+                else:
+                    merged_ex_slots.append(inc)
+            for prev in existing_ex_slots:
+                if isinstance(prev, dict) and str(prev.get("id", "")) not in seen_ids:
+                    merged_ex_slots.append(prev)
+            snap_copy["examinerSlots"] = merged_ex_slots
+
         if snap_row is None:
             db.add(PortalStateSnapshot(scope_key="GLOBAL_PORTAL_STATE", payload=snap_copy))
         else:
@@ -805,6 +856,95 @@ async def sync_portal_state(
 
     await db.flush()
     return {"status": "persisted", "student_roll": normalized_roll}
+
+
+class BookExaminerSlotRequest(BaseModel):
+    studentEmail: str
+    studentName: str
+
+
+@router.post("/examiner-slots/{slot_id}/book")
+async def book_examiner_slot(
+    slot_id: str,
+    body: BookExaminerSlotRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Atomically books an OPEN examiner slot for a single student; rejects if already booked by another student."""
+    student_email = body.studentEmail.strip()
+    student_email_lower = student_email.lower()
+    student_name = body.studentName.strip() or student_email.split("@")[0].upper()
+
+    snap_row = (
+        await db.execute(
+            select(PortalStateSnapshot)
+            .where(PortalStateSnapshot.scope_key == "GLOBAL_PORTAL_STATE")
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+
+    if snap_row is None or not isinstance(snap_row.payload, dict):
+        raise HTTPException(status_code=404, detail="No examiner slot pool found.")
+
+    payload = dict(snap_row.payload)
+    slots = list(payload.get("examinerSlots") or [])
+
+    # Enforce 1 active slot per student
+    for s in slots:
+        if (
+            isinstance(s, dict)
+            and str(s.get("requestedByEmail", "")).strip().lower() == student_email_lower
+            and str(s.get("status", "")).upper() in {"REQUESTED", "ALLOTTED"}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="You have already booked a 1-on-1 slot. Each student may select only 1 slot.",
+            )
+
+    target_idx = next(
+        (i for i, s in enumerate(slots) if isinstance(s, dict) and str(s.get("id")) == slot_id),
+        None,
+    )
+    if target_idx is None:
+        raise HTTPException(status_code=404, detail="Selected slot no longer exists.")
+
+    target = dict(slots[target_idx])
+    if str(target.get("status", "OPEN")).upper() != "OPEN" or target.get("requestedByEmail"):
+        raise HTTPException(
+            status_code=409,
+            detail="This slot was just booked by another student. Please choose another open slot.",
+        )
+
+    # Also check normalized OneOnOneSlotRecordModel table so an already-scheduled slot cannot be double-booked
+    existing_scheduled = (
+        await db.execute(
+            select(OneOnOneSlotRecordModel).where(
+                OneOnOneSlotRecordModel.date == str(target.get("date", "")).strip(),
+                OneOnOneSlotRecordModel.slot_time == str(target.get("slotTime", "")).strip(),
+                OneOnOneSlotRecordModel.instructor == str(target.get("instructor", "")).strip(),
+            )
+        )
+    ).scalars().first()
+    if existing_scheduled is not None:
+        target["status"] = "ALLOTTED"
+        target["requestedByEmail"] = existing_scheduled.student_email
+        target["requestedByName"] = existing_scheduled.student_name
+        slots[target_idx] = target
+        payload["examinerSlots"] = slots
+        snap_row.payload = payload
+        await db.flush()
+        raise HTTPException(
+            status_code=409,
+            detail="This slot is already allotted to another student. Please pick another open slot.",
+        )
+
+    target["status"] = "REQUESTED"
+    target["requestedByEmail"] = student_email
+    target["requestedByName"] = student_name
+    slots[target_idx] = target
+    payload["examinerSlots"] = slots
+    snap_row.payload = payload
+    await db.flush()
+    return {"status": "booked", "slot": target, "examinerSlots": slots}
 
 
 @router.get("/helpdesk", response_model=list[HelpdeskTicketDTO])

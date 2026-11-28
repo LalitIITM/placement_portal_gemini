@@ -195,6 +195,8 @@ export default function TrainingAndVettingPortal({
   const [exPoolTime, setExPoolTime] = useState("");
   const [exPoolDomain] = useState("Data Science");
   const [exPoolAlert, setExPoolAlert] = useState<{ type: "OK" | "ERR"; text: string } | null>(null);
+  const [studentSlotAlert, setStudentSlotAlert] = useState<string | null>(null);
+  const [bookingSlotId, setBookingSlotId] = useState<string | null>(null);
 
   const approvedExaminers = registrations.filter(
     (r: any) => r.role === "EXAMINER" && r.status === "APPROVED"
@@ -203,7 +205,8 @@ export default function TrainingAndVettingPortal({
     (r: any) => r.role === "STUDENT" && r.status === "APPROVED"
   );
 
-  const handleStudentPickSingleSlot = (slotId: string) => {
+  const handleStudentPickSingleSlot = async (slotId: string) => {
+    if (bookingSlotId) return;
     const myEmail = user.email.trim().toLowerCase();
     const alreadyPicked = examinerSlots.find(
       (s: any) =>
@@ -212,14 +215,69 @@ export default function TrainingAndVettingPortal({
     );
     if (alreadyPicked) return;
     const myReg = approvedStudents.find((r: any) => r.email.toLowerCase() === myEmail);
-    const myName = myReg?.fullName || myEmail.split("@")[0].toUpperCase();
-    setExaminerSlots((prev: any[]) =>
-      prev.map((s: any) =>
-        s.id === slotId && s.status === "OPEN"
-          ? { ...s, status: "REQUESTED", requestedByEmail: user.email, requestedByName: myName }
-          : s
-      )
-    );
+    const myName = myReg?.fullName || user.name || myEmail.split("@")[0].toUpperCase();
+    const apiBase =
+      typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ? "http://127.0.0.1:8000"
+        : "";
+
+    setBookingSlotId(slotId);
+    setStudentSlotAlert(null);
+    try {
+      const res = await fetch(
+        `${apiBase}/api/v1/portal-state/examiner-slots/${encodeURIComponent(slotId)}/book`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentEmail: user.email.trim(),
+            studentName: myName,
+          }),
+        }
+      );
+      if (res.status === 409) {
+        const errData = await res.json().catch(() => ({}));
+        setStudentSlotAlert(
+          errData?.detail || "This slot was just booked by another student. Please choose another available slot."
+        );
+        // Immediately refresh latest examinerSlots so booked slot disappears
+        const syncRes = await fetch(
+          `${apiBase}/api/v1/portal-state/bootstrap?student_roll=${encodeURIComponent(myEmail.split("@")[0].toUpperCase())}`
+        );
+        if (syncRes.ok) {
+          const syncJson = await syncRes.json();
+          if (Array.isArray(syncJson?.snapshot?.examinerSlots)) {
+            setExaminerSlots(syncJson.snapshot.examinerSlots);
+          }
+        }
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.examinerSlots)) {
+          setExaminerSlots(data.examinerSlots);
+          return;
+        }
+      }
+      // Local fallback only when backend is unreachable
+      setExaminerSlots((prev: any[]) =>
+        prev.map((s: any) =>
+          s.id === slotId && s.status === "OPEN" && !s.requestedByEmail
+            ? { ...s, status: "REQUESTED", requestedByEmail: user.email, requestedByName: myName }
+            : s
+        )
+      );
+    } catch {
+      setExaminerSlots((prev: any[]) =>
+        prev.map((s: any) =>
+          s.id === slotId && s.status === "OPEN" && !s.requestedByEmail
+            ? { ...s, status: "REQUESTED", requestedByEmail: user.email, requestedByName: myName }
+            : s
+        )
+      );
+    } finally {
+      setBookingSlotId(null);
+    }
   };
 
   const handleCoordinatorAllotFromPool = (poolSlot: any) => {
@@ -297,7 +355,19 @@ export default function TrainingAndVettingPortal({
                     const myRequestedPoolSlot = examinerSlots.find(
                       (s: any) => (s.requestedByEmail || "").toLowerCase() === myEmailLower
                     );
-                    const openPoolSlots = examinerSlots.filter((s: any) => s.status === "OPEN");
+                    const takenSlotKeys = new Set(
+                      effectiveOneOnOneSlots
+                        .filter((os: any) => os.status === "SCHEDULED" || os.status === "COMPLETED")
+                        .map(
+                          (os: any) =>
+                            `${String(os.instructor || "").trim().toLowerCase()}::${String(os.date || "").trim()}::${String(os.slotTime || "").trim().toLowerCase()}`
+                        )
+                    );
+                    const openPoolSlots = examinerSlots.filter((s: any) => {
+                      if (s.status !== "OPEN" || Boolean(s.requestedByEmail)) return false;
+                      const k = `${String(s.instructor || "").trim().toLowerCase()}::${String(s.date || "").trim()}::${String(s.slotTime || "").trim().toLowerCase()}`;
+                      return !takenSlotKeys.has(k);
+                    });
 
                     return (
                       <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
@@ -325,6 +395,11 @@ export default function TrainingAndVettingPortal({
                           </div>
                         ) : (
                           <div className="space-y-2.5">
+                            {studentSlotAlert && (
+                              <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-medium">
+                                {studentSlotAlert}
+                              </div>
+                            )}
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="font-semibold text-emerald-300">
                                 Level 3 Unlocked — Pick Your Preferred 1-on-1 Viva Slot (1 Choice Only)
@@ -349,10 +424,11 @@ export default function TrainingAndVettingPortal({
                                   </div>
                                   <button
                                     type="button"
+                                    disabled={bookingSlotId !== null}
                                     onClick={() => handleStudentPickSingleSlot(slot.id)}
-                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shrink-0"
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold shrink-0"
                                   >
-                                    Pick Slot
+                                    {bookingSlotId === slot.id ? "Booking..." : "Pick Slot"}
                                   </button>
                                 </div>
                               ))}
@@ -454,7 +530,7 @@ export default function TrainingAndVettingPortal({
                 if (a.table === "TABLE_1") return true;
                 if (a.table === "TABLE_2") return a.domain === studentTargetDomain;
                 if (a.table === "TABLE_3")
-                  return studentApplyingTrack === "FULL_TIME" && a.domain === studentTargetDomain;
+                  return (studentApplyingTrack === "FULL_TIME" || studentApplyingTrack === "BOTH") && a.domain === studentTargetDomain;
                 return false;
               });
 
@@ -477,7 +553,9 @@ export default function TrainingAndVettingPortal({
                           </span>{" "}
                           • Opted Plan:{" "}
                           <span className="text-indigo-300 font-semibold">
-                            {studentApplyingTrack === "INTERNSHIP"
+                            {studentApplyingTrack === "BOTH"
+                              ? "Combined Internship (25 Pts) + Full-Time (50 Pts) Plan"
+                              : studentApplyingTrack === "INTERNSHIP"
                               ? "Internship Plan (Min 25 Activity Pts)"
                               : "Full-Time Placement Plan (Min 50 Activity Pts)"}
                           </span>
@@ -754,7 +832,12 @@ export default function TrainingAndVettingPortal({
                         </thead>
                         <tbody className="divide-y divide-slate-800/70">
                           {relevantActivities.map((act) => {
-                            const sub = activitySubmissions.find((s: any) => s.activityId === act.id);
+                            const activeStudentRoll = resolveActiveStudentRoll();
+                            const sub = activitySubmissions.find(
+                              (s: any) =>
+                                s.activityId === act.id &&
+                                String(s.studentEmail || "").split("@")[0].trim().toUpperCase() === activeStudentRoll
+                            );
                             return (
                               <tr key={act.id}>
                                 <td className="py-2.5 pr-3 font-mono text-[11px] text-indigo-300">
@@ -1405,6 +1488,22 @@ export default function TrainingAndVettingPortal({
                         onChange={(e: any) => setCoordTargetRoll(e.target.value.toUpperCase())}
                         className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono font-semibold"
                       />
+                      {(() => {
+                        const matchedReg = (registrations || []).find(
+                          (r: any) =>
+                            r.role === "STUDENT" &&
+                            String(r.email || "").toUpperCase().startsWith(`${coordTargetRoll.trim().toUpperCase()}@`)
+                        );
+                        if (!matchedReg) return null;
+                        const d = matchedReg.studentProfileDetails;
+                        return (
+                          <div className="mt-1.5 text-[10px] text-indigo-300 bg-indigo-950/40 border border-indigo-500/30 rounded px-2 py-1">
+                            {d
+                              ? `${matchedReg.fullName} • ${d.programLevel} • Track: ${d.applyingTrack} • ${d.targetDomain} • CGPA ${d.cgpa || "N/A"}`
+                              : `${matchedReg.fullName} • ${matchedReg.orgOrDept}`}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex flex-col justify-center">
                       <span className="text-slate-400">Level 1 Soft Skills (80% Cutoff)</span>
@@ -2055,7 +2154,14 @@ export default function TrainingAndVettingPortal({
                   </div>
 
                   <div className="space-y-3">
-                    {tracks.map((t: any) => {
+                    {(user.role === "STUDENT"
+                      ? tracks.filter(
+                          (t: any) =>
+                            t.domain === studentTargetDomain &&
+                            (studentApplyingTrack === "BOTH" || t.track === studentApplyingTrack)
+                        )
+                      : tracks
+                    ).map((t: any) => {
                       const poolCount = questionBank.filter(
                         (q: any) => q.domain === t.domain && q.track === t.track
                       ).length;
@@ -2358,41 +2464,46 @@ export default function TrainingAndVettingPortal({
                             Select a scheduled student slot below to conduct &amp; publish feedback directly to their dashboard
                           </span>
                         </div>
-                        <div className="flex gap-1 text-[11px]">
-                          <button
-                            type="button"
-                            onClick={() => setExaminerSlotScope("MINE")}
-                            className={`px-2.5 py-1 rounded-lg font-semibold ${
-                              examinerSlotScope === "MINE"
-                                ? "bg-indigo-600 text-white"
-                                : "bg-slate-900 text-slate-400"
-                            }`}
-                          >
-                            My Slots
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setExaminerSlotScope("ALL")}
-                            className={`px-2.5 py-1 rounded-lg font-semibold ${
-                              examinerSlotScope === "ALL"
-                                ? "bg-indigo-600 text-white"
-                                : "bg-slate-900 text-slate-400"
-                            }`}
-                          >
-                            All Slots ({effectiveOneOnOneSlots.length})
-                          </button>
-                        </div>
+                        {user.role !== "EXAMINER" && (
+                          <div className="flex gap-1 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setExaminerSlotScope("MINE")}
+                              className={`px-2.5 py-1 rounded-lg font-semibold ${
+                                examinerSlotScope === "MINE"
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-900 text-slate-400"
+                              }`}
+                            >
+                              My Slots
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExaminerSlotScope("ALL")}
+                              className={`px-2.5 py-1 rounded-lg font-semibold ${
+                                examinerSlotScope === "ALL"
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-900 text-slate-400"
+                              }`}
+                            >
+                              All Slots ({effectiveOneOnOneSlots.length})
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {(() => {
                         const visibleSlots = effectiveOneOnOneSlots.filter((s: any) => {
-                          if (examinerSlotScope === "ALL") return true;
-                          const inst = s.instructor.toLowerCase();
-                          const uName = user.name.toLowerCase();
-                          const uPrefix = user.email.split("@")[0].toLowerCase();
-                          return inst.includes(uName) || uName.includes(inst) || inst.includes(uPrefix);
+                          if (user.role !== "EXAMINER" && examinerSlotScope === "ALL") return true;
+                          const inst = String(s.instructor || "").toLowerCase();
+                          const uName = String(user.name || "").toLowerCase();
+                          const uPrefix = String(user.email || "").split("@")[0].toLowerCase();
+                          return (
+                            (uName && (inst.includes(uName) || uName.includes(inst))) ||
+                            (uPrefix && inst.includes(uPrefix))
+                          );
                         });
-                        const listToRender = visibleSlots.length > 0 ? visibleSlots : oneOnOneSlots;
+                        const listToRender = visibleSlots;
                         return listToRender.length === 0 ? (
                           <p className="text-slate-400 text-[11px]">No 1-on-1 slots scheduled yet.</p>
                         ) : (
@@ -2418,6 +2529,24 @@ export default function TrainingAndVettingPortal({
                                     <div className="text-[11px] text-slate-300 mt-0.5">
                                       {slot.date} • <span className="text-cyan-300">{slot.slotTime}</span> • Instructor: <span className="text-indigo-300">{slot.instructor}</span>
                                     </div>
+                                    {(() => {
+                                      const candReg = (registrations || []).find(
+                                        (r: any) =>
+                                          r.role === "STUDENT" &&
+                                          String(r.email || "").toLowerCase() === String(slot.studentEmail || "").toLowerCase()
+                                      );
+                                      if (!candReg) return null;
+                                      const det = candReg.studentProfileDetails;
+                                      return (
+                                        <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                                          <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
+                                            {det
+                                              ? `${det.programLevel} • Track: ${det.applyingTrack} • ${det.targetDomain} • CGPA ${det.cgpa || "N/A"}`
+                                              : candReg.orgOrDept}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span
@@ -2436,7 +2565,7 @@ export default function TrainingAndVettingPortal({
                                         if (slot.studentEmail) {
                                           setCoordTargetRoll(slot.studentEmail.split("@")[0].trim().toUpperCase());
                                         }
-                                        if (slot.instructorFeedback) setExaminerNotes(slot.instructorFeedback);
+                                        setExaminerNotes("");
                                       }}
                                       className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
                                     >
@@ -2634,12 +2763,19 @@ export default function TrainingAndVettingPortal({
                               String(ev.studentRoll || "").trim().toUpperCase() === activeRoll ||
                               String(ev.studentEmail || "").trim().toLowerCase() === myEmailLower
                           )
+                        : user.role === "EXAMINER"
+                        ? uniqueEvaluations.filter(
+                            (ev: any) =>
+                              String(ev.examinerEmail || "").trim().toLowerCase() === myEmailLower
+                          )
                         : uniqueEvaluations;
 
                     return (
                       <>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                           {user.role === "STUDENT"
+                            ? `Your Recorded Examiner Viva Evaluations (${visibleEvaluations.length})`
+                            : user.role === "EXAMINER"
                             ? `Your Recorded Examiner Viva Evaluations (${visibleEvaluations.length})`
                             : `Recorded Examiner Viva Evaluations (${visibleEvaluations.length})`}
                         </h3>

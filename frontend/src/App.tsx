@@ -32,6 +32,28 @@ type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED"
   | "WITHDRAWN";
 type StudentOnboardingStep = "AUTH" | "STUDENT_FORM" | "PAYMENT";
 
+interface StudentOnboardingDetails {
+  personalEmail: string;
+  mobileNumber: string;
+  cgpa: string;
+  activeBacklogs: number;
+  programLevel: ProgramLevelOption;
+  degreeType: DegreeTypeOption;
+  applyingTrack: StudentTrackOption;
+  targetDomain: QuizDomainOption;
+  hasDiplomaDataScience: boolean;
+  hasDiplomaProgramming: boolean;
+  gender: string;
+  stateName: string;
+  category: CategoryOption;
+  isWorkingProf: boolean;
+  yearsExp?: string;
+  workDomain?: WorkDomainOption;
+  presentCompany?: string;
+  workLocation?: string;
+  currentCtc?: string;
+}
+
 interface StudentOnboardingDraft {
   fullName: string;
   email: string;
@@ -43,7 +65,7 @@ interface StudentOnboardingDraft {
   programLevel: ProgramLevelOption;
   hasDiplomaDataScience: boolean;
   hasDiplomaProgramming: boolean;
-  applyingTrack: JobRoleTypeOption;
+  applyingTrack: StudentTrackOption;
   targetDomain: QuizDomainOption;
   gender: string;
   stateName: string;
@@ -106,6 +128,7 @@ interface RegistrationRequestRecord {
   submittedAt: string;
   reviewedBy?: string;
   paymentStatus?: "PAID" | "NOT_REQUIRED";
+  studentProfileDetails?: StudentOnboardingDetails;
   examinerProfileDetails?: ExaminerOnboardingDetails;
   recruiterProfileDetails?: RecruiterOnboardingDetails;
 }
@@ -115,6 +138,7 @@ type DegreeTypeOption = "STANDALONE" | "DUAL_DEGREE";
 type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS";
 type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
 type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
+type StudentTrackOption = "INTERNSHIP" | "FULL_TIME" | "BOTH";
 type JobRoleTypeOption = "INTERNSHIP" | "FULL_TIME";
 type ProgramLevelOption = "FOUNDATION" | "DIPLOMA" | "BSC" | "BS";
 interface TrainingStageScore {
@@ -761,8 +785,7 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("SIGN_IN");
-  const [onboardingStep, setOnboardingStep] = useState<StudentOnboardingStep>("AUTH");
-  const [studentDraft, setStudentDraft] = useState<StudentOnboardingDraft>({
+  const INITIAL_STUDENT_DRAFT: StudentOnboardingDraft = {
     fullName: "",
     email: "",
     password: "",
@@ -785,7 +808,10 @@ export default function App() {
     presentCompany: "",
     workLocation: "",
     currentCtc: "",
-  });
+  };
+  const [onboardingStep, setOnboardingStep] = useState<StudentOnboardingStep>("AUTH");
+  const [studentDraft, setStudentDraft] = useState<StudentOnboardingDraft>(INITIAL_STUDENT_DRAFT);
+  const resetStudentDraft = () => setStudentDraft({ ...INITIAL_STUDENT_DRAFT });
   const [eligibilityVerdict, setEligibilityVerdict] = useState<{
     eligible: boolean;
     message: string;
@@ -1324,14 +1350,9 @@ export default function App() {
   const [category, setCategory] = useState<CategoryOption>("GENERAL");
   const [degreeType, setDegreeType] = useState<DegreeTypeOption>("STANDALONE");
   const [studentTargetDomain, setStudentTargetDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
-  const [studentApplyingTrack, setStudentApplyingTrack] = useState<JobRoleTypeOption>("INTERNSHIP");
+  const [studentApplyingTrack, setStudentApplyingTrack] = useState<StudentTrackOption>("INTERNSHIP");
   const [trainingStages, setTrainingStages] = useState<TrainingStageScore[]>(INITIAL_TRAINING_STAGES);
-  const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([
-    { id: "ACT-201", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-DBMS-1", evidenceFileName: "Google Drive • SQL Basic Certificate (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view", completedDate: "2026-08-12", reviewStatus: "APPROVED" },
-    { id: "ACT-202", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-PDSA-2", evidenceFileName: "Google Drive • LeetCode 25 Medium Screenshot (JPG)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/195lHv9-2mK8qR7xPwN3tY6sW4zQ1cVbN8mL2kJ5hG9f/view", completedDate: "2026-09-04", reviewStatus: "APPROVED" },
-    { id: "ACT-203", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-SYS-1", evidenceFileName: "Google Drive • Linux Shell Completion (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/174kLp8-9nJ5wT3vRxM2sZ8qP6yC4bVnM7kL1jH4gF8d/view", completedDate: "2026-09-19", reviewStatus: "APPROVED" },
-    { id: "ACT-204", studentName: "Aarav Sharma", studentEmail: "22f3001234@ds.study.iitm.ac.in", activityId: "T1-CLD-1", evidenceFileName: "Google Drive • Cloud Foundations Cert (PDF)", evidenceFileType: "GDRIVE", evidenceFileSize: "Drive Link", proofUrl: "https://drive.google.com/file/d/152jHn6-7mG3vR1tPwK9rX6oN4wA2zTlK5jH9fD2sA6c/view", completedDate: "2026-10-02", reviewStatus: "APPROVED" },
-  ]);
+  const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([]);
   const [selectedActivityToLog, setSelectedActivityToLog] = useState<string>("T22-KAG-1");
   const [activityProofUrl, setActivityProofUrl] = useState<string>("");
   const [activityEvidenceLabel, setActivityEvidenceLabel] = useState<string>("");
@@ -1686,7 +1707,7 @@ export default function App() {
     const syncLatestSnapshot = async () => {
       try {
         const rollParam = encodeURIComponent(resolveActiveStudentRoll());
-        const res = await fetch(`${API_BASE_URL}/api/v1/portal-state/sync?student_roll=${rollParam}`);
+        const res = await fetch(`${API_BASE_URL}/api/v1/portal-state/bootstrap?student_roll=${rollParam}`);
         if (!res.ok) return;
         const data = await res.json();
         const snap = data?.snapshot || {};
@@ -1704,9 +1725,13 @@ export default function App() {
     };
     const onFocus = () => { void syncLatestSnapshot(); };
     const onVisible = () => { if (document.visibilityState === "visible") void syncLatestSnapshot(); };
+    const pollId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncLatestSnapshot();
+    }, 8000);
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      window.clearInterval(pollId);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -1994,17 +2019,23 @@ export default function App() {
 
   useEffect(() => {
     if (user?.role !== "EXAMINER") return;
+    const uName = (user.name || "").toLowerCase();
+    const uPrefix = (user.email || "").split("@")[0].toLowerCase();
+    const mySlots = oneOnOneSlots.filter((s) => {
+      const inst = (s.instructor || "").toLowerCase();
+      return (uName && (inst.includes(uName) || uName.includes(inst))) || (uPrefix && inst.includes(uPrefix));
+    });
     const slot =
-      oneOnOneSlots.find((s) => s.id === selectedSlotIdForEval) ||
-      oneOnOneSlots.find((s) => s.status === "SCHEDULED") ||
-      oneOnOneSlots[0];
+      mySlots.find((s) => s.id === selectedSlotIdForEval) ||
+      mySlots.find((s) => s.status === "SCHEDULED") ||
+      mySlots[0];
     if (slot?.studentEmail) {
       const derivedRoll = slot.studentEmail.split("@")[0].trim().toUpperCase();
       if (derivedRoll && derivedRoll !== coordTargetRoll) {
         setCoordTargetRoll(derivedRoll);
       }
     }
-  }, [user?.role, selectedSlotIdForEval, oneOnOneSlots]);
+  }, [user?.role, user?.name, user?.email, selectedSlotIdForEval, oneOnOneSlots]);
 
   const resolveActiveStudentRoll = (): string => {
     if (user?.role === "STUDENT" && user.email) {
@@ -2097,6 +2128,18 @@ export default function App() {
         }
         if (Array.isArray(data.helpdeskTickets)) {
           setHelpdeskTickets(data.helpdeskTickets);
+        }
+        const regList = Array.isArray(snap.registrations) ? snap.registrations : registrations;
+        const matchedStudentReg = regList.find(
+          (r: any) =>
+            r.role === "STUDENT" &&
+            (String(r.email || "").trim().toLowerCase() === String(user?.email || "").trim().toLowerCase() ||
+              String(r.rollNumber || "").trim().toUpperCase() === rollToFetch)
+        );
+        if (matchedStudentReg) {
+          if (matchedStudentReg.fullName) setFullName(matchedStudentReg.fullName);
+          if (matchedStudentReg.applyingTrack) setStudentApplyingTrack(matchedStudentReg.applyingTrack);
+          if (matchedStudentReg.targetDomain) setStudentTargetDomain(matchedStudentReg.targetDomain);
         }
         if (data.studentProfile && typeof data.studentProfile === "object") {
           const prof = data.studentProfile;
@@ -2250,7 +2293,10 @@ export default function App() {
     []
   );
 
-  const activeTrack = tracks.find((t) => t.id === activeTrackId) || tracks[0];
+  const activeTrack =
+    (user?.role === "STUDENT"
+      ? tracks.find((t) => t.domain === studentTargetDomain && (studentApplyingTrack === "BOTH" ? true : t.track === studentApplyingTrack))
+      : tracks.find((t) => t.id === activeTrackId)) || tracks[0];
 
   const finalizeQuizAttempt = useCallback(
     (reason: "NORMAL" | "TIMEOUT" | "TAB_SWITCH_VIOLATION") => {
@@ -2867,52 +2913,109 @@ export default function App() {
     }
   };
 
+
+  const resolveStudentRegMeta = (emailOrRoll: string) => {
+    const clean = String(emailOrRoll || "").trim().toLowerCase();
+    const roll = clean.includes("@") ? clean.split("@")[0] : clean;
+    const reg = registrations.find(
+      (r) =>
+        r.role === "STUDENT" &&
+        (r.email.toLowerCase() === clean || r.email.toLowerCase().startsWith(`${roll}@`))
+    );
+    if (!reg) return null;
+    if (reg.studentProfileDetails) {
+      return { reg, details: reg.studentProfileDetails };
+    }
+    const raw = String(reg.orgOrDept || "");
+    const parts = raw.split("•").map((s) => s.trim());
+    const progToken = (parts[0] || "").toUpperCase();
+    const level: ProgramLevelOption = progToken.startsWith("BS ") || progToken === "BS"
+      ? "BS"
+      : progToken.startsWith("BSC")
+      ? "BSC"
+      : progToken.startsWith("FOUNDATION")
+      ? "FOUNDATION"
+      : "DIPLOMA";
+    const isDeg = level === "BSC" || level === "BS";
+    const trackToken = (parts[1] || "").toUpperCase();
+    const track: StudentTrackOption = trackToken.includes("BOTH")
+      ? "BOTH"
+      : trackToken.includes("FULL_TIME") || trackToken.includes("FULL-TIME")
+      ? "FULL_TIME"
+      : "INTERNSHIP";
+    const domainToken = (parts[2] || "").toUpperCase();
+    const domain: QuizDomainOption = domainToken.includes("SOFTWARE") ? "SOFTWARE_DEVELOPMENT" : "DATA_SCIENCE";
+    return {
+      reg,
+      details: {
+        personalEmail: "",
+        mobileNumber: "",
+        cgpa: "",
+        activeBacklogs: 0,
+        programLevel: level,
+        degreeType: "STANDALONE" as DegreeTypeOption,
+        applyingTrack: track,
+        targetDomain: domain,
+        hasDiplomaDataScience: isDeg || raw.includes("Diploma in Data Science"),
+        hasDiplomaProgramming: isDeg || raw.includes("Diploma in Programming"),
+        gender: "",
+        stateName: "",
+        category: "GENERAL" as CategoryOption,
+        isWorkingProf: false,
+      },
+    };
+  };
+
   const evaluateStudentEligibility = (draft: StudentOnboardingDraft): { eligible: boolean; message: string } => {
+    const isBscOrBs = draft.programLevel === "BSC" || draft.programLevel === "BS";
+    const hasDsDiploma = isBscOrBs || draft.hasDiplomaDataScience;
+    const hasProgDiploma = isBscOrBs || draft.hasDiplomaProgramming;
+
     if (draft.applyingTrack === "INTERNSHIP") {
       if (draft.targetDomain === "DATA_SCIENCE") {
-        if (!draft.hasDiplomaDataScience) {
+        if (!hasDsDiploma) {
           return {
             eligible: false,
             message:
-              "Eligibility Check Failed: For Data Science Internship, completing the Diploma in Data Science is mandatory.",
+              "Eligibility Check Failed: For Data Science Internship, completing the Diploma in Data Science (or BSc/BS) is mandatory.",
           };
         }
         return {
           eligible: true,
-          message:
-            "Eligible for Data Science Internship (Diploma in Data Science verified).",
+          message: `Eligible for Data Science Internship (${isBscOrBs ? `${draft.programLevel} — Both Diplomas Verified` : "Diploma in Data Science verified"}).`,
         };
       }
       if (draft.targetDomain === "SOFTWARE_DEVELOPMENT") {
-        if (!draft.hasDiplomaProgramming) {
+        if (!hasProgDiploma) {
           return {
             eligible: false,
             message:
-              "Eligibility Check Failed: For Software Development Internship, completing the Diploma in Programming is mandatory.",
+              "Eligibility Check Failed: For Software Development Internship, completing the Diploma in Programming (or BSc/BS) is mandatory.",
           };
         }
         return {
           eligible: true,
-          message:
-            "Eligible for Software Development Internship (Diploma in Programming verified).",
+          message: `Eligible for Software Development Internship (${isBscOrBs ? `${draft.programLevel} — Both Diplomas Verified` : "Diploma in Programming verified"}).`,
         };
       }
     }
 
-    // FULL_TIME track requires minimum BSc Pass (BSC or BS)
-    if (draft.programLevel !== "BSC" && draft.programLevel !== "BS") {
+    // FULL_TIME or BOTH tracks require minimum BSc Pass (BSC or BS, which implies both diplomas passed)
+    if (!isBscOrBs) {
       return {
         eligible: false,
-        message:
-          "Eligibility Check Failed: For Full-Time Placement, minimum BSc Pass (BSc / BS level) is mandatory.",
+        message: `Eligibility Check Failed: For ${
+          draft.applyingTrack === "BOTH" ? "Combined Internship + Full-Time Placement" : "Full-Time Placement"
+        }, minimum BSc Pass (BSc / BS level) is mandatory.`,
       };
     }
 
     return {
       eligible: true,
-      message: `Eligible for Full-Time Placement (${draft.programLevel} Pass verified • ${
-        draft.targetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"
-      } Track).`,
+      message:
+        draft.applyingTrack === "BOTH"
+          ? `Eligible for Both Internship & Full-Time Placement (${draft.programLevel} — Both Diplomas automatically verified).`
+          : `Eligible for Full-Time Placement (${draft.programLevel} — Both Diplomas automatically verified).`,
     };
   };
 
@@ -3009,16 +3112,19 @@ export default function App() {
     const cleanFullName = studentDraft.fullName.trim();
     const rollCode = normalizedEmail.split("@")[0].toUpperCase();
 
+    const isDegreeLevel = studentDraft.programLevel === "BSC" || studentDraft.programLevel === "BS";
+    const resolvedDsDiploma = isDegreeLevel ? true : studentDraft.hasDiplomaDataScience;
+    const resolvedProgDiploma = isDegreeLevel ? true : studentDraft.hasDiplomaProgramming;
     const diplomasLabel = [
-      studentDraft.hasDiplomaDataScience ? "Diploma in Data Science" : null,
-      studentDraft.hasDiplomaProgramming ? "Diploma in Programming" : null,
+      resolvedDsDiploma ? "Diploma in Data Science" : null,
+      resolvedProgDiploma ? "Diploma in Programming" : null,
     ]
       .filter(Boolean)
       .join(" + ");
 
     const orgSummary = `${studentDraft.programLevel} (${diplomasLabel || "Degree"}) • ${
       studentDraft.applyingTrack
-    } • ${studentDraft.targetDomain} • Payment: PAID`;
+    } • ${studentDraft.targetDomain} • CGPA ${studentDraft.cgpa || "N/A"} • Payment: PAID`;
 
     let backendUserId = `REG-${101 + registrations.length}`;
     try {
@@ -3051,6 +3157,27 @@ export default function App() {
       status: "PENDING",
       paymentStatus: "PAID",
       submittedAt: new Date().toLocaleString("en-IN", { hour12: false }) + " IST",
+      studentProfileDetails: {
+        personalEmail: studentDraft.personalEmail.trim().toLowerCase(),
+        mobileNumber: studentDraft.mobileNumber.trim(),
+        cgpa: studentDraft.cgpa.trim(),
+        activeBacklogs: studentDraft.activeBacklogs,
+        programLevel: studentDraft.programLevel,
+        degreeType: studentDraft.degreeType,
+        applyingTrack: studentDraft.applyingTrack,
+        targetDomain: studentDraft.targetDomain,
+        hasDiplomaDataScience: resolvedDsDiploma,
+        hasDiplomaProgramming: resolvedProgDiploma,
+        gender: studentDraft.gender,
+        stateName: studentDraft.stateName,
+        category: studentDraft.category,
+        isWorkingProf: studentDraft.isWorkingProf,
+        yearsExp: studentDraft.isWorkingProf ? studentDraft.yearsExp : undefined,
+        workDomain: studentDraft.isWorkingProf ? studentDraft.workDomain : undefined,
+        presentCompany: studentDraft.isWorkingProf ? studentDraft.presentCompany : undefined,
+        workLocation: studentDraft.isWorkingProf ? studentDraft.workLocation : undefined,
+        currentCtc: studentDraft.isWorkingProf ? studentDraft.currentCtc : undefined,
+      },
     };
 
     setRegistrations((prev) => [newRecord, ...prev.filter((r) => r.email.toLowerCase() !== normalizedEmail)]);
@@ -3084,6 +3211,9 @@ export default function App() {
     );
 
     setPaymentProcessing(false);
+    resetStudentDraft();
+    setRegFullName("");
+    setRegOrgOrDept("");
     setEmail(normalizedEmail);
     setPassword("");
     setOnboardingStep("AUTH");
@@ -3570,7 +3700,8 @@ export default function App() {
       .map((s) => s.trim())
       .filter(Boolean);
     if (skills.length === 0) {
-      setEvalBanner({ type: "ERR", text: "Specify at least one observed skillset." });
+      setExaminerNotes("");
+    setEvalBanner({ type: "ERR", text: "Specify at least one observed skillset." });
       return;
     }
 
@@ -3983,9 +4114,17 @@ export default function App() {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
+    const activeRollForPoints = resolveActiveStudentRoll();
     const validSubmittedIds = new Set(
       activitySubmissions
-        .filter((sub) => sub.reviewStatus === "APPROVED" && new Date(sub.completedDate) >= oneYearAgo)
+        .filter((sub) => {
+          const subRoll = (sub.studentEmail || "").split("@")[0].trim().toUpperCase();
+          return (
+            subRoll === activeRollForPoints &&
+            sub.reviewStatus === "APPROVED" &&
+            new Date(sub.completedDate) >= oneYearAgo
+          );
+        })
         .map((sub) => sub.activityId)
     );
 
@@ -4013,14 +4152,43 @@ export default function App() {
         ? table1Points + table2Points
         : table1Points + table2Points + table3Points;
 
+    const internshipPointsMet =
+      table1Points >= 10 && table2Points >= 15 && table1Points + table2Points >= 25;
+    const fullTimePointsMet =
+      table1Points >= 10 &&
+      table2Points >= 15 &&
+      table3Points >= 25 &&
+      table1Points + table2Points + table3Points >= 50;
+
     const meetsTableMinimums =
+      studentApplyingTrack === "INTERNSHIP" ? internshipPointsMet : fullTimePointsMet;
+
+    const matchingDomainTracks = tracks.filter((t) => t.domain === studentTargetDomain);
+    const internshipTrackObj = matchingDomainTracks.find((t) => t.track === "INTERNSHIP");
+    const fullTimeTrackObj = matchingDomainTracks.find((t) => t.track !== "INTERNSHIP");
+
+    const hasInternshipBadge = internshipTrackObj
+      ? badges.some((b) => b.courseCode === internshipTrackObj.code && b.scorePct >= 75)
+      : false;
+    const hasFullTimeBadge = fullTimeTrackObj
+      ? badges.some((b) => b.courseCode === fullTimeTrackObj.code && b.scorePct >= 75)
+      : false;
+
+    const domainTrackQuizPassed =
       studentApplyingTrack === "INTERNSHIP"
-        ? table1Points >= 10 && table2Points >= 15 && earnedPointsForTrack >= 25
-        : table1Points >= 10 && table2Points >= 15 && table3Points >= 25 && earnedPointsForTrack >= 50;
+        ? hasInternshipBadge
+        : studentApplyingTrack === "FULL_TIME"
+        ? hasFullTimeBadge
+        : hasInternshipBadge || hasFullTimeBadge;
 
     const eligibleForOneOnOne = l1Passed && l2Passed && l3PreSessionPassed && meetsTableMinimums;
-    const oneOnOneCleared = l3OneOnOne.statusText === "Yes" || Boolean(evaluations[0]?.isPlacementReady);
-    const overallPlacementReady = eligibleForOneOnOne && oneOnOneCleared;
+    const studentEval = evaluations.find(
+      (ev) => String(ev.studentRoll || "").trim().toUpperCase() === activeRollForPoints
+    );
+    const oneOnOneCleared = studentEval
+      ? Boolean(studentEval.isPlacementReady)
+      : l3OneOnOne.statusText === "Yes";
+    const overallPlacementReady = eligibleForOneOnOne && domainTrackQuizPassed && oneOnOneCleared;
 
     return {
       l1Obt,
@@ -4305,6 +4473,7 @@ export default function App() {
         });
 
       const activeCoordRoll = coordTargetRoll.trim().toUpperCase();
+      const persistedRolls: string[] = [];
       for (const [rollNo, stageMap] of updatesByRoll.entries()) {
         try {
           const bootRes = await fetch(
@@ -4321,28 +4490,32 @@ export default function App() {
             setTrainingStages(mergedStages);
           }
 
-          await fetch(`${API_BASE_URL}/api/v1/portal-state/sync`, {
+          const syncRes = await fetch(`${API_BASE_URL}/api/v1/portal-state/sync`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               studentRoll: rollNo,
               trainingStages: mergedStages,
-              activitySubmissions,
-              helpdeskTickets,
-              studentProfile: bootData.studentProfile || {},
-              snapshot: bootData.snapshot || {},
             }),
           });
-        } catch {
+          if (!syncRes.ok) {
+            const errTxt = await syncRes.text();
+            errors.push(`Roll ${rollNo}: Backend sync failed (${syncRes.status} ${errTxt})`);
+          } else {
+            persistedRolls.push(rollNo);
+          }
+        } catch (err) {
+          errors.push(`Roll ${rollNo}: Network error during sync`);
           if (rollNo === activeCoordRoll) {
             setTrainingStages((prev) => applyStageUpdates(prev, stageMap));
           }
         }
       }
 
-      const firstRoll = Array.from(updatesByRoll.keys())[0];
-      if (firstRoll && !updatesByRoll.has(activeCoordRoll)) {
-        setCoordTargetRoll(firstRoll);
+      const uploadedRolls = Array.from(updatesByRoll.keys());
+      const focusRoll = uploadedRolls[uploadedRolls.length - 1];
+      if (focusRoll && !updatesByRoll.has(activeCoordRoll)) {
+        setCoordTargetRoll(focusRoll);
       }
 
       appendAudit(
@@ -4452,6 +4625,20 @@ export default function App() {
     }
     if (!job.allowedLevels.includes(programLevel)) {
       reasons.push(`BRULE-24: Requires level ${job.allowedLevels.join("/")} (yours: ${programLevel}).`);
+    }
+    if (studentApplyingTrack !== "BOTH" && job.roleType !== studentApplyingTrack) {
+      reasons.push(`BRULE-22: Registered track is ${studentApplyingTrack}, not ${job.roleType}.`);
+    }
+    const trackDomainObj = tracks.find(
+      (t) => t.domain === job.domain && t.track === job.roleType
+    );
+    const passedTrackQuiz = trackDomainObj
+      ? badges.some((b) => b.courseCode === trackDomainObj.code && b.scorePct >= 75)
+      : badges.some((b) => b.scorePct >= 75);
+    if (!passedTrackQuiz) {
+      reasons.push(
+        `BRULE-25: Mandatory proctored 15-question ${job.domain.replace("_", " ")} (${job.roleType}) quiz (>= 75%) not yet passed.`
+      );
     }
     if (!examinerReady) {
       reasons.push("BRULE-25: Requires 'Placement Ready' declaration by the Examiner after your 1-on-1 interview.");
@@ -4688,6 +4875,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
+                  resetStudentDraft();
                   setOnboardingStep("AUTH");
                   setAuthMode("SIGN_IN");
                   setAuthError(null);
@@ -4721,7 +4909,7 @@ export default function App() {
               </div>
             )}
 
-            <form onSubmit={handleStudentRegistrationSubmit} className="space-y-4 text-xs">
+            <form onSubmit={handleStudentRegistrationSubmit} autoComplete="off" className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-300 font-medium mb-1">
@@ -4755,6 +4943,7 @@ export default function App() {
                   </label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     required
                     minLength={4}
                     value={studentDraft.password}
@@ -4924,12 +5113,22 @@ export default function App() {
                     <select
                       required
                       value={studentDraft.programLevel}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const nextLevel = e.target.value as ProgramLevelOption;
+                        const isDegree = nextLevel === "BSC" || nextLevel === "BS";
                         setStudentDraft({
                           ...studentDraft,
-                          programLevel: e.target.value as ProgramLevelOption,
-                        })
-                      }
+                          programLevel: nextLevel,
+                          hasDiplomaDataScience: isDegree ? true : studentDraft.hasDiplomaDataScience,
+                          hasDiplomaProgramming: isDegree ? true : studentDraft.hasDiplomaProgramming,
+                          applyingTrack:
+                            !isDegree &&
+                            (studentDraft.applyingTrack === "FULL_TIME" ||
+                              studentDraft.applyingTrack === "BOTH")
+                              ? "INTERNSHIP"
+                              : studentDraft.applyingTrack,
+                        });
+                      }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                     >
                       <option value="FOUNDATION">Foundation</option>
@@ -4949,13 +5148,24 @@ export default function App() {
                       onChange={(e) =>
                         setStudentDraft({
                           ...studentDraft,
-                          applyingTrack: e.target.value as JobRoleTypeOption,
+                          applyingTrack: e.target.value as StudentTrackOption,
                         })
                       }
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100"
                     >
                       <option value="INTERNSHIP">Internship (Min 1 Domain Diploma)</option>
-                      <option value="FULL_TIME">Full-Time Placement (Min BSc Pass)</option>
+                      <option
+                        value="FULL_TIME"
+                        disabled={studentDraft.programLevel !== "BSC" && studentDraft.programLevel !== "BS"}
+                      >
+                        Full-Time Placement (Min BSc Pass)
+                      </option>
+                      <option
+                        value="BOTH"
+                        disabled={studentDraft.programLevel !== "BSC" && studentDraft.programLevel !== "BS"}
+                      >
+                        Both — Internship &amp; Full-Time Placement (Min BSc Pass)
+                      </option>
                     </select>
                   </div>
 
@@ -4980,41 +5190,50 @@ export default function App() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1.5">
-                    Completed IITM Diplomas <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
-                      <input
-                        type="checkbox"
-                        checked={studentDraft.hasDiplomaDataScience}
-                        onChange={(e) =>
-                          setStudentDraft({
-                            ...studentDraft,
-                            hasDiplomaDataScience: e.target.checked,
-                          })
-                        }
-                        className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-slate-200">Diploma in Data Science Completed</span>
-                    </label>
-                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
-                      <input
-                        type="checkbox"
-                        checked={studentDraft.hasDiplomaProgramming}
-                        onChange={(e) =>
-                          setStudentDraft({
-                            ...studentDraft,
-                            hasDiplomaProgramming: e.target.checked,
-                          })
-                        }
-                        className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-slate-200">Diploma in Programming Completed</span>
-                    </label>
+                {studentDraft.programLevel === "BSC" || studentDraft.programLevel === "BS" ? (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>
+                      <strong>Both IITM Diplomas Automatically Verified:</strong> {studentDraft.programLevel} level confirms completion of both Diploma in Data Science and Diploma in Programming (eligible for Internship, Full-Time, or Both).
+                    </span>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1.5">
+                      Completed IITM Diplomas <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
+                        <input
+                          type="checkbox"
+                          checked={studentDraft.hasDiplomaDataScience}
+                          onChange={(e) =>
+                            setStudentDraft({
+                              ...studentDraft,
+                              hasDiplomaDataScience: e.target.checked,
+                            })
+                          }
+                          className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-slate-200">Diploma in Data Science Completed</span>
+                      </label>
+                      <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer hover:border-indigo-500/40">
+                        <input
+                          type="checkbox"
+                          checked={studentDraft.hasDiplomaProgramming}
+                          onChange={(e) =>
+                            setStudentDraft({
+                              ...studentDraft,
+                              hasDiplomaProgramming: e.target.checked,
+                            })
+                          }
+                          className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-slate-200">Diploma in Programming Completed</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Working Professional Mandatory Section */}
@@ -5309,6 +5528,7 @@ export default function App() {
                     setAuthNotice(null);
                     setEligibilityVerdict(null);
                     if (selectedRole === "STUDENT") {
+                      resetStudentDraft();
                       setOnboardingStep("STUDENT_FORM");
                     } else {
                       setAuthMode("SIGN_UP");
@@ -6186,7 +6406,7 @@ export default function App() {
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
-                Opportunities ({jobs.filter((j) => j.domain === studentTargetDomain && j.roleType === studentApplyingTrack).length} Open • {applications.length} Applied)
+                Opportunities ({jobs.filter((j) => j.domain === studentTargetDomain && (studentApplyingTrack === "BOTH" || j.roleType === studentApplyingTrack)).length} Open • {applications.length} Applied)
               </button>
             </>
           ) : user.role === "TRAINING_COORDINATOR" ? (
@@ -7079,7 +7299,7 @@ export default function App() {
                   ? jobs.filter(
                       (j) =>
                         j.domain === studentTargetDomain &&
-                        j.roleType === studentApplyingTrack
+                        (studentApplyingTrack === "BOTH" || j.roleType === studentApplyingTrack)
                     )
                   : user.role === "RECRUITER" && !recruiterShowAllDrives
                   ? jobs.filter(
@@ -7090,7 +7310,11 @@ export default function App() {
                   : jobs;
 
               const effectiveTrackFilter =
-                user.role === "STUDENT" ? studentApplyingTrack : opportunityTrackFilter;
+                user.role === "STUDENT"
+                  ? studentApplyingTrack === "BOTH"
+                    ? "ALL"
+                    : studentApplyingTrack
+                  : opportunityTrackFilter;
               const effectiveDomainFilter =
                 user.role === "STUDENT" ? studentTargetDomain : opportunityDomainFilter;
 
@@ -7283,7 +7507,7 @@ export default function App() {
                         <span className="px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 font-semibold">
                           Registered Cohort:{" "}
                           {studentTargetDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"} •{" "}
-                          {studentApplyingTrack === "INTERNSHIP" ? "Internship Plan" : "Full-Time Placement Plan"}
+                          {studentApplyingTrack === "BOTH" ? "Combined Internship + Full-Time Plan" : studentApplyingTrack === "INTERNSHIP" ? "Internship Plan" : "Full-Time Placement Plan"}
                         </span>
                         <span className="text-slate-400">
                           Showing {baseJobs.length} matching {studentApplyingTrack === "INTERNSHIP" ? "Internship" : "Full-Time"} drive(s)
@@ -7883,6 +8107,42 @@ export default function App() {
                     Roll: {user.email.split("@")[0].toUpperCase()}
                   </span>
                 </div>
+
+                {(() => {
+                  const meta = resolveStudentRegMeta(user.email);
+                  const effLevel = meta?.details.programLevel || programLevel;
+                  const effTrack = meta?.details.applyingTrack || studentApplyingTrack;
+                  const effDomain = meta?.details.targetDomain || studentTargetDomain;
+                  const isDeg = effLevel === "BSC" || effLevel === "BS";
+                  const dsDip = isDeg || Boolean(meta?.details.hasDiplomaDataScience);
+                  const progDip = isDeg || Boolean(meta?.details.hasDiplomaProgramming);
+                  return (
+                    <div className="mb-4 p-3.5 rounded-xl bg-indigo-950/35 border border-indigo-500/30 text-xs space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-indigo-200 uppercase tracking-wider text-[11px]">
+                          Verified Registration &amp; Track Eligibility
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                          {meta?.reg.status || "VERIFIED"} • {meta?.reg.paymentStatus || "PAID"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200">
+                          Program: <strong>{effLevel}</strong> ({degreeType.replace("_", " ")})
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-200">
+                          Opted Track: <strong>{effTrack === "BOTH" ? "BOTH (Internship + Full-Time)" : effTrack}</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-200">
+                          Domain: <strong>{effDomain === "DATA_SCIENCE" ? "Data Science" : "Software Development"}</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-200">
+                          Diplomas: {dsDip ? "Data Science ✓" : "DS ✗"} • {progDip ? "Programming ✓" : "Prog ✗"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {regAlert && (
                   <div

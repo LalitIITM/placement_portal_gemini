@@ -1,0 +1,17 @@
+Domain,Track,Question,Option A,Option B,Option C,Option D,Correct Answer
+Data Science,Internship,"Which evaluation metric is best suited for a heavily imbalanced binary classification dataset?","Accuracy","Precision-Recall AUC (PR-AUC)","Mean Absolute Error","R-Squared",B
+Data Science,Internship,"Which pandas method removes rows containing any missing (NaN) values by default?","df.fillna()","df.dropna()","df.isna()","df.replace()",B
+Data Science,Internship,"What does a p-value less than 0.05 typically indicate in hypothesis testing?","The null hypothesis is proven true","Strong evidence against the null hypothesis","The sample size is too small","Zero variance in the dataset",B
+Data Science,Internship,"Which SQL clause filters aggregated groups after a GROUP BY operation?","WHERE","ORDER BY","HAVING","DISTINCT",C
+Data Science,Full-Time Placement,"In gradient boosted decision trees (XGBoost/LightGBM), what does the L2 regularization parameter (lambda) penalize?","Total number of trees","Squared leaf weights","Feature cardinality","Learning rate decay",B
+Data Science,Full-Time Placement,"Which technique mitigates vanishing gradients in deep neural networks by adding identity skip connections?","Dropout","Residual Networks (ResNet)","Batch Normalization","Max Pooling",B
+Data Science,Full-Time Placement,"In Principal Component Analysis (PCA), what do the eigenvectors of the covariance matrix represent?","Noise residuals","Directions of maximum variance","Cluster centroids","Feature correlations with the target",B
+Data Science,Full-Time Placement,"Why is stratified k-fold cross-validation preferred over standard k-fold for classification tasks?","It trains faster on GPUs","It preserves class proportions across every fold","It eliminates data leakage automatically","It tunes hyperparameters without validation sets",B
+Software Development,Internship,"What is the average-case time complexity of searching for a key in a hash table?","O(1)","O(log n)","O(n)","O(n log n)",A
+Software Development,Internship,"Which HTTP method is idempotent and used to completely replace an existing resource?","POST","PATCH","PUT","CONNECT",C
+Software Development,Internship,"Which Git command creates a new local branch and immediately switches to it?","git branch -d feature","git checkout -b feature","git merge feature","git stash pop",B
+Software Development,Internship,"Which data structure operates on a Last-In, First-Out (LIFO) principle?","Queue","Min-Heap","Stack","Circular Linked List",C
+Software Development,Full-Time Placement,"Which SQL transaction isolation level prevents dirty reads and non-repeatable reads but still permits phantom reads?","Read Uncommitted","Read Committed","Repeatable Read","Serializable",C
+Software Development,Full-Time Placement,"According to the CAP theorem, during a network partition a distributed data store must choose between which two guarantees?","Consistency and Availability","Latency and Throughput","Durability and Atomicity","Replication and Sharding",A
+Software Development,Full-Time Placement,"In system design, what is the primary purpose of a database write-ahead log (WAL)?","Caching frequent SELECT queries","Ensuring durability and crash recovery","Compressing cold storage tables","Load balancing read replicas",B
+Software Development,Full-Time Placement,"Which concurrency issue occurs when two or more threads wait indefinitely for locks held by each other?","Race condition","Deadlock","Starvation","Thrashing",B

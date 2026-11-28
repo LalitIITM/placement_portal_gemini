@@ -9,6 +9,28 @@ export type RegistrationApprovalStatus = "PENDING" | "APPROVED" | "REJECTED"
 
 export type StudentOnboardingStep = "AUTH" | "STUDENT_FORM" | "PAYMENT";
 
+export interface StudentOnboardingDetails {
+  personalEmail: string;
+  mobileNumber: string;
+  cgpa: string;
+  activeBacklogs: number;
+  programLevel: ProgramLevelOption;
+  degreeType: DegreeTypeOption;
+  applyingTrack: StudentTrackOption;
+  targetDomain: QuizDomainOption;
+  hasDiplomaDataScience: boolean;
+  hasDiplomaProgramming: boolean;
+  gender: string;
+  stateName: string;
+  category: CategoryOption;
+  isWorkingProf: boolean;
+  yearsExp?: string;
+  workDomain?: WorkDomainOption;
+  presentCompany?: string;
+  workLocation?: string;
+  currentCtc?: string;
+}
+
 export interface StudentOnboardingDraft {
   fullName: string;
   email: string;
@@ -20,7 +42,7 @@ export interface StudentOnboardingDraft {
   programLevel: ProgramLevelOption;
   hasDiplomaDataScience: boolean;
   hasDiplomaProgramming: boolean;
-  applyingTrack: JobRoleTypeOption;
+  applyingTrack: StudentTrackOption;
   targetDomain: QuizDomainOption;
   gender: string;
   stateName: string;
@@ -83,6 +105,7 @@ export interface RegistrationRequestRecord {
   submittedAt: string;
   reviewedBy?: string;
   paymentStatus?: "PAID" | "NOT_REQUIRED";
+  studentProfileDetails?: StudentOnboardingDetails;
   examinerProfileDetails?: ExaminerOnboardingDetails;
   recruiterProfileDetails?: RecruiterOnboardingDetails;
 }
@@ -98,6 +121,8 @@ export type WorkDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT" | "OTHERS
 export type QuizDomainOption = "DATA_SCIENCE" | "SOFTWARE_DEVELOPMENT";
 
 export type QuizTrackOption = "INTERNSHIP" | "SOFTWARE_DEVELOPMENT";
+
+export type StudentTrackOption = "INTERNSHIP" | "FULL_TIME" | "BOTH";
 
 export type JobRoleTypeOption = "INTERNSHIP" | "FULL_TIME";
 
@@ -357,7 +382,7 @@ export interface StudentProfileSyncDTO {
   activeBacklogs: number;
   programLevel: ProgramLevelOption;
   degreeType: DegreeTypeOption;
-  applyingTrack: JobRoleTypeOption;
+  applyingTrack: StudentTrackOption;
   targetDomain: QuizDomainOption;
   headline: string;
   githubUrl: string;

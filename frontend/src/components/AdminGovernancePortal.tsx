@@ -450,7 +450,25 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                                   className="w-full px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-100"
                                 />
                               ) : (
-                                <div>{reg.orgOrDept}</div>
+                                <div>
+                                  <div>{reg.orgOrDept}</div>
+                                  {reg.role === "STUDENT" && reg.studentProfileDetails && (
+                                    <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                                      <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 font-semibold">
+                                        {reg.studentProfileDetails.programLevel} ({reg.studentProfileDetails.degreeType.replace("_", " ")})
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-200 border border-cyan-500/30 font-semibold">
+                                        Track: {reg.studentProfileDetails.applyingTrack}
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                        Diplomas: {reg.studentProfileDetails.hasDiplomaDataScience ? "DS ✓" : "DS ✗"} • {reg.studentProfileDetails.hasDiplomaProgramming ? "Prog ✓" : "Prog ✗"}
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
+                                        CGPA: {reg.studentProfileDetails.cgpa || "N/A"} • Backlogs: {reg.studentProfileDetails.activeBacklogs}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                               {!isEditing && reg.role === "EXAMINER" && reg.examinerProfileDetails && (
                                 <div className="mt-2 p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs space-y-1.5">
@@ -928,8 +946,13 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                                 <div className="text-sm font-bold text-indigo-300 mt-0.5">{r.role}</div>
                               </div>
                               <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                                <div className="text-[10px] text-slate-400">Department / Organization</div>
+                                <div className="text-[10px] text-slate-400">Department / Qualification &amp; Track</div>
                                 <div className="text-xs font-semibold text-white mt-0.5">{r.orgOrDept || "—"}</div>
+                                {r.role === "STUDENT" && r.studentProfileDetails && (
+                                  <div className="mt-1 text-[10px] text-indigo-300">
+                                    Level: {r.studentProfileDetails.programLevel} • Track: {r.studentProfileDetails.applyingTrack} • Diplomas: {r.studentProfileDetails.hasDiplomaDataScience ? "DS ✓" : "DS ✗"}, {r.studentProfileDetails.hasDiplomaProgramming ? "Prog ✓" : "Prog ✗"} • CGPA: {r.studentProfileDetails.cgpa || "N/A"}
+                                  </div>
+                                )}
                               </div>
                               <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
                                 <div className="text-[10px] text-slate-400">Submitted / Registered</div>
