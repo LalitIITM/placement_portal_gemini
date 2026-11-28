@@ -79,6 +79,7 @@ export default function TrainingAndVettingPortal({
     handleDownloadSampleQuestionCsv,
     handleDownloadSampleSlotsCsv,
     handleDownloadSampleTrainingCsv,
+    handleDownloadFullTrainingReportCsv,
     handleLogActivityPoint,
     handlePasteSlotRowsSubmit,
     handleQuestionBankFileUpload,
@@ -1453,6 +1454,13 @@ export default function TrainingAndVettingPortal({
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadFullTrainingReportCsv}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                      >
+                        Download Full Training Report (.csv)
+                      </button>
                       <button
                         type="button"
                         onClick={handleDownloadSampleTrainingCsv}

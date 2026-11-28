@@ -25,6 +25,12 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
     offers,
     handleRegistrationDecision,
     handleAdminDownloadRosterCsv,
+    handleDownloadFullTrainingReportCsv,
+    trainingStages,
+    trainingStagesByRoll,
+    activitySubmissions,
+    oneOnOneSlots,
+    badges,
     setDriveDocPreview,
     auditLogs,
     jobs,
@@ -272,9 +278,16 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                     <button
                       type="button"
                       onClick={() => handleAdminDownloadRosterCsv("ALL")}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition"
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition"
                     >
                       Download Complete Master Roster ({registrations.length}) .csv
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadFullTrainingReportCsv}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition shadow-sm"
+                    >
+                      Download Full Student Training &amp; Readiness Report (.csv)
                     </button>
                   </div>
                 </div>
@@ -1432,6 +1445,140 @@ export default function AdminGovernancePortal({ ctx }: { ctx: any }) {
                   </div>
                 </div>
               )}
+
+              {/* Consolidated Student Training & Readiness Matrix (L1-L3 + IIC Points + Badges + Viva) */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white">
+                      Student Training &amp; Readiness Matrix (L1–L3, IIC Activity Points &amp; Viva)
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Real-time per-student progression across Level 1 Soft Skills (80%), Level 2 Focus Finder (60%), Level 3 Hire Tracking, IIC Activity Points, and Examiner Viva Sign-off.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadFullTrainingReportCsv}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm"
+                  >
+                    Export Full Training Matrix (.csv)
+                  </button>
+                </div>
+
+                {(() => {
+                  const studentRows = (registrations || []).filter((r: any) => r.role === "STUDENT");
+                  if (studentRows.length === 0) {
+                    return (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                        No registered student records found.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                          <tr>
+                            <th className="py-2.5 px-3">Student &amp; Roll</th>
+                            <th className="py-2.5 px-3">Level 1 (80% Cutoff)</th>
+                            <th className="py-2.5 px-3">Level 2 (60% Cutoff)</th>
+                            <th className="py-2.5 px-3">Level 3 (Test / AI Mock)</th>
+                            <th className="py-2.5 px-3">IIC Activity Pts</th>
+                            <th className="py-2.5 px-3">Quiz Badges</th>
+                            <th className="py-2.5 px-3">1-on-1 Viva Verdict</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/80 bg-slate-950/60">
+                          {studentRows.map((st: any) => {
+                            const roll = String(st.email || "").split("@")[0].trim().toUpperCase();
+                            const stages = (trainingStagesByRoll && trainingStagesByRoll[roll]) || trainingStages || [];
+                            const l1 = stages.filter((s: any) => s.level === 1);
+                            const l2 = stages.filter((s: any) => s.level === 2);
+                            const l1Obt = l1.reduce((acc: number, s: any) => acc + (s.obtainedMarks || 0), 0);
+                            const l1Max = l1.reduce((acc: number, s: any) => acc + (s.maxMarks || 0), 0) || 120;
+                            const l2Obt = l2.reduce((acc: number, s: any) => acc + (s.obtainedMarks || 0), 0);
+                            const l2Max = l2.reduce((acc: number, s: any) => acc + (s.maxMarks || 0), 0) || 80;
+                            const l3s1 = stages.find((s: any) => s.id === "L3-S1");
+                            const l3s2 = stages.find((s: any) => s.id === "L3-S2");
+                            const subs = (activitySubmissions || []).filter(
+                              (sub: any) => String(sub.studentEmail || "").split("@")[0].trim().toUpperCase() === roll
+                            );
+                            const approvedPts = subs
+                              .filter((s: any) => s.reviewStatus === "APPROVED")
+                              .reduce((acc: number, s: any) => acc + (s.pointsAwarded || 5), 0);
+                            const pendingCnt = subs.filter((s: any) => s.reviewStatus === "PENDING_COORDINATOR").length;
+                            const stBadges = (badges || []).filter(
+                              (b: any) => !b.studentRoll || String(b.studentRoll).trim().toUpperCase() === roll
+                            );
+                            const ev = (evaluations || []).find(
+                              (e: any) => String(e.studentRoll || "").trim().toUpperCase() === roll
+                            );
+                            const slot = (oneOnOneSlots || []).find(
+                              (sl: any) => String(sl.studentEmail || "").split("@")[0].trim().toUpperCase() === roll
+                            );
+
+                            return (
+                              <tr key={st.id} className="hover:bg-slate-900/70">
+                                <td className="py-2.5 px-3">
+                                  <div className="font-semibold text-white">{st.fullName}</div>
+                                  <div className="font-mono text-[11px] text-indigo-300">{roll}</div>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`font-semibold ${l1Obt >= Math.round(l1Max * 0.8) ? "text-emerald-300" : "text-amber-300"}`}>
+                                    {l1Obt}/{l1Max}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-400">
+                                    {l1Obt >= Math.round(l1Max * 0.8) ? "PASSED" : "In Progress"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`font-semibold ${l2Obt >= Math.round(l2Max * 0.6) ? "text-emerald-300" : "text-amber-300"}`}>
+                                    {l2Obt}/{l2Max}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-400">
+                                    {l2Obt >= Math.round(l2Max * 0.6) ? "PASSED" : "In Progress"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-[11px] text-slate-200">
+                                  <div>Test: {l3s1 ? `${l3s1.obtainedMarks}/${l3s1.maxMarks}` : "0/25"}</div>
+                                  <div className="text-slate-400">Mock: {l3s2?.statusText || "Pending"}</div>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="font-semibold text-emerald-300">{approvedPts} pts</span>
+                                  {pendingCnt > 0 && (
+                                    <span className="block text-[10px] text-amber-300">{pendingCnt} pending review</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-[11px] text-slate-200">
+                                  {stBadges.length} badge(s)
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  {ev ? (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                        ev.isPlacementReady
+                                          ? "bg-emerald-500/20 text-emerald-300"
+                                          : "bg-amber-500/20 text-amber-300"
+                                      }`}
+                                    >
+                                      {ev.isPlacementReady ? "PLACEMENT READY" : "REMEDIAL"}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">
+                                      {slot ? `Scheduled (${slot.date})` : "Pending Viva"}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
 
               {/* Examiner 1-on-1 Viva Evaluations Audit Summary */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">

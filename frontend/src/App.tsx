@@ -973,6 +973,185 @@ export default function App() {
     });
   };
 
+  const handleDownloadFullTrainingReportCsv = () => {
+    const escapeCsv = (val: unknown) => {
+      const s = String(val ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const studentMap = new Map<string, { roll: string; fullName: string; email: string; status: string }>();
+    registrations
+      .filter((r) => r.role === "STUDENT")
+      .forEach((r) => {
+        const roll = (r.email.split("@")[0] || "").trim().toUpperCase();
+        if (roll) {
+          studentMap.set(roll, {
+            roll,
+            fullName: r.fullName,
+            email: r.email,
+            status: r.status,
+          });
+        }
+      });
+
+    Object.keys(trainingStagesByRoll).forEach((r) => {
+      const roll = r.trim().toUpperCase();
+      if (roll && !studentMap.has(roll)) {
+        studentMap.set(roll, {
+          roll,
+          fullName: `IITM Student (${roll})`,
+          email: `${roll.toLowerCase()}@ds.study.iitm.ac.in`,
+          status: "APPROVED",
+        });
+      }
+    });
+
+    evaluations.forEach((ev) => {
+      const roll = String(ev.studentRoll || "").trim().toUpperCase();
+      if (roll && !studentMap.has(roll)) {
+        studentMap.set(roll, {
+          roll,
+          fullName: `IITM Student (${roll})`,
+          email: `${roll.toLowerCase()}@ds.study.iitm.ac.in`,
+          status: "APPROVED",
+        });
+      }
+    });
+
+    const activeRoll = resolveActiveStudentRoll();
+    const allStagesMap: Record<string, TrainingStageScore[]> = {
+      ...trainingStagesByRoll,
+      [activeRoll]: trainingStages,
+    };
+
+    const headers = [
+      "Roll_No",
+      "Full_Name",
+      "IITM_Email",
+      "Account_Status",
+      "Level_1_Marks",
+      "Level_1_Max",
+      "Level_1_Status",
+      "Level_1_Stages",
+      "Level_2_Marks",
+      "Level_2_Max",
+      "Level_2_Status",
+      "Level_2_Stages",
+      "Level_3_Tech_Test",
+      "Level_3_AI_Mock",
+      "Level_3_Viva_SignOff",
+      "IIC_Approved_Points",
+      "IIC_Pending_Count",
+      "IIC_Activities",
+      "Quiz_Badges_Count",
+      "Quiz_Badges",
+      "Viva_Slot",
+      "Assigned_Examiner",
+      "Prog_Rating",
+      "DS_Rating",
+      "Comm_Rating",
+      "Placement_Ready_Verdict",
+      "Examiner_Remarks",
+    ];
+
+    const rows = Array.from(studentMap.values()).map((st) => {
+      const stages = allStagesMap[st.roll] || INITIAL_TRAINING_STAGES;
+      const l1 = stages.filter((s) => s.level === 1);
+      const l2 = stages.filter((s) => s.level === 2);
+      const l1Obt = l1.reduce((acc, s) => acc + s.obtainedMarks, 0);
+      const l1Max = l1.reduce((acc, s) => acc + s.maxMarks, 0) || 120;
+      const l2Obt = l2.reduce((acc, s) => acc + s.obtainedMarks, 0);
+      const l2Max = l2.reduce((acc, s) => acc + s.maxMarks, 0) || 80;
+      const l3s1 = stages.find((s) => s.id === "L3-S1");
+      const l3s2 = stages.find((s) => s.id === "L3-S2");
+      const l3s3 = stages.find((s) => s.id === "L3-S3");
+
+      const subs = activitySubmissions.filter(
+        (sub) => String(sub.studentEmail || "").split("@")[0].trim().toUpperCase() === st.roll
+      );
+      const approvedSubs = subs.filter((s) => s.reviewStatus === "APPROVED");
+      const pendingSubs = subs.filter((s) => s.reviewStatus === "PENDING_COORDINATOR");
+      const approvedPts = approvedSubs.reduce((acc, s) => {
+        const cat = ACTIVITY_CATALOG.find((c) => c.id === s.activityId);
+        return acc + (cat?.points || 0);
+      }, 0);
+
+      const studentBadges = badges;
+
+      const ev = evaluations.find(
+        (e) => String(e.studentRoll || "").trim().toUpperCase() === st.roll
+      );
+      const slot = oneOnOneSlots.find(
+        (sl) => String(sl.studentEmail || "").split("@")[0].trim().toUpperCase() === st.roll
+      );
+
+      return [
+        st.roll,
+        st.fullName,
+        st.email,
+        st.status,
+        l1Obt,
+        l1Max,
+        l1Obt >= Math.round(l1Max * 0.8) ? "PASSED" : "IN_PROGRESS",
+        l1.map((s) => `${s.id}:${s.obtainedMarks}/${s.maxMarks}`).join(" | "),
+        l2Obt,
+        l2Max,
+        l2Obt >= Math.round(l2Max * 0.6) ? "PASSED" : "IN_PROGRESS",
+        l2.map((s) => `${s.id}:${s.obtainedMarks}/${s.maxMarks}`).join(" | "),
+        l3s1 ? `${l3s1.obtainedMarks}/${l3s1.maxMarks} (${l3s1.statusText})` : "0/25",
+        l3s2 ? l3s2.statusText : "Pending",
+        ev?.isPlacementReady ? "Yes" : l3s3?.statusText || "Pending",
+        approvedPts,
+        pendingSubs.length,
+        subs.map((s) => {
+          const cat = ACTIVITY_CATALOG.find((c) => c.id === s.activityId);
+          return `${cat?.title || s.activityId} [${s.reviewStatus}]`;
+        }).join(" | "),
+        studentBadges.length,
+        studentBadges.map((b) => `${b.skillName} (${b.scorePct}%)`).join(" | "),
+        slot ? `${slot.date} ${slot.slotTime}` : "Not Scheduled",
+        ev?.examinerEmail || slot?.instructor || "Unassigned",
+        ev ? `${ev.programmingRating}/5` : "-",
+        ev ? `${ev.dataScienceRating}/5` : "-",
+        ev ? `${ev.communicationRating}/5` : "-",
+        ev ? (ev.isPlacementReady ? "PLACEMENT_READY" : "REMEDIAL_ASSIGNED") : "PENDING_VIVA",
+        ev?.notes || "",
+      ]
+        .map(escapeCsv)
+        .join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `iitm_full_student_training_report_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    appendAudit(
+      user?.email || "admin@iitm.ac.in",
+      user?.role || "ADMIN",
+      "FULL_TRAINING_REPORT_EXPORT",
+      `Downloaded consolidated training & readiness CSV for ${rows.length} student(s)`,
+      "SUCCESS"
+    );
+    setAdminCommandAlert({
+      type: "OK",
+      text: `Downloaded full training & readiness report for ${rows.length} student(s).`,
+    });
+    setCoordFeedback({
+      type: "OK",
+      text: `Downloaded full training & readiness CSV report for ${rows.length} student(s).`,
+    });
+  };
+
   const isPersistedUuid = (val: string) => val.includes("-") && val.length >= 32;
 
   const handleAdminCreateUser = async (e: React.FormEvent) => {
@@ -1352,6 +1531,7 @@ export default function App() {
   const [studentTargetDomain, setStudentTargetDomain] = useState<QuizDomainOption>("DATA_SCIENCE");
   const [studentApplyingTrack, setStudentApplyingTrack] = useState<StudentTrackOption>("INTERNSHIP");
   const [trainingStages, setTrainingStages] = useState<TrainingStageScore[]>(INITIAL_TRAINING_STAGES);
+  const [trainingStagesByRoll, setTrainingStagesByRoll] = useState<Record<string, TrainingStageScore[]>>({});
   const [activitySubmissions, setActivitySubmissions] = useState<ActivitySubmission[]>([]);
   const [selectedActivityToLog, setSelectedActivityToLog] = useState<string>("T22-KAG-1");
   const [activityProofUrl, setActivityProofUrl] = useState<string>("");
@@ -2066,13 +2246,25 @@ export default function App() {
         const data = await res.json();
         if (cancelled) return;
 
+        const snap = data.snapshot || {};
+        const snapByRoll: Record<string, TrainingStageScore[]> =
+          snap.trainingStagesByRoll && typeof snap.trainingStagesByRoll === "object"
+            ? snap.trainingStagesByRoll
+            : {};
+        if (Object.keys(snapByRoll).length > 0) {
+          setTrainingStagesByRoll(snapByRoll);
+        }
         if (Array.isArray(data.trainingStages) && data.trainingStages.length > 0) {
           setTrainingStages(data.trainingStages);
+          setTrainingStagesByRoll((prev) => ({ ...prev, [rollToFetch]: data.trainingStages }));
+        } else if (Array.isArray(snapByRoll[rollToFetch]) && snapByRoll[rollToFetch].length > 0) {
+          setTrainingStages(snapByRoll[rollToFetch]);
+        } else {
+          setTrainingStages(INITIAL_TRAINING_STAGES);
         }
         if (Array.isArray(data.activitySubmissions)) {
           setActivitySubmissions(data.activitySubmissions);
         }
-        const snap = data.snapshot || {};
         if (Array.isArray(snap.registrations) && snap.registrations.length > 0) {
           setRegistrations((prevDefaults) => {
             const existingEmails = new Set(
@@ -2186,6 +2378,10 @@ export default function App() {
     if (!dbHydrated) return;
     const rollToSave = resolveActiveStudentRoll();
     if (loadedRollRef.current !== rollToSave) return;
+    setTrainingStagesByRoll((prev) => {
+      if (prev[rollToSave] === trainingStages) return prev;
+      return { ...prev, [rollToSave]: trainingStages };
+    });
     setDbSyncStatus("SYNCING");
 
     const timer = window.setTimeout(async () => {
@@ -2231,6 +2427,10 @@ export default function App() {
               oneOnOneSlots,
               examinerSlots,
               questionBank,
+              trainingStagesByRoll: {
+                ...trainingStagesByRoll,
+                [rollToSave]: trainingStages,
+              },
               auditLogs,
               resumes,
               marksheet,
@@ -4521,6 +4721,14 @@ export default function App() {
         }
       }
 
+      setTrainingStagesByRoll((prev) => {
+        const next = { ...prev };
+        for (const [rNo, sMap] of updatesByRoll.entries()) {
+          const base = Array.isArray(next[rNo]) && next[rNo].length > 0 ? next[rNo] : INITIAL_TRAINING_STAGES;
+          next[rNo] = applyStageUpdates(base, sMap);
+        }
+        return next;
+      });
       const uploadedRolls = Array.from(updatesByRoll.keys());
       const focusRoll = uploadedRolls[uploadedRolls.length - 1];
       if (focusRoll && !updatesByRoll.has(activeCoordRoll)) {
@@ -8671,7 +8879,7 @@ export default function App() {
 
         {activeTab === "TRAINING" && (
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading Training & Vetting Workspace...</div>}>
-            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, examinerSlots, setExaminerSlots, registrations, ingestParsedSlotRows, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
+            <TrainingAndVettingPortal ctx={{ activePoolSize, activeTrack, examinerSlots, setExaminerSlots, registrations, ingestParsedSlotRows, activityAlert, activityCompletedDate, activityProofUrl, activitySubmissions, badges, bulkImporting, bulkQDomain, bulkQMode, bulkQStatus, bulkQTrack, bulkSheetUrl, commRating, computeTrainingAndActivityProgress, coordCsvInputRef, coordFeedback, coordTargetRoll, drawnQuestions, dsRating, evalBanner, evalSkillsets, evaluations, examinerNotes, examinerSlotScope, formatTimer, handleAddQuestionToBank, handleAddSingleSlot, handleAttemptTrainingStage, handleBatchTrainingCsvUpload, handleCoordinatorReviewActivity, handleCoordinatorUpdateStageScore, handleDownloadSampleQuestionCsv, handleDownloadSampleSlotsCsv, handleDownloadSampleTrainingCsv, handleDownloadFullTrainingReportCsv, trainingStagesByRoll, handleLogActivityPoint, handlePasteSlotRowsSubmit, handleQuestionBankFileUpload, handleQuestionBankSheetUrlImport, handleSaveExaminerEvaluation, handleSimulateOneOnOneSignoff, handleSpreadsheetSlotFileUpload, handleStartRandomQuiz, handleSubmitQuiz, isPlacementReady, isQuizActive, manualSlotDate, manualSlotEmail, manualSlotInstructor, manualSlotName, manualSlotTime, marksheet, oneOnOneSlots, performingExceptionallyGood, progRating, qbBanner, qbCorrectIdx, qbDomain, qbOpt0, qbOpt1, qbOpt2, qbOpt3, qbPrompt, qbTrack, questionBank, quizAnswers, quizBanner, remedialTasksText, resolveActiveStudentRoll, resumes, secondsLeft, selectedActivityToLog, selectedSlotIdForEval, setActiveTrackId, setActivityCompletedDate, setActivityProofUrl, setBulkQDomain, setBulkQMode, setBulkQStatus, setBulkQTrack, setBulkSheetUrl, setCommRating, setCoordTargetRoll, setDrawnQuestions, setDriveDocPreview, setDsRating, setEvalSkillsets, setExaminerNotes, setExaminerSlotScope, setIsPlacementReady, setManualSlotDate, setManualSlotEmail, setManualSlotInstructor, setManualSlotName, setManualSlotTime, setPerformingExceptionallyGood, setPreviewSubmission, setProgRating, setQbCorrectIdx, setQbDomain, setQbOpt0, setQbOpt1, setQbOpt2, setQbOpt3, setQbPrompt, setQbTrack, setQuizAnswers, setQuizBanner, setRemedialTasksText, setSelectedActivityToLog, setSelectedSlotIdForEval, setSlotPasteText, setSlotProgressFilter, setSlotUploadAlert, slotPasteText, slotProgressFilter, slotUploadAlert, studentApplyingTrack, studentTargetDomain, toggleModuleComplete, tracks, trainingStages, user }} />
           </Suspense>
         )}
 
@@ -9126,6 +9334,12 @@ export default function App() {
                 offers,
                 handleRegistrationDecision,
                 handleAdminDownloadRosterCsv,
+                handleDownloadFullTrainingReportCsv,
+                trainingStages,
+                trainingStagesByRoll,
+                activitySubmissions,
+                oneOnOneSlots,
+                badges,
                 setDriveDocPreview,
                 auditLogs,
                 jobs,
