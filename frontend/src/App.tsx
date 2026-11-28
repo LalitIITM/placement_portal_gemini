@@ -543,13 +543,10 @@ const INDIAN_STATES = [
   "Other",
 ];
 
-const SEED_DS_BANK: Array<[string, string[], number]> = [
+// 1. Data Science — Internship Track Question Bank (24 unique questions)
+const SEED_DS_INTERNSHIP_BANK: Array<[string, string[], number]> = [
   ["When should StandardScaler be fit inside a cross-validation pipeline?", ["On the entire dataset before splitting", "Inside each training fold only, then applied to validation", "Only on the test set", "After hyperparameter tuning"], 1],
   ["Which metric is most informative on a heavily imbalanced 1% positive class dataset?", ["Raw Accuracy", "PR-AUC (Precision-Recall AUC)", "R-squared", "Mean Bias Error"], 1],
-  ["What does a high Population Stability Index (PSI > 0.25) indicate in production?", ["Significant covariate distribution shift", "Zero model latency", "Perfect calibration", "Training-only overfitting"], 0],
-  ["Which technique calibrates predicted probabilities without altering rank ordering?", ["Dropout", "Isotonic / Platt Calibration", "L1 Pruning", "PCA"], 1],
-  ["What is the variance inflation factor (VIF) used to diagnose?", ["Heteroscedasticity", "Multicollinearity among predictors", "Autocorrelation", "Non-normality of target"], 1],
-  ["In gradient boosted trees, what does lowering learning rate with more estimators generally improve?", ["Generalization performance", "Training speed", "Memory footprint", "Label noise"], 0],
   ["Which SQL window function assigns consecutive ranks without gaps for ties?", ["RANK()", "DENSE_RANK()", "ROW_NUMBER()", "NTILE(4)"], 1],
   ["What does L1 (Lasso) regularization uniquely encourage compared to L2 (Ridge)?", ["Exact zero feature weights (sparsity)", "Uniformly small weights", "Faster matrix inversion", "Higher variance"], 0],
   ["Which hypothesis test compares medians across two independent non-normal samples?", ["Paired t-test", "Mann-Whitney U test", "Chi-square test", "ANOVA F-test"], 1],
@@ -561,56 +558,143 @@ const SEED_DS_BANK: Array<[string, string[], number]> = [
   ["What does PCA maximize along its first principal component?", ["Class separability", "Projected variance of centered data", "Mutual information", "L1 sparsity"], 1],
   ["In k-means clustering, what does the silhouette score measure?", ["Cluster cohesion vs separation", "Iteration count", "Feature correlation", "Outlier count"], 0],
   ["Which technique addresses class imbalance by interpolating synthetic minority points?", ["SMOTE", "Random column shuffling", "Standard scaling", "PCA whitening"], 0],
-  ["What is the primary purpose of an out-of-time (OOT) validation split?", ["Verify temporal stability against concept drift", "Speed up grid search", "Tune batch size", "Replace unit tests"], 0],
   ["Which SQL clause filters groups after aggregation?", ["WHERE", "HAVING", "ORDER BY", "DISTINCT"], 1],
-  ["What does SHAP provide for gradient boosted tree models?", ["Consistent local feature attribution values", "Hyperparameter bounds", "Database indexing", "GPU profiling"], 0],
+  ["What is the variance inflation factor (VIF) used to diagnose?", ["Heteroscedasticity", "Multicollinearity among predictors", "Autocorrelation", "Non-normality of target"], 1],
+  ["In gradient boosted trees, what does lowering learning rate with more estimators generally improve?", ["Generalization performance", "Training speed", "Memory footprint", "Label noise"], 0],
+  ["What is the difference between UNION and UNION ALL in SQL?", ["UNION deduplicates rows; UNION ALL retains all duplicates", "UNION ALL sorts automatically", "UNION requires identical column names", "UNION only works on indexed tables"], 0],
+  ["Which Pandas operation avoids chained-indexing SettingWithCopyWarning?", ["Using .loc[row_indexer, col_indexer] in a single step", "Chaining df[a][b] = val", "Disabling garbage collection", "Converting to list first"], 0],
+  ["What does a ROC curve plot across classification thresholds?", ["True Positive Rate vs False Positive Rate", "Precision vs Recall", "Loss vs Epoch", "Bias vs Variance"], 0],
+  ["When is median imputation preferred over mean imputation?", ["When the numeric feature has heavy skewness or outliers", "When data is categorical", "When missingness is 0%", "When variance is zero"], 0],
+  ["Which SQL join returns all rows from the left table and matched rows from the right table?", ["LEFT OUTER JOIN", "INNER JOIN", "CROSS JOIN", "SELF JOIN"], 0],
+  ["Which diagnostic plot compares empirical sample quantiles against theoretical normal quantiles?", ["Q-Q Plot", "ROC Curve", "Scree Plot", "Partial Dependence Plot"], 0],
+  ["Why is Huber loss preferred over MSE when target labels contain severe outliers?", ["It transitions from quadratic to linear error beyond threshold delta", "It ignores all residuals", "It forces sparse coefficients", "It requires no hyperparameter"], 0],
+  ["What does the F1-score compute?", ["Harmonic mean of Precision and Recall", "Arithmetic mean of Accuracy and Specificity", "Area under the Lift curve", "Log-odds ratio"], 0],
 ];
 
-const SEED_SD_BANK: Array<[string, string[], number]> = [
-  ["Why should blocking I/O calls be avoided inside an async FastAPI route?", ["They stall the single-threaded asyncio event loop", "FastAPI rejects sync functions", "PostgreSQL drops sync connections", "CORS headers fail"], 0],
+// 2. Data Science — Full-Time Placement Question Bank (24 distinct production ML & statistical modeling questions)
+const SEED_DS_FULLTIME_BANK: Array<[string, string[], number]> = [
+  ["What does a high Population Stability Index (PSI > 0.25) indicate in production?", ["Significant covariate distribution shift", "Zero model latency", "Perfect calibration", "Training-only overfitting"], 0],
+  ["Which technique calibrates predicted probabilities without altering rank ordering?", ["Dropout", "Isotonic / Platt Calibration", "L1 Pruning", "PCA"], 1],
+  ["What is the primary purpose of an out-of-time (OOT) validation split?", ["Verify temporal stability against concept drift", "Speed up grid search", "Tune batch size", "Replace unit tests"], 0],
+  ["What does SHAP provide for gradient boosted tree models?", ["Consistent local feature attribution values", "Hyperparameter bounds", "Database indexing", "GPU profiling"], 0],
+  ["What does the Benjamini-Hochberg procedure control during multiple hypothesis testing?", ["False Discovery Rate (FDR)", "Model variance", "Learning rate decay", "Gradient clipping threshold"], 0],
+  ["In survival analysis, what does right-censoring mean for an observation?", ["The event has not occurred yet by the end of the study window", "The feature values were deleted", "The label was inverted", "The sample failed quality checks"], 0],
+  ["What is the primary role of an embedding layer in deep learning for high-cardinality categoricals?", ["Maps discrete IDs into dense low-dimensional continuous vectors", "Performs one-hot expansion on disk", "Normalizes batch gradients", "Prunes dead ReLU neurons"], 0],
+  ["In Bayesian inference, what is a conjugate prior?", ["A prior distribution yielding a posterior in the same probability family", "A uniform uninformative prior only", "A point-mass Dirac prior", "A cross-validated hyperparameter"], 0],
+  ["What does Kullback-Leibler (KL) divergence measure between distributions P and Q?", ["Relative entropy (information lost when Q approximates P)", "Euclidean distance between means", "Pearson correlation", "Sample size ratio"], 0],
+  ["Why do online feature stores maintain separate offline and online storage tiers?", ["Sub-10ms point lookups for serving vs high-throughput batch scans for training", "Offline stores cannot store floats", "Online stores forbid primary keys", "To duplicate raw CSV files"], 0],
+  ["In causal inference, what does the Difference-in-Differences (DiD) estimator assume?", ["Parallel trends between treatment and control groups absent intervention", "Random assignment at the individual level", "Zero confounding covariates", "Linearity of propensity scores"], 0],
+  ["How does CUPED reduce variance in online A/B experiments?", ["Adjusts post-experiment metrics using correlated pre-experiment covariates", "Increases sample size by bootstrapping", "Drops the top 10% of users", "Uses one-tailed t-tests"], 0],
+  ["What problem does Approximate Nearest Neighbor (HNSW / IVF) solve in vector retrieval?", ["Sub-linear similarity search over millions of dense embeddings", "Exact SQL joins on JSONB", "Gradient checkpointing", "Lossless image compression"], 0],
+  ["In LightGBM, why does Gradient-based One-Side Sampling (GOSS) speed up training?", ["Retains instances with large gradients while randomly sampling small-gradient instances", "Drops all categorical features", "Uses full-batch second-order Hessians only", "Disables tree pruning"], 0],
+  ["What does the Brier score evaluate for probabilistic classifiers?", ["Mean squared error between predicted probabilities and binary outcomes", "Ranking AUC across imbalanced classes", "Feature collinearity", "Cluster purity"], 0],
+  ["Why is GroupKFold required when a dataset contains multiple rows per user or session?", ["Prevents entity leakage across train and validation splits", "Balances class weights automatically", "Speeds up matrix multiplication", "Normalizes target skewness"], 0],
+  ["In multi-armed bandits, how does Thompson Sampling balance exploration and exploitation?", ["Samples parameters from each arm's posterior reward distribution and picks the highest", "Always picks the arm with highest empirical mean", "Selects arms uniformly at random forever", "Uses fixed round-robin scheduling"], 0],
+  ["What causes catastrophic forgetting during continual fine-tuning of neural networks?", ["Gradient updates overwrite weights critical to earlier tasks", "Learning rate equals zero", "Batch normalization is frozen", "Weight decay is disabled"], 0],
+  ["In recommendation systems, what is the cold-start problem?", ["Lack of historical interaction data for new users or items", "GPU thermal throttling during inference", "Over-regularization of matrix factorization", "Duplicate item IDs in catalog"], 0],
+  ["Why apply log1p transformation to heavy-tailed monetary or count targets?", ["Stabilizes variance and reduces right-skew influence on residuals", "Converts regression to classification", "Removes all zero values", "Guarantees normal residuals"], 0],
+  ["What does the Kolmogorov-Smirnov (KS) two-sample statistic measure in drift monitoring?", ["Maximum vertical distance between two empirical CDFs", "Ratio of sample variances", "Correlation of residuals", "Number of missing values"], 0],
+  ["In shadow deployment of a new ML model, how is live traffic handled?", ["Production traffic is mirrored to the candidate model without affecting user responses", "50% of users receive candidate predictions immediately", "Offline batch files are replayed once a month", "The primary model is shut down during evaluation"], 0],
+  ["What is focal loss designed to address in dense object detection or extreme class imbalance?", ["Down-weights well-classified easy negatives so training focuses on hard examples", "Eliminates bounding-box regression", "Replaces non-maximum suppression", "Enforces L1 weight sparsity"], 0],
+  ["Why are monotonic constraints often enforced on credit-risk or pricing GBMs?", ["Ensures domain-consistent directional behavior and regulatory interpretability", "Reduces tree depth to 1", "Eliminates validation splits", "Forces linear decision boundaries"], 0],
+];
+
+// 3. Software Development — Internship Track Question Bank (24 unique questions)
+const SEED_SD_INTERNSHIP_BANK: Array<[string, string[], number]> = [
   ["Which HTTP status code best represents a business-rule conflict like exceeding max attempts?", ["200 OK", "302 Found", "409 Conflict", "502 Bad Gateway"], 2],
+  ["What is the average lookup time complexity in a balanced binary search tree?", ["O(1)", "O(log n)", "O(n)", "O(n log n)"], 1],
+  ["Which Git command replays commits from a feature branch onto the tip of main cleanly?", ["git rebase main", "git stash pop", "git bisect", "git tag"], 0],
+  ["What does CORS preflight (OPTIONS) verify before a browser sends a cross-origin POST?", ["Allowed origins, HTTP methods, and custom headers", "TLS certificate chain", "DB connection pool", "DNSSEC records"], 0],
+  ["Which data structure underlies Dijkstra's shortest-path algorithm for O((V+E) log V) runtime?", ["Min-Priority Queue (Binary Heap)", "LIFO Stack", "Circular Buffer", "Disjoint Set"], 0],
+  ["Why parameterize SQL queries instead of string concatenation?", ["Prevents SQL injection and enables query plan reuse", "Bypasses transactions", "Disables foreign keys", "Compresses text columns"], 0],
+  ["In React, what causes an infinite re-render loop inside useEffect?", ["Updating state unconditionally without a proper dependency array", "Using TypeScript interfaces", "Memoizing callbacks", "Rendering lists with keys"], 0],
+  ["Which HTTP status code indicates the client has sent too many requests in a given timeframe?", ["429 Too Many Requests", "401 Unauthorized", "403 Forbidden", "422 Unprocessable Entity"], 0],
+  ["What is the worst-case time complexity of quicksort without randomized pivot selection?", ["O(n^2)", "O(n log n)", "O(log n)", "O(1)"], 0],
+  ["Which React hook preserves a mutable value across renders without triggering re-renders?", ["useRef", "useState", "useEffect", "useReducer"], 0],
+  ["What is the key difference between HTTP 401 Unauthorized and 403 Forbidden?", ["401 means unauthenticated; 403 means authenticated but lacking permission", "401 is for POST only; 403 is for GET", "403 triggers automatic token refresh", "They are identical in RFC 9110"], 0],
+  ["Which data structure provides O(1) amortized push/pop at both ends?", ["Deque (Double-Ended Queue)", "Singly Linked List", "Binary Max-Heap", "Trie"], 0],
+  ["Why should stable unique keys (not array index) be used when rendering dynamic lists in React?", ["Prevents state mismatch and unnecessary DOM re-creation on reorder/delete", "Enables CSS Grid", "Avoids TypeScript errors", "Compresses JSX bundles"], 0],
+  ["What does a foreign key constraint enforce in a relational database?", ["Referential integrity between child and parent table rows", "Automatic full-text indexing", "Row-level encryption", "Read-only table access"], 0],
+  ["Which HTTP method is defined as both safe and idempotent?", ["GET", "POST", "PATCH", "CONNECT"], 0],
+  ["What is the time complexity of finding connected components in an undirected graph using BFS/DFS?", ["O(V + E)", "O(V^2 log V)", "O(E log V)", "O(V!)"], 0],
+  ["In REST APIs, when is 201 Created the standard response status?", ["When a POST request successfully creates a new resource", "When a GET returns an empty list", "When validation fails", "When a record is deleted"], 0],
+  ["What does git bisect use to locate the commit that introduced a regression?", ["Binary search across commit history", "Three-way merge conflict resolution", "Interactive rebase squashing", "Reflog garbage collection"], 0],
+  ["In TypeScript, what is the difference between unknown and any?", ["unknown requires type narrowing before operations; any disables type checking", "any is stricter than unknown", "unknown only works for primitives", "They compile to different JS syntax"], 0],
+  ["What does a B-Tree index accelerate in SQL queries?", ["Equality (=) and range (<, >, BETWEEN) predicates on indexed columns", "Full-table sequential scans only", "Unindexed LIKE '%substring%' searches", "Network serialization"], 0],
+  ["Why store password hashes using bcrypt or Argon2 instead of plain SHA-256?", ["Adaptive work factor and built-in salting resist GPU brute-force attacks", "SHA-256 produces longer strings", "bcrypt is reversible for password recovery", "Argon2 requires no CPU"], 0],
+  ["What is a hash collision in a hash table?", ["Two distinct keys map to the same bucket index", "The hash table runs out of RAM", "A key is null", "The load factor reaches zero"], 0],
+  ["In CSS Flexbox, what does justify-content control?", ["Alignment along the main axis", "Alignment along the cross axis", "Grid template columns", "Z-index stacking context"], 0],
+  ["What is the purpose of an environment file (.env) excluded via .gitignore?", ["Keeps secrets and environment-specific config out of source control", "Speeds up Vite bundling", "Stores database migrations", "Defines Docker base images"], 0],
+];
+
+// 4. Software Development — Full-Time Placement Question Bank (24 distinct backend, DB & distributed systems questions)
+const SEED_SD_FULLTIME_BANK: Array<[string, string[], number]> = [
+  ["Why should blocking I/O calls be avoided inside an async FastAPI route?", ["They stall the single-threaded asyncio event loop", "FastAPI rejects sync functions", "PostgreSQL drops sync connections", "CORS headers fail"], 0],
   ["How is immutability guaranteed on an enterprise audit log table?", ["Soft-delete flags", "Blocking UPDATE/DELETE at ORM hooks and DB triggers", "Nightly truncation", "Client-side caching"], 1],
   ["What is the primary advantage of keyset pagination over large OFFSET queries?", ["Eliminates indexes", "O(log N) index seek without scanning skipped rows", "Automatic compression", "Disables isolation"], 1],
   ["What does an idempotency key prevent on POST application or payment endpoints?", ["Duplicate side effects on network retries", "SQL injection", "Slow DNS lookups", "JWT expiration"], 0],
   ["Which PostgreSQL index type is best suited for JSONB containment (@>) queries?", ["B-Tree", "GIN (Generalized Inverted Index)", "Hash", "BRIN"], 1],
   ["In JWT authentication, why use short-lived access tokens paired with refresh tokens?", ["Limits exposure window if an access token is compromised", "Eliminates HTTPS", "Avoids signature verification", "Stores passwords in plaintext"], 0],
-  ["What is the average lookup time complexity in a balanced binary search tree?", ["O(1)", "O(log n)", "O(n)", "O(n log n)"], 1],
   ["Which PostgreSQL isolation level prevents dirty reads and non-repeatable reads?", ["READ UNCOMMITTED", "REPEATABLE READ", "READ COMMITTED", "NONE"], 1],
   ["What problem does a circuit breaker pattern solve in distributed services?", ["Cascading failures when a downstream dependency degrades", "Schema migrations", "Static asset bundling", "CSS layout shifts"], 0],
-  ["Which Git command replays commits from a feature branch onto the tip of main cleanly?", ["git rebase main", "git stash pop", "git bisect", "git tag"], 0],
-  ["What does CORS preflight (OPTIONS) verify before a browser sends a cross-origin POST?", ["Allowed origins, HTTP methods, and custom headers", "TLS certificate chain", "DB connection pool", "DNSSEC records"], 0],
-  ["Which data structure underlies Dijkstra's shortest-path algorithm for O((V+E) log V) runtime?", ["Min-Priority Queue (Binary Heap)", "LIFO Stack", "Circular Buffer", "Disjoint Set"], 0],
-  ["Why parameterize SQL queries instead of string concatenation?", ["Prevents SQL injection and enables query plan reuse", "Bypasses transactions", "Disables foreign keys", "Compresses text columns"], 0],
   ["What is the purpose of a database connection pooler like PgBouncer?", ["Multiplexes client connections onto a bounded pool of DB backends", "Replaces backups", "Encrypts disk volumes", "Formats JSON"], 0],
   ["Which HTTP response header enforces HTTPS-only connections in browsers?", ["Strict-Transport-Security (HSTS)", "X-Powered-By", "Accept-Encoding", "ETag"], 0],
-  ["In React, what causes an infinite re-render loop inside useEffect?", ["Updating state unconditionally without a proper dependency array", "Using TypeScript interfaces", "Memoizing callbacks", "Rendering lists with keys"], 0],
   ["Which CAP theorem trade-off does a strongly consistent PostgreSQL primary choose during a partition?", ["Consistency over Availability (CP)", "Availability over Consistency (AP)", "Neither", "Eventual disk sync"], 0],
   ["What does EXPLAIN ANALYZE in PostgreSQL show that EXPLAIN alone does not?", ["Actual execution times and row counts from running the query", "Table column types", "User permissions", "Index definitions"], 0],
   ["Which rate-limiting algorithm allows short bursts while enforcing a steady average rate?", ["Token Bucket", "Bubble Sort", "Round-Robin DNS", "Two-Phase Commit"], 0],
+  ["What does optimistic locking typically use to detect concurrent row updates?", ["A version number or timestamp checked in the UPDATE WHERE clause", "Exclusive table-level locks on read", "Disabling WAL logging", "Single-threaded web workers"], 0],
+  ["In OAuth 2.0 / OIDC for SPAs, why is PKCE (Proof Key for Code Exchange) mandatory?", ["Prevents authorization code interception without embedding a client secret", "Encrypts localStorage cookies", "Replaces TLS certificates", "Bypasses token expiry"], 0],
+  ["Why use an Outbox Pattern when publishing domain events alongside PostgreSQL writes?", ["Guarantees atomic persistence of state and event without dual-write loss", "Eliminates message brokers", "Compresses JSON payloads", "Avoids primary keys"], 0],
+  ["What does a Covering Index (INCLUDE columns) in PostgreSQL enable?", ["Index-Only Scans without fetching heap table pages", "Automatic table partitioning", "Full-text stemming", "Foreign key cascading"], 0],
+  ["In container security, why run FastAPI/Node workloads as a non-root user?", ["Limits blast radius if an application vulnerability is exploited", "Increases CPU clock speed", "Enables privileged port binding", "Disables memory limits"], 0],
+  ["What causes write amplification in LSM-tree storage engines (like RocksDB/Cassandra)?", ["Background SSTable compaction rewriting key-value pairs across levels", "B-Tree page splits on reads", "Row-level foreign key checks", "TLS handshake overhead"], 0],
+  ["Why use SELECT ... FOR UPDATE SKIP LOCKED in a PostgreSQL job queue?", ["Allows concurrent workers to claim distinct pending jobs without lock contention", "Disables ACID durability", "Drops dead tuples automatically", "Forces sequential table scans"], 0],
+  ["In distributed tracing, what is the purpose of propagating a W3C traceparent header?", ["Correlates spans across microservices into a single end-to-end request trace", "Caches DNS lookups", "Compresses HTTP/2 frames", "Enforces CORS origin checks"], 0],
+  ["What is a thundering herd (cache stampede) problem and how is it mitigated?", ["Many requests miss an expired cache key simultaneously; mitigated via request coalescing or jittered TTLs", "Database disk reaches 100% IOPS on backups", "JWT keys expire every second", "DNS TTL is set to 24 hours"], 0],
+  ["Why prefer Zero-Downtime Expand-and-Contract migrations for live PostgreSQL schemas?", ["Avoids long ACCESS EXCLUSIVE locks and maintains compatibility across rolling deploys", "Eliminates foreign keys permanently", "Rebuilds all indexes synchronously", "Skips staging environments"], 0],
+  ["What does backpressure achieve in streaming or async producer-consumer pipelines?", ["Signals upstream producers to slow down when downstream consumers saturate", "Drops all unacknowledged messages", "Doubles thread pool size infinitely", "Disables TCP flow control"], 0],
 ];
 
 function buildInitialQuestionBank(): BankQuestionItem[] {
   const bank: BankQuestionItem[] = [];
-  (["INTERNSHIP", "SOFTWARE_DEVELOPMENT"] as QuizTrackOption[]).forEach((track) => {
-    SEED_DS_BANK.forEach(([prompt, options, correctIndex], idx) => {
-      bank.push({
-        id: `ds-${track}-${idx + 1}`,
-        domain: "DATA_SCIENCE",
-        track,
-        prompt,
-        options,
-        correctIndex,
-      });
+  SEED_DS_INTERNSHIP_BANK.forEach(([prompt, options, correctIndex], idx) => {
+    bank.push({
+      id: `ds-INTERNSHIP-${idx + 1}`,
+      domain: "DATA_SCIENCE",
+      track: "INTERNSHIP",
+      prompt,
+      options,
+      correctIndex,
     });
-    SEED_SD_BANK.forEach(([prompt, options, correctIndex], idx) => {
-      bank.push({
-        id: `sd-${track}-${idx + 1}`,
-        domain: "SOFTWARE_DEVELOPMENT",
-        track,
-        prompt,
-        options,
-        correctIndex,
-      });
+  });
+  SEED_DS_FULLTIME_BANK.forEach(([prompt, options, correctIndex], idx) => {
+    bank.push({
+      id: `ds-SOFTWARE_DEVELOPMENT-${idx + 1}`,
+      domain: "DATA_SCIENCE",
+      track: "SOFTWARE_DEVELOPMENT",
+      prompt,
+      options,
+      correctIndex,
+    });
+  });
+  SEED_SD_INTERNSHIP_BANK.forEach(([prompt, options, correctIndex], idx) => {
+    bank.push({
+      id: `sd-INTERNSHIP-${idx + 1}`,
+      domain: "SOFTWARE_DEVELOPMENT",
+      track: "INTERNSHIP",
+      prompt,
+      options,
+      correctIndex,
+    });
+  });
+  SEED_SD_FULLTIME_BANK.forEach(([prompt, options, correctIndex], idx) => {
+    bank.push({
+      id: `sd-SOFTWARE_DEVELOPMENT-${idx + 1}`,
+      domain: "SOFTWARE_DEVELOPMENT",
+      track: "SOFTWARE_DEVELOPMENT",
+      prompt,
+      options,
+      correctIndex,
     });
   });
   return bank;
