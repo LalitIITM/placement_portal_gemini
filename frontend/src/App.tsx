@@ -1718,6 +1718,9 @@ export default function App() {
         if (Array.isArray(snap.examinerSlots) && snap.examinerSlots.length > 0) {
           setExaminerSlots(snap.examinerSlots);
         }
+        if (Array.isArray(snap.questionBank) && snap.questionBank.length > 0) {
+          setQuestionBank(snap.questionBank);
+        }
         if (Array.isArray(data.activitySubmissions)) {
           setActivitySubmissions(data.activitySubmissions);
         }
@@ -2084,6 +2087,9 @@ export default function App() {
         if (Array.isArray(snap.jobs) && snap.jobs.length > 0) {
           setJobs(snap.jobs);
         }
+        if (Array.isArray(snap.questionBank) && snap.questionBank.length > 0) {
+          setQuestionBank(snap.questionBank);
+        }
         if (Array.isArray(snap.applications)) {
           setApplications(snap.applications);
         }
@@ -2224,6 +2230,7 @@ export default function App() {
               evaluations,
               oneOnOneSlots,
               examinerSlots,
+              questionBank,
               auditLogs,
               resumes,
               marksheet,
@@ -2251,6 +2258,7 @@ export default function App() {
     evaluations,
     oneOnOneSlots,
     examinerSlots,
+    questionBank,
     auditLogs,
     resumes,
     marksheet,
@@ -3843,6 +3851,7 @@ export default function App() {
               offers,
               evaluations: updatedEvals,
               oneOnOneSlots: updatedSlots,
+              questionBank,
               auditLogs,
               resumes,
               marksheet,
