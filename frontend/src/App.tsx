@@ -5894,7 +5894,7 @@ export default function App() {
               <label className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
                 Select Role Context
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              <div className="flex flex-wrap justify-center gap-2">
                 {(["STUDENT", "RECRUITER", "EXAMINER", "TRAINING_COORDINATOR", "ADMIN"] as Role[]).map((r) => (
                   <button
                     key={r}
@@ -5907,7 +5907,7 @@ export default function App() {
                         setAuthMode("SIGN_IN");
                       }
                     }}
-                    className={`py-2 px-2 rounded-lg text-[11px] font-semibold border transition truncate ${
+                    className={`py-2 px-3.5 rounded-lg text-xs font-semibold border transition whitespace-nowrap ${
                       selectedRole === r
                         ? "bg-indigo-600 border-indigo-500 text-white"
                         : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
